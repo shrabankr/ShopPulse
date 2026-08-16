@@ -188,6 +188,7 @@ const DB = {
     BACKUPS: 'sp_backups',
     LICENSE: 'sp_license',
     REMOTE: 'sp_remote',
+    TEMPLATE: 'sp_custom_template',
     SETUP_DONE: 'sp_setup_done',
     SEEDED: 'sp_seeded',
   },
@@ -202,12 +203,39 @@ const DB = {
       address: '', city: '', state: 'Maharashtra', stateCode: '27',
       pincode: '', phone: '', email: '', website: '',
       bankName: '', bankAccount: '', bankIFSC: '', bankBranch: '', upiId: '',
-      invoicePrefix: 'INV', invoiceCounter: 1,
+      invoicePrefix: 'INV', invoiceCounter: 1, invoiceFormat: 'classic',
       billPrefix: 'PO', billCounter: 1,
       defaultPaymentTerms: 30, signatory: '', termsAndConditions: 'Goods once sold will not be taken back.\nInterest @18% p.a. will be charged on delayed payments.',
     };
   },
   setBiz(b) { this._set(this.K.BIZ, b); },
+
+  /* Bill Templates & Formats (Licensed Feature) */
+  getBillFormat() {
+    const limits = this.getTrialLimits();
+    if (limits.isTrial) return 'classic';
+    const biz = this.getBiz();
+    return biz.invoiceFormat || 'classic';
+  },
+  setBillFormat(fmt) {
+    const biz = this.getBiz();
+    biz.invoiceFormat = fmt;
+    this.setBiz(biz);
+  },
+  getCustomTemplate() {
+    return this._get(this.K.TEMPLATE) || {
+      primaryColor: '#1e293b',
+      accentColor: '#0284c7',
+      fontFamily: 'Arial, sans-serif',
+      logoPos: 'left',
+      headerStyle: 'solid',
+      showBorder: true,
+      customNotes: 'Thank you for choosing us for your IT & CCTV infrastructure!',
+    };
+  },
+  saveCustomTemplate(t) {
+    this._set(this.K.TEMPLATE, t);
+  },
 
   /* Categories */
   getCategories() { return this._get(this.K.CATEGORIES) || ['Computers & Laptops', 'CCTV & Security', 'Networking & Cables', 'Computer Parts (RAM/SSD)', 'Printers & Peripherals', 'Services & AMC', 'Software & Licenses', 'Other']; },

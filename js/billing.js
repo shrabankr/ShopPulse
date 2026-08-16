@@ -827,16 +827,28 @@ const Billing = {
     const limits = DB.getTrialLimits();
     const isLicensed = !limits.isTrial;
 
+    const activeFmt = biz.invoiceFormat || 'classic';
+    window._viewDocFmt = activeFmt;
+
     const actionButtons = `
       <button class="btn btn-ghost" onclick="App.closeModal()">Close</button>
       <button class="btn btn-secondary" onclick="Billing.shareWhatsApp('${id}','${type}')" title="${isLicensed ? 'Share via WhatsApp' : 'Commercial License Required 💎'}">
         <span class="material-icons" style="color:#25d366">chat</span> WhatsApp ${isLicensed ? '' : '<span style="font-size:10px">💎</span>'}
       </button>
       <button class="btn btn-secondary" onclick="Billing.exportPDF('${id}','${type}')" title="${isLicensed ? 'Save / Export as PDF' : 'Commercial License Required 💎'}">
-        <span class="material-icons" style="color:#e74c3c">picture_as_pdf</span> PDF Bill ${isLicensed ? '' : '<span style="font-size:10px">💎</span>'}
+        <span class="material-icons" style="color:#e74c3c">picture_as_pdf</span> PDF ${isLicensed ? '' : '<span style="font-size:10px">💎</span>'}
       </button>
       ${doc.status !== 'paid' ? `<button class="btn btn-success" onclick="App.closeModal();Billing.markPaid('${id}','${type}')"><span class="material-icons">check_circle</span> Mark Paid</button>` : ''}
-      <button class="btn btn-primary" onclick="Billing.printDoc('${id}','${type}')"><span class="material-icons">print</span> Print</button>
+      ${isLicensed ? `
+      <select id="vd-fmt" style="padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);font-size:.82rem;background:#fff;font-weight:600;color:var(--text-primary)" onchange="window._viewDocFmt = this.value">
+        <option value="classic" ${activeFmt === 'classic' ? 'selected' : ''}>📄 Classic GST</option>
+        <option value="modern" ${activeFmt === 'modern' ? 'selected' : ''}>💎 Modern Blue</option>
+        <option value="compact_pos" ${activeFmt === 'compact_pos' ? 'selected' : ''}>💎 POS 3" Receipt</option>
+        <option value="executive" ${activeFmt === 'executive' ? 'selected' : ''}>💎 Executive Dark</option>
+        <option value="custom" ${activeFmt === 'custom' ? 'selected' : ''}>🛠️ Custom Template</option>
+      </select>
+      ` : ''}
+      <button class="btn btn-primary" onclick="Billing.printDoc('${id}','${type}', window._viewDocFmt || '${activeFmt}')"><span class="material-icons">print</span> Print</button>
     `;
 
     App.modal(`${isSales ? 'Sales Tax Invoice' : 'Purchase Order / Bill'}: ${no}`,
@@ -1092,7 +1104,10 @@ const Billing = {
   /* ═══════════════════════════════════════════
      PRINT (GST-COMPLIANT LAYOUT)
   ═══════════════════════════════════════════ */
-  printDoc(id, type) {
+  /* ═══════════════════════════════════════════
+     PRINT (GST-COMPLIANT MULTI-FORMAT ENGINE)
+  ═══════════════════════════════════════════ */
+  printDoc(id, type, formatOverride = null) {
     const isSales = type === 'sales';
     const doc = isSales ? DB.getSaleById(id) : DB.getPurchaseById(id);
     if (!doc) return;
@@ -1104,6 +1119,123 @@ const Billing = {
     const partyAddr = isSales ? doc.customerAddress : (doc.supplierAddress || '');
     const partyState = isSales ? doc.customerState : doc.supplierState;
 
+    const limits = DB.getTrialLimits();
+    const showWatermark = limits.isTrial && limits.isWatermarkNeeded;
+    const format = limits.isTrial ? 'classic' : (formatOverride || DB.getBillFormat() || 'classic');
+    const customTpl = DB.getCustomTemplate();
+
+    // ─── 1. COMPACT 3-INCH THERMAL POS FORMAT (80MM ROLL) ───
+    if (format === 'compact_pos') {
+      const posHtml = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>${no} - POS</title>
+<style>
+@page { size: 80mm auto; margin: 2mm; }
+body { font-family: 'Courier New', Courier, monospace, sans-serif; font-size: 8.5pt; color: #000; width: 74mm; margin: 0 auto; padding: 4px 2px; }
+.pos-center { text-align: center; }
+.pos-title { font-size: 11pt; font-weight: 900; }
+.pos-sub { font-size: 7.5pt; line-height: 1.3; }
+.pos-divider { border-top: 1px dashed #000; margin: 5px 0; }
+.pos-table { width: 100%; font-size: 8pt; border-collapse: collapse; }
+.pos-table th { border-bottom: 1px dashed #000; padding: 3px 0; text-align: left; }
+.pos-table td { padding: 3px 0; vertical-align: top; }
+.pos-right { text-align: right; }
+.pos-totals { width: 100%; font-size: 8.5pt; margin-top: 4px; }
+.pos-totals td { padding: 2px 0; }
+.pos-grand { font-size: 10pt; font-weight: 900; border-top: 1px solid #000; border-bottom: 1px solid #000; }
+@media print { body { width: 100%; } }
+</style>
+</head>
+<body>
+<div class="pos-center">
+  <div class="pos-title">${biz.name}</div>
+  <div class="pos-sub">${biz.address}, ${biz.city} — ${biz.pincode}<br>Phone: ${biz.phone} | GSTIN: ${biz.gstin || '—'}</div>
+</div>
+<div class="pos-divider"></div>
+<div style="font-size:8pt;line-height:1.4">
+  <div><strong>${isSales ? 'TAX INVOICE' : 'PURCHASE BILL'}:</strong> ${no}</div>
+  <div><strong>Date:</strong> ${fmtDate(doc.date)}</div>
+  <div><strong>Customer:</strong> ${partyName}</div>
+  ${partyGstin ? `<div><strong>GSTIN:</strong> ${partyGstin}</div>` : ''}
+</div>
+<div class="pos-divider"></div>
+<table class="pos-table">
+  <thead>
+    <tr><th>Item</th><th class="pos-right">Qty</th><th class="pos-right">Rate</th><th class="pos-right">Total</th></tr>
+  </thead>
+  <tbody>
+    ${(doc.items || []).map(it => `
+      <tr>
+        <td>${it.name}</td>
+        <td class="pos-right">${it.qty} ${it.unit}</td>
+        <td class="pos-right">${parseFloat(it.rate).toFixed(0)}</td>
+        <td class="pos-right font-bold">${parseFloat(it.totalAmt).toFixed(2)}</td>
+      </tr>
+    `).join('')}
+  </tbody>
+</table>
+<div class="pos-divider"></div>
+<table class="pos-totals">
+  <tr><td>Taxable Subtotal:</td><td class="pos-right">${fmtCurrency(doc.subtotal)}</td></tr>
+  ${doc.isIntra ? `<tr><td>CGST + SGST:</td><td class="pos-right">${fmtCurrency(doc.totalCgst + doc.totalSgst)}</td></tr>` : `<tr><td>IGST:</td><td class="pos-right">${fmtCurrency(doc.totalIgst)}</td></tr>`}
+  <tr class="pos-grand"><td><strong>NET TOTAL:</strong></td><td class="pos-right"><strong>${fmtCurrency(doc.total)}</strong></td></tr>
+</table>
+${!limits.isTrial && isSales && biz.upiId ? `
+<div class="pos-center" style="margin-top:6px">
+  <div style="font-size:7pt;font-weight:700">SCAN &amp; PAY UPI</div>
+  <img src="https://api.qrserver.com/v1/create-qr-code/?size=85x85&margin=0&data=${encodeURIComponent(`upi://pay?pa=${biz.upiId}&pn=${biz.name}&am=${parseFloat(doc.total).toFixed(2)}&tn=${encodeURIComponent('Invoice ' + no)}&cu=INR`)}" style="width:70px;height:70px;margin:3px auto;display:block">
+  <div style="font-size:6.5pt">${biz.upiId}</div>
+</div>
+` : ''}
+<div class="pos-divider"></div>
+<div class="pos-center pos-sub">Thank you for your business!<br>${biz.website || 'Visit Again!'}</div>
+<script>window.onload=function(){window.print();}</script>
+</body></html>`;
+      const w = window.open('', '_blank');
+      if (w) { w.document.write(posHtml); w.document.close(); }
+      App.closeModal();
+      return;
+    }
+
+    // ─── 2. STANDARD A4 MULTI-FORMAT THEMES (Classic, Modern, Executive, Custom) ───
+    let primaryColor = '#1a2332';
+    let accentColor = '#2563eb';
+    let fontFamily = 'Arial, Helvetica, sans-serif';
+    let headerBorder = '1.5px solid #222';
+    let headerBgStyle = 'background: #1a2332; color: #fff;';
+    let itemTableBorder = 'border: .5pt solid #bbb;';
+    let zebraRows = false;
+    let logoPos = 'left';
+
+    if (format === 'modern') {
+      primaryColor = '#1d4ed8';
+      accentColor = '#3b82f6';
+      fontFamily = "'Segoe UI', Roboto, Helvetica, sans-serif";
+      headerBorder = '1.5px solid #e2e8f0; border-radius: 8px; overflow: hidden;';
+      headerBgStyle = 'background: #1d4ed8; color: #fff; letter-spacing: 0.1em;';
+      itemTableBorder = 'border-bottom: 1px solid #e2e8f0;';
+      zebraRows = true;
+    } else if (format === 'executive') {
+      primaryColor = '#0f172a';
+      accentColor = '#d97706';
+      fontFamily = "'Segoe UI', Georgia, serif";
+      headerBorder = '2px solid #0f172a;';
+      headerBgStyle = 'background: #0f172a; color: #f8fafc; border-bottom: 3px solid #d97706;';
+      itemTableBorder = 'border: .5pt solid #cbd5e1;';
+      zebraRows = false;
+    } else if (format === 'custom') {
+      primaryColor = customTpl.primaryColor || '#1e293b';
+      accentColor = customTpl.accentColor || '#0284c7';
+      fontFamily = customTpl.fontFamily || 'Arial, sans-serif';
+      logoPos = customTpl.logoPos || 'left';
+      headerBorder = customTpl.showBorder ? `1.5px solid ${primaryColor};` : '1px solid #e2e8f0;';
+      headerBgStyle = customTpl.headerStyle === 'solid' ? `background: ${primaryColor}; color: #fff;` : (customTpl.headerStyle === 'border' ? `border-left: 6px solid ${primaryColor}; background: #f8fafc; color: ${primaryColor};` : `background: #f1f5f9; color: ${primaryColor};`);
+      itemTableBorder = customTpl.showBorder ? 'border: .5pt solid #cbd5e1;' : 'border-bottom: 1px solid #e2e8f0;';
+      zebraRows = !customTpl.showBorder;
+    }
+
     let taxCols = doc.isIntra
       ? `<th>CGST Rate</th><th>CGST Amt</th><th>SGST Rate</th><th>SGST Amt</th>`
       : `<th>IGST Rate</th><th>IGST Amt</th>`;
@@ -1112,7 +1244,7 @@ const Billing = {
       let taxCells = doc.isIntra
         ? `<td class="rate">${item.cgstRate}%</td><td class="amount">${fmtCurrency(item.cgstAmt)}</td><td class="rate">${item.sgstRate}%</td><td class="amount">${fmtCurrency(item.sgstAmt)}</td>`
         : `<td class="rate">${item.igstRate}%</td><td class="amount">${fmtCurrency(item.igstAmt)}</td>`;
-      return `<tr>
+      return `<tr ${zebraRows && i % 2 === 1 ? 'style="background:#f8fafc"' : ''}>
         <td class="sr">${i + 1}</td>
         <td>${item.name}${item.discount ? ` <em>(${item.discount}% disc)</em>` : ''}</td>
         <td class="hsn">${item.hsn || ''}</td>
@@ -1129,18 +1261,15 @@ const Billing = {
       ? `<tr><td>CGST</td><td>${fmtCurrency(doc.totalCgst)}</td></tr><tr><td>SGST</td><td>${fmtCurrency(doc.totalSgst)}</td></tr>`
       : `<tr><td>IGST</td><td>${fmtCurrency(doc.totalIgst)}</td></tr>`;
 
-    const limits = DB.getTrialLimits();
-    const showWatermark = limits.isTrial && limits.isWatermarkNeeded;
-
     const html = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
 <title>${no}</title>
 <style>
-body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #000; margin: 0; padding: 15mm; position: relative; }
-.inv-header { border: 1.5px solid #222; position: relative; z-index: 1; background: #fff; }
-.inv-title-bar { background: #1a2332; color: #fff; text-align: center; padding: 8px 0 6px; font-size: 13pt; font-weight: 900; letter-spacing: .15em; }
+body { font-family: ${fontFamily}; font-size: 10pt; color: #000; margin: 0; padding: 12mm; position: relative; }
+.inv-header { ${headerBorder} position: relative; z-index: 1; background: #fff; }
+.inv-title-bar { ${headerBgStyle} text-align: center; padding: 8px 0 6px; font-size: 13pt; font-weight: 900; letter-spacing: .15em; }
 .watermark {
   position: fixed;
   top: 50%;
@@ -1167,10 +1296,10 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #000; 
   margin-top: 10px;
   border-top: 1px dashed #e74c3c;
 }
-.inv-biz-row { display: flex; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid #ccc; }
-.inv-biz-name { font-size: 12pt; font-weight: 700; }
+.inv-biz-row { display: flex; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid #ccc; align-items: center; }
+.inv-biz-name { font-size: 12pt; font-weight: 700; color: ${primaryColor}; }
 .inv-biz-detail { font-size: 8.5pt; color: #333; line-height: 1.6; }
-.inv-biz-gstin { font-size: 9pt; font-weight: 700; color: #1a2332; margin-top: 4px; }
+.inv-biz-gstin { font-size: 9pt; font-weight: 700; color: ${primaryColor}; margin-top: 4px; }
 .inv-meta-table td { padding: 2px 4px; font-size: 8.5pt; }
 .inv-meta-table td:first-child { color: #555; text-align: right; padding-right: 8px; }
 .inv-meta-table td:last-child { font-weight: 700; }
@@ -1180,17 +1309,17 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #000; 
 .inv-party-label { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #555; margin-bottom: 4px; }
 .inv-party-name { font-size: 10.5pt; font-weight: 700; margin-bottom: 2px; }
 .inv-party-addr { font-size: 8.5pt; color: #333; line-height: 1.5; }
-.inv-party-gstin { font-size: 8.5pt; font-weight: 700; color: #1a2332; margin-top: 4px; }
+.inv-party-gstin { font-size: 8.5pt; font-weight: 700; color: ${primaryColor}; margin-top: 4px; }
 .supply-bar { padding: 5px 14px; background: #f5f5f5; border-bottom: 1px solid #ccc; font-size: 8.5pt; color: #333; }
 .supply-bar strong { color: #000; }
 table.items { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
 table.items th { background: #e8eaf0; padding: 6px 5px; text-align: center; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .03em; border: .5pt solid #aaa; }
-table.items td { border: .5pt solid #bbb; padding: 5px 5px; vertical-align: middle; }
+table.items td { ${itemTableBorder} padding: 5px 5px; vertical-align: middle; }
 table.items .sr, table.items .qty, table.items .hsn { text-align: center; }
 table.items .rate, table.items .amount { text-align: right; }
 .inv-footer { display: grid; grid-template-columns: 1fr auto; border-top: 1px solid #ccc; }
 .inv-bank { padding: 10px 14px; border-right: 1px solid #ccc; }
-.inv-bank h4 { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #555; margin-bottom: 6px; }
+.inv-bank h4 { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: ${primaryColor}; margin-bottom: 6px; }
 .inv-bank table td { padding: 2px 6px 2px 0; font-size: 8pt; }
 .inv-bank table td:first-child { color: #555; min-width: 80px; font-size: 7.5pt; }
 .inv-bank table td:last-child { font-weight: 600; }
@@ -1198,22 +1327,22 @@ table.items .rate, table.items .amount { text-align: right; }
 .inv-totals table { width: 100%; border-collapse: collapse; }
 .inv-totals table td { padding: 4px 10px; border-bottom: .5pt solid #eee; font-size: 8.5pt; }
 .inv-totals table td:last-child { text-align: right; font-weight: 600; }
-.grand-total td { background: #1a2332 !important; color: #fff !important; font-weight: 800 !important; font-size: 10pt !important; padding: 7px 10px !important; }
+.grand-total td { background: ${primaryColor} !important; color: #fff !important; font-weight: 800 !important; font-size: 10pt !important; padding: 7px 10px !important; }
 .inv-words { border-top: 1px solid #ccc; padding: 6px 14px; font-size: 8pt; font-style: italic; }
 .inv-sign { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid #ccc; }
 .inv-sign-box { padding: 10px 14px; min-height: 60px; font-size: 8pt; color: #555; }
 .inv-sign-box:first-child { border-right: 1px solid #ccc; }
 .inv-sign-name { font-weight: 700; font-size: 9pt; color: #000; margin-top: 24px; }
 .rc-note { font-size: 7.5pt; color: #777; padding: 4px 14px; border-top: .5pt solid #ccc; }
-@media print { @page { margin: 10mm; } body { padding: 0; } }
+@media print { @page { margin: 8mm; } body { padding: 0; } }
 </style>
 </head>
 <body>
 <div class="inv-header">
   <div class="inv-title-bar">${isSales ? 'TAX INVOICE' : 'PURCHASE ORDER'}</div>
   <div class="inv-biz-row">
-    <div style="display:flex;align-items:center;gap:12px">
-      ${!limits.isTrial && biz.logo ? `<img src="${biz.logo}" style="max-height:52px;max-width:90px;object-fit:contain">` : ''}
+    <div style="display:flex;align-items:center;gap:12px;${logoPos === 'right' ? 'flex-direction:row-reverse' : ''}">
+      ${!limits.isTrial && biz.logo && logoPos !== 'none' ? `<img src="${biz.logo}" style="max-height:52px;max-width:90px;object-fit:contain">` : ''}
       <div>
         <div class="inv-biz-name">${biz.name}</div>
         ${!limits.isTrial && biz.tagline ? `<div style="font-size:8pt;color:#555;font-style:italic;margin-bottom:2px">${biz.tagline}</div>` : ''}
@@ -1302,13 +1431,14 @@ table.items .rate, table.items .amount { text-align: right; }
         </div>
         ${!limits.isTrial && biz.upiId ? `
         <div style="text-align:center;border:1px solid #cbd5e1;padding:5px 8px;border-radius:4px;background:#f8fafc;min-width:96px">
-          <div style="font-size:6.5pt;font-weight:700;color:#1e3a8a;margin-bottom:2px;letter-spacing:0.04em">SCAN &amp; PAY UPI</div>
+          <div style="font-size:6.5pt;font-weight:700;color:${primaryColor};margin-bottom:2px;letter-spacing:0.04em">SCAN &amp; PAY UPI</div>
           <img src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&margin=0&data=${encodeURIComponent(`upi://pay?pa=${biz.upiId}&pn=${biz.name}&am=${parseFloat(doc.total).toFixed(2)}&tn=${encodeURIComponent('Invoice ' + no)}&cu=INR`)}" style="width:78px;height:78px;display:block;margin:0 auto;background:#fff;padding:2px;border:1px solid #e2e8f0" alt="UPI QR">
           <div style="font-size:6pt;font-weight:700;color:${doc.status === 'paid' ? '#059669' : '#d97706'};margin-top:2px">${fmtCurrency(doc.total)} ${doc.status === 'paid' ? '(Paid)' : '(Due)'}</div>
         </div>
         ` : ''}
       </div>
       ${doc.notes ? `<div style="margin-top:8px;font-size:8pt;color:#333"><strong>Notes:</strong> ${doc.notes}</div>` : ''}
+      ${customTpl.customNotes ? `<div style="margin-top:6px;font-size:8pt;color:${primaryColor};font-style:italic"><strong>Message:</strong> ${customTpl.customNotes}</div>` : ''}
       ${biz.termsAndConditions ? `<div style="margin-top:8px;font-size:7.5pt;color:#555"><strong>Terms:</strong><br>${biz.termsAndConditions.replace(/\n/g, '<br>')}</div>` : ''}
       ` : `
       <h4>Order &amp; Delivery Instructions</h4>

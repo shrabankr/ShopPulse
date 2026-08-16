@@ -1573,6 +1573,42 @@ ${JSON.stringify(data, null, 2)}
           </div>
         </div>
 
+        <div class="card" style="border-left:4px solid var(--primary)">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+            <h3><span class="material-icons" style="vertical-align:middle;font-size:20px;color:var(--primary)">style</span> Bill &amp; Invoice Printing Formats</h3>
+            <span class="badge ${lic.isTrial ? 'badge-warning' : 'badge-paid'}">${lic.isTrial ? '1 Format (Trial Default)' : '5 Formats Available 💎'}</span>
+          </div>
+          <div class="card-body">
+            <div style="font-size:.85rem;color:var(--text-secondary);margin-bottom:14px">
+              ${lic.isTrial ? `
+              🔒 <strong>Trial Limitation:</strong> Free trial accounts use the standard <em>Classic GST Corporate</em> format. <strong>Commercial License</strong> unlocks Modern Minimalist, 3-Inch POS Receipt, Executive Dark, and your own Custom Template Designer.
+              ` : `
+              Select your shop's primary invoice design or build your own custom branded bill layout.
+              `}
+            </div>
+            <div class="form-grid">
+              <div class="form-group form-full">
+                <label>Active Bill / Invoice Format</label>
+                <select id="s-invfmt" onchange="App._onFormatSelectChange(this)" ${lic.isTrial || DB.getRole() === 'staff' ? 'disabled' : ''}>
+                  <option value="classic" ${(b.invoiceFormat || 'classic') === 'classic' ? 'selected' : ''}>📄 Classic GST Corporate (Standard GST Grid - Default)</option>
+                  <option value="modern" ${(b.invoiceFormat) === 'modern' ? 'selected' : ''}>💎 Modern Tech Minimalist (Clean Blue &amp; Borderless)</option>
+                  <option value="compact_pos" ${(b.invoiceFormat) === 'compact_pos' ? 'selected' : ''}>💎 Compact 3-Inch POS Receipt (80mm Thermal Roll)</option>
+                  <option value="executive" ${(b.invoiceFormat) === 'executive' ? 'selected' : ''}>💎 Executive Slate &amp; Gold (Luxury IT Projects)</option>
+                  <option value="custom" ${(b.invoiceFormat) === 'custom' ? 'selected' : ''}>🛠️ Custom Template (Designed by Owner / Dev)</option>
+                </select>
+              </div>
+            </div>
+
+            ${!lic.isTrial && (DB.getRole() === 'owner' || DB.getRole() === 'developer') ? `
+            <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+              <button type="button" class="btn btn-sm btn-secondary" onclick="App.openCustomTemplateModal()"><span class="material-icons">palette</span> 🎨 Design Custom Template</button>
+            </div>
+            ` : (lic.isTrial ? `
+            <button type="button" class="btn btn-primary btn-sm" style="margin-top:8px" onclick="App.openLicenseModal()"><span class="material-icons">vpn_key</span> Unlock All Formats with License</button>
+            ` : '')}
+          </div>
+        </div>
+
         <div class="card">
           <div class="card-header"><h3>Invoice Customization</h3></div>
           <div class="card-body">
@@ -1589,6 +1625,128 @@ ${JSON.stringify(data, null, 2)}
         </div>
       </div>
     `;
+  },
+
+  _onFormatSelectChange(sel) {
+    const limits = DB.getTrialLimits();
+    if (limits.isTrial && sel.value !== 'classic') {
+      sel.value = 'classic';
+      this.toast('💎 Multiple Bill Formats are exclusive to Licensed Users. Please activate your license to unlock.', 'warning');
+      this.openLicenseModal();
+      return;
+    }
+    if (DB.getRole() === 'staff') {
+      this.toast('🔒 Only Owner or Developer can change bill formats.', 'error');
+      return;
+    }
+    const biz = DB.getBiz();
+    biz.invoiceFormat = sel.value;
+    DB.setBiz(biz);
+    this.toast(`Bill format changed to ${sel.options[sel.selectedIndex].text.split('(')[0].trim()}! 🎨`, 'success');
+  },
+
+  openCustomTemplateModal() {
+    const limits = DB.getTrialLimits();
+    if (limits.isTrial) {
+      this.toast('💎 Custom Template Builder is exclusive to Licensed Users.', 'warning');
+      this.openLicenseModal();
+      return;
+    }
+    if (DB.getRole() === 'staff') {
+      this.toast('🔒 Only Owner or Developer can access Custom Template Designer.', 'error');
+      return;
+    }
+
+    const t = DB.getCustomTemplate();
+    App.modal('🎨 Custom Bill Format Designer (Owner / Dev Only)',
+      `
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Primary Theme Color</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="color" id="ct-primary" value="${t.primaryColor || '#1e293b'}" style="width:46px;height:38px;padding:2px;cursor:pointer;border-radius:4px;border:1px solid var(--border)">
+            <input id="ct-primary-hex" value="${t.primaryColor || '#1e293b'}" placeholder="#1e293b" style="flex:1" onchange="document.getElementById('ct-primary').value = this.value">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Accent Color</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="color" id="ct-accent" value="${t.accentColor || '#0284c7'}" style="width:46px;height:38px;padding:2px;cursor:pointer;border-radius:4px;border:1px solid var(--border)">
+            <input id="ct-accent-hex" value="${t.accentColor || '#0284c7'}" placeholder="#0284c7" style="flex:1" onchange="document.getElementById('ct-accent').value = this.value">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Font Family</label>
+          <select id="ct-font">
+            <option value="Arial, sans-serif" ${t.fontFamily.includes('Arial') ? 'selected' : ''}>Arial (Classic Clean)</option>
+            <option value="'Segoe UI', Roboto, sans-serif" ${t.fontFamily.includes('Segoe') ? 'selected' : ''}>Segoe UI / Modern Sans</option>
+            <option value="'Courier New', monospace" ${t.fontFamily.includes('Courier') ? 'selected' : ''}>Courier New (Technical / Monospace)</option>
+            <option value="Georgia, serif" ${t.fontFamily.includes('Georgia') ? 'selected' : ''}>Georgia (Traditional Serif)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Logo Placement</label>
+          <select id="ct-logo-pos">
+            <option value="left" ${t.logoPos === 'left' ? 'selected' : ''}>Left-Aligned</option>
+            <option value="center" ${t.logoPos === 'center' ? 'selected' : ''}>Center-Aligned</option>
+            <option value="right" ${t.logoPos === 'right' ? 'selected' : ''}>Right-Aligned</option>
+            <option value="none" ${t.logoPos === 'none' ? 'selected' : ''}>Hide Logo</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Header Title Bar Style</label>
+          <select id="ct-header-style">
+            <option value="solid" ${t.headerStyle === 'solid' ? 'selected' : ''}>Solid Full-Width Primary Color</option>
+            <option value="minimal" ${t.headerStyle === 'minimal' ? 'selected' : ''}>Minimal Clean (Light Accent)</option>
+            <option value="border" ${t.headerStyle === 'border' ? 'selected' : ''}>Left Accent Stripe Only</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Table Grid Outline</label>
+          <select id="ct-border">
+            <option value="true" ${t.showBorder ? 'selected' : ''}>Full Box Grid (GST Strict)</option>
+            <option value="false" ${!t.showBorder ? 'selected' : ''}>Clean Borderless Zebra</option>
+          </select>
+        </div>
+        <div class="form-group form-full">
+          <label>Custom Thank You / Footer Slogan</label>
+          <input id="ct-notes" value="${t.customNotes || ''}" placeholder="e.g. Thank you for choosing us for your IT &amp; CCTV infrastructure!">
+        </div>
+      </div>
+      `,
+      `
+      <button class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="App.saveCustomTemplate()"><span class="material-icons">save</span> Save &amp; Apply My Format</button>
+      `,
+      'modal-lg'
+    );
+
+    // Sync color inputs
+    const pPicker = document.getElementById('ct-primary');
+    const pHex = document.getElementById('ct-primary-hex');
+    if (pPicker && pHex) pPicker.addEventListener('input', () => { pHex.value = pPicker.value; });
+
+    const aPicker = document.getElementById('ct-accent');
+    const aHex = document.getElementById('ct-accent-hex');
+    if (aPicker && aHex) aPicker.addEventListener('input', () => { aHex.value = aPicker.value; });
+  },
+
+  saveCustomTemplate() {
+    const templateData = {
+      primaryColor: document.getElementById('ct-primary')?.value || '#1e293b',
+      accentColor: document.getElementById('ct-accent')?.value || '#0284c7',
+      fontFamily: document.getElementById('ct-font')?.value || 'Arial, sans-serif',
+      logoPos: document.getElementById('ct-logo-pos')?.value || 'left',
+      headerStyle: document.getElementById('ct-header-style')?.value || 'solid',
+      showBorder: document.getElementById('ct-border')?.value === 'true',
+      customNotes: document.getElementById('ct-notes')?.value?.trim() || '',
+    };
+
+    DB.saveCustomTemplate(templateData);
+    DB.setBillFormat('custom');
+    this.closeModal();
+    this.toast('🎉 Custom Bill Format saved and activated as your default format!', 'success');
+    this.renderSettings(document.getElementById('page-content'));
   },
 
   _handleLogoUpload(input) {
