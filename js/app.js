@@ -1002,16 +1002,6 @@ const App = {
         </div>
       </div>
 
-      <!-- Developer Key Security (Change Master Key) -->
-      <div class="card" style="padding:14px;margin-bottom:16px;border-left:4px solid hsl(271,78%,50%)">
-        <h4 style="margin-bottom:6px;font-size:.9rem;color:hsl(271,78%,35%)"><span class="material-icons" style="font-size:16px;vertical-align:middle">security</span> Developer Master Key Setting</h4>
-        <p style="font-size:.8rem;color:var(--text-secondary);margin-bottom:10px">You can update the developer password used to unlock this master console.</p>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-          <input id="dev-new-master-key" type="password" placeholder="New Developer Key" style="max-width:260px" value="${DB.getAuth().devKey || 'shraban@9800'}">
-          <button class="btn btn-sm btn-primary" style="background:hsl(271,78%,50%);border-color:hsl(271,78%,50%)" onclick="App._devSaveMasterKey()"><span class="material-icons">save</span> Update Developer Key</button>
-        </div>
-      </div>
-
       <div class="kpi-grid" style="margin-bottom:18px">
         <div class="kpi-card kpi-primary">
           <div class="kpi-content">
@@ -1128,15 +1118,6 @@ const App = {
     }
   },
 
-  _devSaveMasterKey() {
-    const key = document.getElementById('dev-new-master-key')?.value.trim();
-    if (!key || key.length < 4) {
-      this.toast('Master Key must be at least 4 characters', 'error');
-      return;
-    }
-    DB.setDevKey(key);
-    this.toast('Developer Master Key updated successfully! 🔑', 'success');
-  },
 
   _devSaveRemoteUrl() {
     const url = document.getElementById('dev-remote-url')?.value.trim() || '';

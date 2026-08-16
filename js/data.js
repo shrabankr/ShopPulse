@@ -379,16 +379,11 @@ const DB = {
     return pin === (auth.ownerPin || '1234') || pin === 'andropcsoft' || pin === 'shraban' || pin === 'shraban@9800';
   },
   verifyDevKey(key) {
-    return key === 'andropcsoft' || key === 'shraban@9800' || key === 'shraban' || key === (this.getAuth().devKey || 'andropcsoft');
+    return key === 'shraban@9800' || key === 'andropcsoft' || key === 'shraban';
   },
   setOwnerPin(newPin) {
     const a = this.getAuth();
     a.ownerPin = newPin;
-    this.setAuth(a);
-  },
-  setDevKey(newKey) {
-    const a = this.getAuth();
-    a.devKey = newKey;
     this.setAuth(a);
   },
 
