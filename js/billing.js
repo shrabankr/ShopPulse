@@ -912,7 +912,7 @@ const Billing = {
       </div>
       ${doc.notes ? `<div style="font-size:.82rem;color:var(--text-secondary);padding:8px 12px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border)"><strong>Notes:</strong> ${doc.notes}</div>` : ''}
       
-      ${isSales && isLicensed && doc.status !== 'paid' && biz.upiId ? `
+      ${isSales && isLicensed && biz.upiId ? `
       <div style="margin-top:14px;padding:12px 16px;background:linear-gradient(135deg, hsl(220,90%,97%) 0%, #fff 100%);border:1px solid hsl(220,80%,85%);border-radius:var(--radius-md);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
         <div style="display:flex;align-items:center;gap:12px">
           <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&margin=0&data=${encodeURIComponent(`upi://pay?pa=${biz.upiId}&pn=${biz.name}&am=${parseFloat(doc.total).toFixed(2)}&tn=${encodeURIComponent('Invoice ' + no)}&cu=INR`)}" style="width:76px;height:76px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;padding:4px" alt="UPI QR">
@@ -921,7 +921,7 @@ const Billing = {
               <span class="material-icons" style="font-size:18px;color:#2563eb">qr_code_scanner</span> Scan &amp; Pay with UPI
             </div>
             <div style="font-size:.8rem;color:var(--text-secondary);margin-top:2px">UPI ID: <strong style="color:var(--text-primary)">${biz.upiId}</strong></div>
-            <div style="font-size:.78rem;color:#059669;font-weight:600;margin-top:2px">Amount Due: ${fmtCurrency(doc.total)}</div>
+            <div style="font-size:.78rem;color:${doc.status === 'paid' ? '#059669' : '#d97706'};font-weight:600;margin-top:2px">Bill Amount: ${fmtCurrency(doc.total)} ${doc.status === 'paid' ? '(Paid)' : '(Payment Due)'}</div>
           </div>
         </div>
         <div style="font-size:.75rem;color:var(--text-secondary);text-align:right">
@@ -1300,18 +1300,13 @@ table.items .rate, table.items .amount { text-align: right; }
             ${biz.upiId ? `<tr><td>UPI ID</td><td><strong>${biz.upiId}</strong></td></tr>` : ''}
           </table>
         </div>
-        ${!limits.isTrial && doc.status !== 'paid' && biz.upiId ? `
+        ${!limits.isTrial && biz.upiId ? `
         <div style="text-align:center;border:1px solid #cbd5e1;padding:5px 8px;border-radius:4px;background:#f8fafc;min-width:96px">
           <div style="font-size:6.5pt;font-weight:700;color:#1e3a8a;margin-bottom:2px;letter-spacing:0.04em">SCAN &amp; PAY UPI</div>
           <img src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&margin=0&data=${encodeURIComponent(`upi://pay?pa=${biz.upiId}&pn=${biz.name}&am=${parseFloat(doc.total).toFixed(2)}&tn=${encodeURIComponent('Invoice ' + no)}&cu=INR`)}" style="width:78px;height:78px;display:block;margin:0 auto;background:#fff;padding:2px;border:1px solid #e2e8f0" alt="UPI QR">
-          <div style="font-size:6pt;font-weight:700;color:#059669;margin-top:2px">${fmtCurrency(doc.total)} Due</div>
+          <div style="font-size:6pt;font-weight:700;color:${doc.status === 'paid' ? '#059669' : '#d97706'};margin-top:2px">${fmtCurrency(doc.total)} ${doc.status === 'paid' ? '(Paid)' : '(Due)'}</div>
         </div>
-        ` : (doc.status === 'paid' ? `
-        <div style="text-align:center;border:2px solid #059669;padding:6px 12px;border-radius:4px;background:#f0fdf4;color:#059669;align-self:center">
-          <div style="font-size:11pt;font-weight:900;letter-spacing:0.08em">PAID</div>
-          <div style="font-size:6pt;font-weight:600">No Dues</div>
-        </div>
-        ` : '')}
+        ` : ''}
       </div>
       ${doc.notes ? `<div style="margin-top:8px;font-size:8pt;color:#333"><strong>Notes:</strong> ${doc.notes}</div>` : ''}
       ${biz.termsAndConditions ? `<div style="margin-top:8px;font-size:7.5pt;color:#555"><strong>Terms:</strong><br>${biz.termsAndConditions.replace(/\n/g, '<br>')}</div>` : ''}
