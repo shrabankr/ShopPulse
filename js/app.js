@@ -70,6 +70,7 @@ const App = {
           `}
           <a href="#ai" class="nav-item" data-r="ai"><span class="material-icons">auto_awesome</span><span>AI Assistant</span><span class="nav-chip">AI</span></a>
           <a href="#settings" class="nav-item" data-r="settings"><span class="material-icons">settings</span><span>Settings &amp; Backup</span></a>
+          <a href="#help" class="nav-item" data-r="help"><span class="material-icons">help_outline</span><span>Help &amp; Support</span></a>
         </div>
       </nav>
     `;
@@ -118,8 +119,11 @@ const App = {
         <button class="icon-btn" onclick="App.downloadBackup()" title="1-Click Backup Database (.json)">
           <span class="material-icons">cloud_download</span>
         </button>
-        <button class="icon-btn" onclick="App.route('#settings')" title="Settings & Backup Hub">
+        <button class="icon-btn" onclick="App.route('#settings')" title="Settings &amp; Backup Hub">
           <span class="material-icons">manage_accounts</span>
+        </button>
+        <button class="icon-btn" onclick="App.route('#help')" title="Help &amp; Developer Support">
+          <span class="material-icons">help_outline</span>
         </button>
       </div>
     `;
@@ -147,7 +151,7 @@ const App = {
       'billing-purchases': 'Purchase Bills', expenses: 'Operating Expenses',
       receivables: 'Receivables', payables: 'Payables', inventory: 'Inventory',
       customers: 'Customers', suppliers: 'Suppliers',
-      reports: 'Reports', gst: 'GST Returns', ai: 'AI Assistant', settings: 'Settings'
+      reports: 'Reports', gst: 'GST Returns', ai: 'AI Assistant', settings: 'Settings', help: 'Help & Support'
     };
     if (T) T.textContent = titles[r] || 'ShopPulse';
 
@@ -165,6 +169,7 @@ const App = {
       case 'gst': Reports.renderGST(c); break;
       case 'ai': AI.render(c); break;
       case 'settings': this.renderSettings(c); break;
+      case 'help': this.renderHelp(c); break;
       default: this.renderDashboard(c);
     }
   },
@@ -804,6 +809,99 @@ ${JSON.stringify(data, null, 2)}
     DB.setBiz(biz);
     this.buildSidebar();
     this.toast('Settings saved successfully!');
+  },
+
+  renderHelp(container) {
+    const biz = DB.getBiz();
+    container.innerHTML = `
+      <div class="page-header">
+        <h2>Help &amp; Developer Support</h2>
+        <p>Official technical support, software customizations, and developer assistance.</p>
+      </div>
+
+      <!-- Developer Support Banner -->
+      <div class="card" style="margin-bottom:20px;border-left:4px solid hsl(271,78%,50%);background:linear-gradient(135deg, #ffffff 0%, hsl(271,78%,98%) 100%)">
+        <div class="card-body" style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+          <div style="width:60px;height:60px;border-radius:16px;background:hsl(271,78%,50%);color:#fff;display:flex;align-items:center;justify-content:center;font-size:32px;flex-shrink:0;box-shadow:0 4px 14px rgba(147,51,234,0.3)">
+            <span class="material-icons" style="font-size:34px">support_agent</span>
+          </div>
+          <div style="flex:1;min-width:260px">
+            <h3 style="margin-bottom:4px;color:hsl(271,78%,25%)">Software Developer Contact</h3>
+            <div style="font-size:.9rem;color:var(--text-secondary);margin-bottom:8px">
+              Created &amp; Maintained by <strong>Shraban Kumar Mahato</strong> (AndroPCSoft)
+            </div>
+            <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:.86rem">
+              <span>📧 Email: <a href="mailto:shraban@andropcsoft.com?subject=ShopPulse%20Support%20Request" style="font-weight:700;color:hsl(271,78%,45%)">shraban@andropcsoft.com</a></span>
+              <span>🌐 Website: <a href="https://andropcsoft.com" target="_blank" style="font-weight:700;color:hsl(271,78%,45%)">andropcsoft.com</a></span>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <a href="mailto:shraban@andropcsoft.com?subject=ShopPulse%20Help%20Request%20-%20${encodeURIComponent(biz.name)}" class="btn btn-primary" style="background:hsl(271,78%,50%);border-color:hsl(271,78%,50%)">
+              <span class="material-icons">mail</span> Email Shraban
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Who and How to Contact -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-bottom:24px">
+        <div class="card">
+          <div class="card-header"><h4 style="display:flex;align-items:center;gap:8px"><span class="material-icons" style="color:var(--primary);font-size:20px">storefront</span> Shop Owners &amp; Retailers</h4></div>
+          <div class="card-body" style="font-size:.85rem;color:var(--text-secondary);line-height:1.6">
+            <p><strong>Contact for:</strong></p>
+            <ul style="padding-left:18px;margin-top:6px">
+              <li>Setting up on new desktop PCs or laptops</li>
+              <li>Thermal printer &amp; A4/A5 invoice layout customization</li>
+              <li>Database backup recovery or PC migration</li>
+              <li>GSTIN &amp; HSN rate setup for computer/CCTV goods</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><h4 style="display:flex;align-items:center;gap:8px"><span class="material-icons" style="color:var(--success);font-size:20px">account_balance</span> Accountants &amp; Tax Consultants</h4></div>
+          <div class="card-body" style="font-size:.85rem;color:var(--text-secondary);line-height:1.6">
+            <p><strong>Contact for:</strong></p>
+            <ul style="padding-left:18px;margin-top:6px">
+              <li>Custom GSTR-1 / GSTR-3B Excel &amp; CSV export formats</li>
+              <li>Tally XML or Busy accounting export integration</li>
+              <li>ITC input tax credit verification &amp; P&amp;L audit reports</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><h4 style="display:flex;align-items:center;gap:8px"><span class="material-icons" style="color:hsl(271,78%,50%);font-size:20px">cloud_sync</span> Multi-Shop SaaS &amp; Custom Features</h4></div>
+          <div class="card-body" style="font-size:.85rem;color:var(--text-secondary);line-height:1.6">
+            <p><strong>Contact for:</strong></p>
+            <ul style="padding-left:18px;margin-top:6px">
+              <li>Multi-branch inventory sync &amp; central warehouse</li>
+              <li>Field technician mobile job card apps</li>
+              <li>Cloud multi-tenant deployment for your business group</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Self Help -->
+      <div class="card">
+        <div class="card-header"><h3><span class="material-icons" style="vertical-align:middle;font-size:20px">help</span> Frequently Asked Questions</h3></div>
+        <div class="card-body" style="font-size:.86rem;line-height:1.6;color:var(--text-secondary)">
+          <div style="margin-bottom:14px">
+            <strong style="color:var(--text-primary);font-size:.9rem">Q: How do I backup my shop data?</strong>
+            <p>Go to <strong>Settings &amp; Backup Hub</strong> and click <strong>"Download Backup (.json)"</strong>. Keep this file in a USB drive or Google Drive weekly.</p>
+          </div>
+          <div style="margin-bottom:14px">
+            <strong style="color:var(--text-primary);font-size:.9rem">Q: How do I hide profit margins from billing staff?</strong>
+            <p>Click the mode badge on the topbar and select <strong>"Lock to Staff Mode"</strong>. To switch back, enter your Owner PIN (Default: <code>1234</code>).</p>
+          </div>
+          <div>
+            <strong style="color:var(--text-primary);font-size:.9rem">Q: How do I open the Developer Master Console?</strong>
+            <p>Press <strong><code>Ctrl + Shift + D</code></strong> anywhere on your keyboard or triple-click the ShopPulse logo on top-left.</p>
+          </div>
+        </div>
+      </div>
+    `;
   },
 
   clearAll() {
