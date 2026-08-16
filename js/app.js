@@ -1002,6 +1002,16 @@ const App = {
         </div>
       </div>
 
+      <!-- Developer Key Security (Change Master Key) -->
+      <div class="card" style="padding:14px;margin-bottom:16px;border-left:4px solid hsl(271,78%,50%)">
+        <h4 style="margin-bottom:6px;font-size:.9rem;color:hsl(271,78%,35%)"><span class="material-icons" style="font-size:16px;vertical-align:middle">security</span> Developer Master Key Setting</h4>
+        <p style="font-size:.8rem;color:var(--text-secondary);margin-bottom:10px">You can update the developer password used to unlock this master console.</p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <input id="dev-new-master-key" type="password" placeholder="New Developer Key" style="max-width:260px" value="${DB.getAuth().devKey || 'shraban@9800'}">
+          <button class="btn btn-sm btn-primary" style="background:hsl(271,78%,50%);border-color:hsl(271,78%,50%)" onclick="App._devSaveMasterKey()"><span class="material-icons">save</span> Update Developer Key</button>
+        </div>
+      </div>
+
       <div class="kpi-grid" style="margin-bottom:18px">
         <div class="kpi-card kpi-primary">
           <div class="kpi-content">
@@ -1116,6 +1126,16 @@ const App = {
       input.type = 'password';
       if (btn) btn.innerHTML = '<span class="material-icons" style="font-size:14px;vertical-align:middle">visibility</span> Show URL';
     }
+  },
+
+  _devSaveMasterKey() {
+    const key = document.getElementById('dev-new-master-key')?.value.trim();
+    if (!key || key.length < 4) {
+      this.toast('Master Key must be at least 4 characters', 'error');
+      return;
+    }
+    DB.setDevKey(key);
+    this.toast('Developer Master Key updated successfully! 🔑', 'success');
   },
 
   _devSaveRemoteUrl() {
@@ -1317,12 +1337,43 @@ ${JSON.stringify(data, null, 2)}
   renderSettings(container) {
     const b = DB.getBiz();
     const auth = DB.getAuth();
+    const lic = DB.getLicenseStatus();
+    const limits = DB.getTrialLimits();
     const snapshots = DB.getSnapshots();
     const stateOpts = INDIAN_STATES.map(s => `<option value="${s.code}" ${b.stateCode === s.code ? 'selected' : ''}>${s.name}</option>`).join('');
     container.innerHTML = `
       <div class="page-header">
         <h2>Business Settings &amp; Data Safety</h2>
-        <p>Manage your GST profile, backup your database, and configure staff security.</p>
+        <p>Manage your GST profile, check subscription status, and backup your database.</p>
+      </div>
+
+      <!-- Subscription & License Status Card (Owner & User Friendly) -->
+      <div class="card" style="margin-bottom:20px;border-left:4px solid ${lic.isTrial ? '#f59e0b' : '#0f9d58'}">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <div>
+            <h3 style="display:flex;align-items:center;gap:6px">
+              <span class="material-icons" style="font-size:22px;color:${lic.isTrial ? '#f59e0b' : '#0f9d58'}">${lic.isTrial ? 'hourglass_top' : 'verified'}</span>
+              Subscription &amp; License Status
+            </h3>
+          </div>
+          <span class="badge ${lic.isTrial ? (lic.isExpired ? 'badge-danger' : 'badge-warning') : 'badge-paid'}" style="font-size:.8rem;padding:4px 10px">
+            ${lic.planName.toUpperCase()} ${lic.isTrial ? `(${lic.daysLeft} days left)` : '• ACTIVE'}
+          </span>
+        </div>
+        <div class="card-body">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;margin-bottom:14px">
+            <div>
+              <div style="font-size:.9rem;font-weight:600;margin-bottom:4px">${lic.isTrial ? '60-Day Free Evaluation Trial' : 'Commercial Business License Active'}</div>
+              <div style="font-size:.82rem;color:var(--text-secondary)">
+                ${lic.isTrial ? `Trial Usage: ${limits.customersCount}/50 Customers • ${limits.suppliersCount}/10 Suppliers • ${limits.salesCount}/80 Invoices (${limits.isWatermarkNeeded ? 'Watermarked' : 'Clean Print'})` : `Unlimited Customers, Unlimited Suppliers, Unlimited Clean Invoices &amp; Custom Branding`}
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-sm btn-secondary" onclick="App.checkOnlineActivation()"><span class="material-icons">sync</span> 🔄 Check Online Status</button>
+              <button class="btn btn-sm btn-primary" onclick="App.openLicenseModal()"><span class="material-icons">vpn_key</span> ${lic.isTrial ? 'Activate License' : 'View License Key'}</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="settings-grid">

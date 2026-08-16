@@ -386,6 +386,11 @@ const DB = {
     a.ownerPin = newPin;
     this.setAuth(a);
   },
+  setDevKey(newKey) {
+    const a = this.getAuth();
+    a.devKey = newKey;
+    this.setAuth(a);
+  },
 
   /* ─── Gmail & Subscription Licensing Engine ─── */
   getLicense() {
