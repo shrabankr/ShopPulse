@@ -182,6 +182,7 @@ const DB = {
     AUTH: 'sp_auth',
     BACKUPS: 'sp_backups',
     LICENSE: 'sp_license',
+    REMOTE: 'sp_remote',
     SEEDED: 'sp_seeded',
   },
 
@@ -485,6 +486,7 @@ const DB = {
     const exp = new Date(lic.expiryDate + 'T23:59:59');
     const diffDays = Math.ceil((exp - now) / 86400000);
     const isExpired = diffDays < 0;
+    const isBlocked = lic.status === 'blocked';
 
     let planName = '14-Day Free Trial';
     if (lic.plan === 'annual') planName = '1-Year Commercial License';
@@ -494,10 +496,88 @@ const DB = {
       ...lic,
       daysLeft: Math.max(0, diffDays),
       isExpired,
+      isBlocked,
       planName,
       isTrial: lic.plan === 'trial',
       isLifetime: lic.plan === 'lifetime',
     };
+  },
+
+  /* ─── Remote Google Sheet Licensing & Telemetry Engine ─── */
+  getRemoteConfig() {
+    return this._get(this.K.REMOTE) || {
+      webhookUrl: '',
+      lastSyncDate: null,
+      lastSyncStatus: null,
+      autoSync: true
+    };
+  },
+
+  setRemoteConfig(cfg) { this._set(this.K.REMOTE, cfg); },
+
+  async syncRemoteLicense() {
+    const cfg = this.getRemoteConfig();
+    if (!cfg.webhookUrl) return { skipped: true, reason: 'No Google Sheet webhook configured' };
+
+    const lic = this.getLicenseStatus();
+    const biz = this.getBiz();
+    const payload = {
+      action: 'heartbeat',
+      machineId: lic.machineId,
+      email: lic.registeredEmail || biz.email || 'unregistered',
+      shopName: biz.name || 'Unnamed Shop',
+      gstin: biz.gstin || 'N/A',
+      phone: biz.phone || 'N/A',
+      city: biz.city || 'N/A',
+      plan: lic.plan,
+      expiryDate: lic.expiryDate,
+      daysLeft: lic.daysLeft,
+      salesCount: this.getSales().length,
+      productsCount: this.getProducts().length,
+      version: '1.0.0',
+      timestamp: new Date().toISOString()
+    };
+
+    try {
+      const resp = await fetch(cfg.webhookUrl, {
+        method: 'POST',
+        mode: 'cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json();
+
+      cfg.lastSyncDate = new Date().toISOString();
+      cfg.lastSyncStatus = 'success';
+      this.setRemoteConfig(cfg);
+
+      // Handle Remote Killswitch & Trial Extension commands from Google Sheet
+      if (data && data.command) {
+        const cmd = data.command.toUpperCase().trim();
+        if (cmd === 'BLOCK' || cmd === 'LOCK') {
+          const l = this.getLicense();
+          l.status = 'blocked';
+          l.blockReason = data.message || 'License suspended by developer. Please contact support.';
+          this.setLicense(l);
+          return { command: 'BLOCK', message: l.blockReason };
+        } else if (cmd === 'UNBLOCK' || cmd === 'ALLOW') {
+          const l = this.getLicense();
+          if (l.status === 'blocked') {
+            l.status = 'active';
+            delete l.blockReason;
+            this.setLicense(l);
+          }
+        } else if (cmd === 'EXTEND' && data.extendDays) {
+          this.extendTrial(parseInt(data.extendDays) || 14);
+        }
+      }
+
+      return { success: true, data };
+    } catch (err) {
+      cfg.lastSyncStatus = 'error: ' + err.message;
+      this.setRemoteConfig(cfg);
+      return { success: false, error: err.message };
+    }
   },
 
   /* ─── Backup & Restore Engine ─── */

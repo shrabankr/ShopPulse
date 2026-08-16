@@ -20,6 +20,15 @@ const App = {
         this.openDevConsole();
       }
     });
+
+    // Background Google Sheets telemetry sync (silent)
+    setTimeout(() => {
+      DB.syncRemoteLicense().then(res => {
+        if (res && res.command === 'BLOCK') {
+          App.route();
+        }
+      }).catch(() => {});
+    }, 2000);
   },
 
   /* ─── Sidebar ─── */
@@ -168,6 +177,35 @@ const App = {
       reports: 'Reports', gst: 'GST Returns', ai: 'AI Assistant', settings: 'Settings', help: 'Help & Support'
     };
     if (T) T.textContent = titles[r] || 'ShopPulse';
+
+    // Remote Killswitch check
+    const lic = DB.getLicenseStatus();
+    if (lic.isBlocked && r !== 'help' && r !== 'settings') {
+      if (T) T.textContent = 'License Suspended';
+      c.innerHTML = `
+        <div style="min-height:70vh;display:flex;align-items:center;justify-content:center;padding:20px">
+          <div class="card" style="max-width:540px;text-align:center;padding:36px;border-top:5px solid var(--danger)">
+            <div style="width:68px;height:68px;border-radius:50%;background:var(--danger-light);color:var(--danger);display:inline-flex;align-items:center;justify-content:center;margin-bottom:18px">
+              <span class="material-icons" style="font-size:36px">block</span>
+            </div>
+            <h2>Software Access Suspended</h2>
+            <p style="color:var(--text-secondary);margin:12px 0 20px;line-height:1.6">
+              ${lic.blockReason || 'Your ShopPulse access has been temporarily suspended by the developer. Please contact support to reactivate.'}
+            </p>
+            <div style="background:var(--bg);padding:14px;border-radius:var(--radius-sm);margin-bottom:20px;font-size:.85rem;text-align:left">
+              <div style="margin-bottom:6px">Machine ID: <strong class="mono">${lic.machineId}</strong></div>
+              <div style="margin-bottom:6px">Registered Gmail: <strong>${lic.registeredEmail || 'Unregistered'}</strong></div>
+              <div>Business Name: <strong>${DB.getBiz().name}</strong></div>
+            </div>
+            <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+              <a href="mailto:shraban@andropcsoft.com?subject=ShopPulse%20Reactivation%20-%20${encodeURIComponent(lic.machineId)}" class="btn btn-primary"><span class="material-icons">mail</span> Contact Shraban (Developer)</a>
+              <button class="btn btn-secondary" onclick="App.openLicenseModal()"><span class="material-icons">vpn_key</span> Enter Activation Key</button>
+            </div>
+          </div>
+        </div>
+      `;
+      return;
+    }
 
     switch (r) {
       case 'dashboard': this.renderDashboard(c); break;
@@ -671,6 +709,30 @@ const App = {
         </div>
       </div>
 
+      <!-- Remote Google Sheets License & Killswitch Hub -->
+      <div class="card" style="padding:14px;margin-bottom:16px;border-left:4px solid #0f9d58">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <h4 style="margin-bottom:4px;color:#0f9d58"><span class="material-icons" style="font-size:18px;vertical-align:middle">table_chart</span> Google Sheets Remote Monitor &amp; Killswitch</h4>
+            <p style="font-size:.8rem;color:var(--text-secondary);margin-bottom:10px">Receive live shop heartbeats, active client lists, and control licenses remotely via your Google Sheet.</p>
+          </div>
+          <button class="btn btn-xs btn-secondary" onclick="App._devCopyGoogleScript()"><span class="material-icons" style="font-size:13px">content_copy</span> Copy Apps Script Code</button>
+        </div>
+        <div class="form-grid" style="margin-bottom:10px">
+          <div class="form-group form-full">
+            <label>Google Apps Script Web App URL (Deploy &gt; Web App)</label>
+            <input id="dev-remote-url" placeholder="https://script.google.com/macros/s/AKfycb.../exec" value="${DB.getRemoteConfig().webhookUrl || ''}">
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-sm btn-primary" onclick="App._devSaveRemoteUrl()"><span class="material-icons">save</span> Save Webhook URL</button>
+          <button class="btn btn-sm btn-secondary" onclick="App._devTestRemoteSync()"><span class="material-icons">sync</span> Test Live Heartbeat</button>
+          <span style="font-size:.78rem;color:var(--text-secondary)">
+            Last Sync: <strong>${DB.getRemoteConfig().lastSyncDate ? fmtDate(DB.getRemoteConfig().lastSyncDate) : 'Never synced'}</strong> &nbsp;|&nbsp; Status: <strong>${DB.getRemoteConfig().lastSyncStatus || 'Idle'}</strong>
+          </span>
+        </div>
+      </div>
+
       <div class="kpi-grid" style="margin-bottom:18px">
         <div class="kpi-card kpi-primary">
           <div class="kpi-content">
@@ -771,6 +833,87 @@ const App = {
     const msg = `🎉 *ShopPulse License Activation Details*\n\nDear Customer,\nThank you for choosing ShopPulse!\n\n📧 *Registered Gmail:* ${email}\n🔑 *License Key:* \`${key}\`\n\n*How to Activate:*\n1. Open ShopPulse\n2. Click 'Settings' > 'Subscription & License'\n3. Enter your Gmail & paste this License Key\n4. Click 'Activate'\n\nFor support, contact Shraban Kumar Mahato (shraban@andropcsoft.com).`;
     navigator.clipboard.writeText(msg);
     this.toast('WhatsApp activation message copied! 💬', 'success');
+  },
+
+  _devSaveRemoteUrl() {
+    const url = document.getElementById('dev-remote-url')?.value.trim() || '';
+    const cfg = DB.getRemoteConfig();
+    cfg.webhookUrl = url;
+    DB.setRemoteConfig(cfg);
+    this.toast('Google Sheets Webhook URL saved! 🌐', 'success');
+  },
+
+  async _devTestRemoteSync() {
+    this.toast('Sending telemetry ping to Google Sheet…', 'info');
+    const res = await DB.syncRemoteLicense();
+    if (res.skipped) {
+      this.toast('Please enter and save your Google Apps Script Webhook URL first.', 'warning');
+    } else if (res.success) {
+      this.toast('Ping received by Google Sheet! Response: ' + (res.data.command || 'OK'), 'success');
+      this.openDevConsole();
+    } else {
+      this.toast('Ping failed: ' + (res.error || 'Network error'), 'error');
+      this.openDevConsole();
+    }
+  },
+
+  _devCopyGoogleScript() {
+    const scriptCode = `// ─── ShopPulse Master Google Apps Script Webhook ───
+// Deploy as: Web App > Execute as: Me > Who has access: Anyone
+function doPost(e) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var data = JSON.parse(e.postData.contents);
+  
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow([
+      "Last Active", "Machine ID", "Shop Name", "Gmail", "Phone", 
+      "City", "GSTIN", "Plan", "Days Left", "Invoices", "Version", "Command", "Admin Notes"
+    ]);
+    sheet.getRange(1, 1, 1, 13).setFontWeight("bold").setBackground("#1a2332").setFontColor("#ffffff");
+  }
+  
+  var rows = sheet.getDataRange().getValues();
+  var rowIndex = -1;
+  var command = "ALLOW";
+  
+  for (var i = 1; i < rows.length; i++) {
+    if (rows[i][1] == data.machineId) {
+      rowIndex = i + 1;
+      command = rows[i][11] || "ALLOW";
+      break;
+    }
+  }
+  
+  if (rowIndex > -1) {
+    sheet.getRange(rowIndex, 1, 1, 11).setValues([[
+      new Date(), data.machineId, data.shopName, data.email, data.phone,
+      data.city, data.gstin, data.plan, data.daysLeft, data.salesCount, data.version
+    ]]);
+  } else {
+    sheet.appendRow([
+      new Date(), data.machineId, data.shopName, data.email, data.phone,
+      data.city, data.gstin, data.plan, data.daysLeft, data.salesCount, data.version, command, ""
+    ]);
+  }
+  
+  return ContentService.createTextOutput(JSON.stringify({
+    status: "success",
+    command: command,
+    message: command === "BLOCK" ? "License suspended by administrator." : "Active"
+  })).setMimeType(ContentService.MimeType.JSON);
+}`;
+
+    navigator.clipboard.writeText(scriptCode);
+    this.modal('📋 Google Apps Script Code Copied',
+      `
+      <div style="margin-bottom:12px;font-size:.85rem;color:var(--text-secondary)">
+        Paste this code into your Google Sheet under <strong>Extensions &gt; Apps Script</strong>, then click <strong>Deploy &gt; New deployment &gt; Web app (Access: Anyone)</strong>.
+      </div>
+      <pre style="background:#1a2332;color:#a6e22e;padding:12px;border-radius:var(--radius-sm);font-size:.78rem;max-height:280px;overflow:auto;white-space:pre-wrap">${scriptCode}</pre>
+      `,
+      `<button class="btn btn-primary" onclick="App.closeModal()">Got it!</button>`,
+      'modal-lg'
+    );
   },
 
   _inspectCollection(colName) {
