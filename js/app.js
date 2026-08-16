@@ -854,7 +854,6 @@ const App = {
       this.toast('Online check failed: ' + e.message, 'error');
     }
   },
-
   activateLicense() {
     const email = document.getElementById('lic-in-email')?.value.trim();
     const key = document.getElementById('lic-in-key')?.value.trim();
@@ -873,8 +872,53 @@ const App = {
     }
   },
 
-  /* ─── Developer Master Console ─── */
+  /* ─── Developer Master Console & Security Gate ─── */
   openDevConsole() {
+    this.requestDevAccess();
+  },
+
+  requestDevAccess() {
+    if (sessionStorage.getItem('sp_dev_authenticated') === 'true') {
+      this._showDevConsole();
+      return;
+    }
+    this.modal('🔒 Developer Access Restricted',
+      `
+      <div style="text-align:center;padding:10px 0 16px">
+        <div style="width:54px;height:54px;border-radius:50%;background:hsl(271,78%,90%);color:hsl(271,78%,50%);display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px">
+          <span class="material-icons" style="font-size:28px">terminal</span>
+        </div>
+        <h3>Developer Authentication</h3>
+        <p style="font-size:.84rem;color:var(--text-secondary)">This console is strictly restricted to software developer <strong>Shraban Kumar Mahato</strong>.</p>
+      </div>
+      <div class="form-group" style="max-width:260px;margin:0 auto 16px">
+        <label style="text-align:center;display:block">Enter Developer Master Key</label>
+        <input type="password" id="dev-auth-key" placeholder="••••••••••••" style="text-align:center;font-size:1.1rem;letter-spacing:.15em;font-weight:700" onkeyup="if(event.key==='Enter')App._verifyDevAccess()">
+      </div>
+      `,
+      `
+      <button class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
+      <button class="btn btn-primary" style="background:hsl(271,78%,50%);border-color:hsl(271,78%,50%)" onclick="App._verifyDevAccess()"><span class="material-icons">lock_open</span> Authorize</button>
+      `,
+      'modal-sm'
+    );
+    setTimeout(() => document.getElementById('dev-auth-key')?.focus(), 200);
+  },
+
+  _verifyDevAccess() {
+    const key = document.getElementById('dev-auth-key')?.value.trim();
+    if (DB.verifyDevKey(key)) {
+      sessionStorage.setItem('sp_dev_authenticated', 'true');
+      DB.setRole('developer');
+      this.closeModal();
+      this.toast('Developer access granted! 🚀', 'success');
+      this._showDevConsole();
+    } else {
+      this.toast('⛔ Access Denied: Invalid Developer Key!', 'error');
+    }
+  },
+
+  _showDevConsole() {
     const biz = DB.getBiz();
     const sales = DB.getSales();
     const purchases = DB.getPurchases();
@@ -916,8 +960,8 @@ const App = {
           <div class="form-group">
             <label>Subscription Plan</label>
             <select id="dev-lic-plan">
-              <option value="1YR">1-Year License (₹2,499)</option>
-              <option value="LIFE">Lifetime Unlimited (₹6,999)</option>
+              <option value="1YR">1-Year License (₹1,999)</option>
+              <option value="LIFE">Lifetime Unlimited (₹4,999)</option>
             </select>
           </div>
           <div class="form-group">
@@ -926,8 +970,9 @@ const App = {
           </div>
         </div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-          <button class="btn btn-sm btn-primary" onclick="App._devGenerateKey()"><span class="material-icons">vpn_key</span> Generate License Key</button>
-          <button class="btn btn-sm btn-secondary" onclick="DB.extendTrial(14);App.buildTopbar();App.toast('Client trial extended by +14 days! ⏳');App.openDevConsole()"><span class="material-icons">more_time</span> +14 Days Trial</button>
+          <button class="btn btn-sm btn-primary" style="background:hsl(271,78%,50%);border-color:hsl(271,78%,50%)" onclick="App._devGenerateKey()"><span class="material-icons">vpn_key</span> Generate License Key</button>
+          <button class="btn btn-sm btn-secondary" onclick="DB.extendTrial(14);App.buildTopbar();App.toast('Client trial extended by +14 days! ⏳');App._showDevConsole()"><span class="material-icons">more_time</span> +14 Days Trial</button>
+          <button class="btn btn-sm btn-secondary" onclick="DB.extendTrial(30);App.buildTopbar();App.toast('Client trial extended by +30 days! ⏳');App._showDevConsole()"><span class="material-icons">more_time</span> +30 Days Trial</button>
         </div>
         <div id="dev-key-output" style="display:none;margin-top:12px;padding:10px;background:var(--bg);border-radius:var(--radius-sm)">
           <div style="font-size:.8rem;color:var(--text-secondary);margin-bottom:4px">Generated Key for <strong id="dev-out-email"></strong>:</div>
@@ -939,7 +984,7 @@ const App = {
         </div>
       </div>
 
-      <!-- Remote Google Sheets License & Killswitch Hub -->
+      <!-- Remote Google Sheets License & Killswitch Hub (Masked URL) -->
       <div class="card" style="padding:14px;margin-bottom:16px;border-left:4px solid #0f9d58">
         <div style="display:flex;justify-content:space-between;align-items:flex-start">
           <div>
@@ -950,8 +995,11 @@ const App = {
         </div>
         <div class="form-grid" style="margin-bottom:10px">
           <div class="form-group form-full">
-            <label>Google Apps Script Web App URL (Deploy &gt; Web App)</label>
-            <input id="dev-remote-url" placeholder="https://script.google.com/macros/s/AKfycb.../exec" value="${DB.getRemoteConfig().webhookUrl || ''}">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+              <label style="margin-bottom:0">Google Apps Script Webhook URL</label>
+              <a href="javascript:void(0)" onclick="App._toggleUrlVisibility()" id="dev-url-toggle-btn" style="font-size:.78rem;color:var(--primary);text-decoration:none"><span class="material-icons" style="font-size:14px;vertical-align:middle">visibility</span> Show / Hide URL</a>
+            </div>
+            <input id="dev-remote-url" type="password" placeholder="https://script.google.com/macros/s/AKfycb.../exec" value="${DB.getRemoteConfig().webhookUrl || ''}">
           </div>
         </div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -1064,6 +1112,19 @@ const App = {
     const msg = `🎉 *ShopPulse License Activation Details*\n\nDear Customer,\nThank you for choosing ShopPulse!\n\n📧 *Registered Gmail:* ${email}\n🔑 *License Key:* \`${key}\`\n\n*How to Activate:*\n1. Open ShopPulse\n2. Click 'Settings' > 'Subscription & License'\n3. Enter your Gmail & paste this License Key\n4. Click 'Activate'\n\nFor support, contact Shraban Kumar Mahato (shraban@andropcsoft.com).`;
     navigator.clipboard.writeText(msg);
     this.toast('WhatsApp activation message copied! 💬', 'success');
+  },
+
+  _toggleUrlVisibility() {
+    const input = document.getElementById('dev-remote-url');
+    const btn = document.getElementById('dev-url-toggle-btn');
+    if (!input) return;
+    if (input.type === 'password') {
+      input.type = 'text';
+      if (btn) btn.innerHTML = '<span class="material-icons" style="font-size:14px;vertical-align:middle">visibility_off</span> Hide URL';
+    } else {
+      input.type = 'password';
+      if (btn) btn.innerHTML = '<span class="material-icons" style="font-size:14px;vertical-align:middle">visibility</span> Show URL';
+    }
   },
 
   _devSaveRemoteUrl() {
@@ -1361,13 +1422,6 @@ ${JSON.stringify(data, null, 2)}
               <div class="form-group" style="align-self:flex-end">
                 <button class="btn btn-secondary" onclick="App.saveOwnerPin()"><span class="material-icons">key</span> Update PIN</button>
               </div>
-            </div>
-            <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-              <div>
-                <div style="font-weight:600;font-size:.88rem">Developer Master Console</div>
-                <div style="font-size:.78rem;color:var(--text-secondary)">By Shraban Kumar Mahato (AndroPCSoft)</div>
-              </div>
-              <button class="btn btn-sm btn-ghost" onclick="App.openDevConsole()"><span class="material-icons">terminal</span> Open Console</button>
             </div>
           </div>
         </div>
