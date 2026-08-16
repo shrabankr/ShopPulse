@@ -1036,49 +1036,86 @@ const App = {
   },
 
   _devCopyGoogleScript() {
-    const scriptCode = `// ─── ShopPulse Master Google Apps Script Webhook ───
-// Deploy as: Web App > Execute as: Me > Who has access: Anyone
+    const scriptCode = `// ═══════════════════════════════════════════════════════════════════════════
+// ShopPulse Master Remote License Hub & Auto-Lead Manager
+// Author: Shraban Kumar Mahato (AndroPCSoft - shraban@andropcsoft.com)
+// Deploy: Deploy > New Deployment > Web App > Execute as: Me > Access: Anyone
+// ═══════════════════════════════════════════════════════════════════════════
+
 function doPost(e) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getActiveSheet();
   var data = JSON.parse(e.postData.contents);
-  
+
+  // 1. First-time auto setup & styling
   if (sheet.getLastRow() === 0) {
     sheet.appendRow([
       "Last Active", "Machine ID", "Shop Name", "Gmail", "Phone", 
-      "City", "GSTIN", "Plan", "Days Left", "Invoices", "Version", "Command", "Admin Notes"
+      "City", "GSTIN", "Current Plan", "Days Left", "Invoices", "Version", 
+      "Command (Control)", "WhatsApp Client", "Admin Notes"
     ]);
-    sheet.getRange(1, 1, 1, 13).setFontWeight("bold").setBackground("#1a2332").setFontColor("#ffffff");
+    sheet.getRange(1, 1, 1, 14)
+      .setFontWeight("bold")
+      .setBackground("#1a2332")
+      .setFontColor("#ffffff")
+      .setHorizontalAlignment("center");
+    sheet.setFrozenRows(1);
   }
-  
+
   var rows = sheet.getDataRange().getValues();
   var rowIndex = -1;
   var command = "ALLOW";
-  
+  var adminNotes = "";
+
   for (var i = 1; i < rows.length; i++) {
     if (rows[i][1] == data.machineId) {
       rowIndex = i + 1;
       command = rows[i][11] || "ALLOW";
+      adminNotes = rows[i][13] || "";
       break;
     }
   }
-  
+
+  var now = Utilities.formatDate(new Date(), "GMT+5:30", "dd-MMM-yyyy HH:mm");
+  var cleanPhone = (data.phone || "").toString().replace(/\\D/g, "");
+  if (cleanPhone.length === 10) cleanPhone = "91" + cleanPhone;
+  var waFormula = cleanPhone ? '=HYPERLINK("https://wa.me/' + cleanPhone + '", "📲 WhatsApp")' : "—";
+
   if (rowIndex > -1) {
     sheet.getRange(rowIndex, 1, 1, 11).setValues([[
-      new Date(), data.machineId, data.shopName, data.email, data.phone,
+      now, data.machineId, data.shopName, data.email, data.phone,
       data.city, data.gstin, data.plan, data.daysLeft, data.salesCount, data.version
     ]]);
+    sheet.getRange(rowIndex, 13).setFormula(waFormula);
   } else {
-    sheet.appendRow([
-      new Date(), data.machineId, data.shopName, data.email, data.phone,
-      data.city, data.gstin, data.plan, data.daysLeft, data.salesCount, data.version, command, ""
-    ]);
+    var newRow = [
+      now, data.machineId, data.shopName, data.email, data.phone,
+      data.city, data.gstin, data.plan, data.daysLeft, data.salesCount, data.version,
+      "ALLOW", "", ""
+    ];
+    sheet.appendRow(newRow);
+    var lastRow = sheet.getLastRow();
+    sheet.getRange(lastRow, 13).setFormula(waFormula);
+
+    // Add Command Dropdown validation for easy 1-click control
+    var rule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(["ALLOW", "ACTIVATE_1YR", "ACTIVATE_LIFE", "EXTEND_30D", "BLOCK"], true)
+      .setAllowInvalid(false)
+      .build();
+    sheet.getRange(lastRow, 12).setDataValidation(rule);
   }
-  
-  return ContentService.createTextOutput(JSON.stringify({
+
+  // Response commands sent back to ShopPulse client app
+  var response = {
     status: "success",
     command: command,
-    message: command === "BLOCK" ? "License suspended by administrator." : "Active"
-  })).setMimeType(ContentService.MimeType.JSON);
+    plan: command.indexOf("LIFE") > -1 ? "lifetime" : (command.indexOf("1YR") > -1 ? "annual" : data.plan),
+    extendDays: command === "EXTEND_30D" ? 30 : 0,
+    message: command === "BLOCK" ? "License suspended by developer. Please contact shraban@andropcsoft.com." : "Active"
+  };
+
+  return ContentService.createTextOutput(JSON.stringify(response))
+    .setMimeType(ContentService.MimeType.JSON);
 }`;
 
     navigator.clipboard.writeText(scriptCode);
