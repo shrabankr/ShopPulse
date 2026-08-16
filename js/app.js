@@ -788,28 +788,28 @@ const App = {
       </div>
 
       <div class="card" style="padding:14px;border-left:4px solid var(--primary);margin-bottom:14px">
-        <h4 style="margin-bottom:10px;font-size:.9rem"><span class="material-icons" style="font-size:16px;vertical-align:middle">vpn_key</span> Method 1: Offline License Key Activation (No Internet Required)</h4>
-        <p style="font-size:.78rem;color:var(--text-secondary);margin-bottom:8px">Enter the cryptographic key sent to you via SMS, WhatsApp, or Email by Shraban.</p>
+        <h4 style="margin-bottom:10px;font-size:.9rem"><span class="material-icons" style="font-size:16px;vertical-align:middle">vpn_key</span> Method 1: Offline License Key (Activation / Renewal / Upgrade)</h4>
+        <p style="font-size:.78rem;color:var(--text-secondary);margin-bottom:8px">Enter the cryptographic key sent to you via SMS, WhatsApp, or Email by Shraban to activate, renew, or upgrade to Lifetime.</p>
         <div class="form-grid" style="margin-bottom:10px">
           <div class="form-group form-full">
             <label>Your Registered Gmail Address <span class="required">*</span></label>
             <input id="lic-in-email" type="email" placeholder="e.g. yourshop@gmail.com" value="${lic.registeredEmail || biz.email || ''}">
           </div>
           <div class="form-group form-full">
-            <label>License Activation Key <span class="required">*</span></label>
-            <input id="lic-in-key" placeholder="e.g. SPS-1YR-XXXXXX-2027" style="font-family:monospace;letter-spacing:.08em;text-transform:uppercase" value="${lic.licenseKey || ''}">
+            <label>License Activation / Upgrade Key <span class="required">*</span></label>
+            <input id="lic-in-key" placeholder="e.g. SPS-1YR-XXXXXX-2027 or SPS-LIFE-XXXXXX-2099" style="font-family:monospace;letter-spacing:.08em;text-transform:uppercase" value="${lic.licenseKey || ''}">
           </div>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="App.activateLicense()"><span class="material-icons">check_circle</span> Activate Offline Key</button>
+        <button class="btn btn-primary btn-sm" onclick="App.activateLicense()"><span class="material-icons">check_circle</span> Activate / Upgrade License</button>
       </div>
 
       <div class="card" style="padding:14px;border-left:4px solid #0f9d58;margin-bottom:14px">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
           <div>
-            <h4 style="font-size:.9rem;color:#0f9d58"><span class="material-icons" style="font-size:16px;vertical-align:middle">cloud_sync</span> Method 2: Online 1-Click Activation</h4>
-            <p style="font-size:.78rem;color:var(--text-secondary);margin-top:2px">If you already paid via UPI/GPay, click below to sync and auto-activate from server.</p>
+            <h4 style="font-size:.9rem;color:#0f9d58"><span class="material-icons" style="font-size:16px;vertical-align:middle">cloud_sync</span> Method 2: Online 1-Click Auto-Activation / Upgrade</h4>
+            <p style="font-size:.78rem;color:var(--text-secondary);margin-top:2px">If you already paid via UPI/GPay, click below to sync and automatically apply your new license.</p>
           </div>
-          <button class="btn btn-sm btn-secondary" onclick="App.checkOnlineActivation()"><span class="material-icons">sync</span> Check Online Status</button>
+          <button class="btn btn-sm btn-secondary" onclick="App.checkOnlineActivation()"><span class="material-icons">sync</span> 🔄 Check Online Status</button>
         </div>
       </div>
 
