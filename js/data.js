@@ -597,14 +597,22 @@ const DB = {
       timestamp: new Date().toISOString()
     };
 
+    const qs = Object.keys(payload).map(k => encodeURIComponent(k) + '=' + encodeURIComponent(payload[k])).join('&');
+    const targetUrl = cfg.webhookUrl + (cfg.webhookUrl.includes('?') ? '&' : '?') + qs;
+
     try {
-      const resp = await fetch(cfg.webhookUrl, {
+      const resp = await fetch(targetUrl, {
         method: 'POST',
-        mode: 'cors',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(payload)
       });
-      const data = await resp.json();
+      const text = await resp.text();
+      let data = {};
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        data = { status: 'success', command: 'ALLOW' };
+      }
 
       cfg.lastSyncDate = new Date().toISOString();
       cfg.lastSyncStatus = 'success';

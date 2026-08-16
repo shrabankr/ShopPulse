@@ -1043,17 +1043,31 @@ const App = {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function doGet(e) {
-  return ContentService.createTextOutput(JSON.stringify({
-    status: "online",
-    service: "ShopPulse Remote License Hub",
-    timestamp: new Date().toISOString()
-  })).setMimeType(ContentService.MimeType.JSON);
+  return handleRequest(e);
 }
 
 function doPost(e) {
+  return handleRequest(e);
+}
+
+function handleRequest(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getActiveSheet();
-  var data = JSON.parse(e.postData.contents);
+  
+  var data = {};
+  if (e && e.postData && e.postData.contents) {
+    try { data = JSON.parse(e.postData.contents); } catch (err) { data = e.parameter || {}; }
+  } else if (e && e.parameter) {
+    data = e.parameter;
+  }
+
+  // If no machineId provided, return health status
+  if (!data || !data.machineId) {
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "online",
+      message: "ShopPulse Webhook is Active! Waiting for shop data."
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
 
   // 1. First-time auto setup & styling
   if (sheet.getLastRow() === 0) {
