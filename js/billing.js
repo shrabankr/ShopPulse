@@ -285,13 +285,13 @@ const Billing = {
             <thead>
               <tr>
                 <th style="width:28px">#</th>
-                <th style="min-width:180px">Description / Product</th>
-                <th style="width:90px">HSN/SAC</th>
-                <th style="width:70px">Qty</th>
-                <th style="width:70px">Unit</th>
-                <th style="width:100px">Rate (₹)</th>
-                <th style="width:70px">Disc%</th>
-                <th style="width:80px">GST%</th>
+                <th style="min-width:220px">Description / Product</th>
+                <th style="width:95px">HSN/SAC</th>
+                <th style="width:75px">Qty</th>
+                <th style="width:85px">Unit</th>
+                <th style="width:105px">Rate (₹)</th>
+                <th style="width:75px">Disc%</th>
+                <th style="width:85px">GST%</th>
                 <th class="text-right" style="width:100px">Taxable</th>
                 <th class="text-right" style="width:110px">Total</th>
                 <th style="width:36px"></th>
@@ -346,42 +346,48 @@ const Billing = {
     window._iType = type;
     window._iDoc = doc;
 
-    this._renderRows(products, gstOpts, unitOpts, productOpts, biz);
-
-    if (doc && doc.items) {
-      doc.items.forEach(() => { });
-      this._recalc(biz.stateCode);
-    } else {
-      this._recalc(biz.stateCode);
-    }
-  },
-
-  _renderRows(products, gstOpts, unitOpts, productOpts, biz) {
-    const tbody = document.getElementById('items-tbody');
-    if (!tbody) return;
-    const items = window._iItems || [{ productId: '', name: '', hsn: '', unit: 'Nos', qty: 1, rate: 0, discount: 0, gstRate: 18 }];
-    tbody.innerHTML = '';
-    items.forEach((item, i) => this._appendRow(i, item, products, gstOpts, unitOpts, productOpts, biz));
+    this._renderRows();
     this._recalc(biz.stateCode);
   },
 
-  _appendRow(idx, item, products, gstOpts, unitOpts, productOpts, biz) {
+  _getProductOptions(selectedId = '') {
+    const products = DB.getProducts();
+    const isSales = window._iType === 'sales';
+    return products.map(p => {
+      const price = isSales ? p.sellingPrice : p.purchasePrice;
+      const sel = p.id === selectedId ? 'selected' : '';
+      return `<option value="${p.id}" ${sel}>${p.name}${p.sku ? ' (' + p.sku + ')' : ''} — ${fmtCurrency(price)}</option>`;
+    }).join('');
+  },
+
+  _renderRows() {
     const tbody = document.getElementById('items-tbody');
     if (!tbody) return;
+    const biz = DB.getBiz();
+    const items = window._iItems && window._iItems.length ? window._iItems : [{ productId: '', name: '', hsn: '', unit: 'Nos', qty: 1, rate: 0, discount: 0, gstRate: 18 }];
+    tbody.innerHTML = '';
+    items.forEach((item, i) => this._appendRow(i, item));
+    this._recalc(biz.stateCode);
+  },
+
+  _appendRow(idx, item) {
+    const tbody = document.getElementById('items-tbody');
+    if (!tbody) return;
+    const biz = DB.getBiz();
     const tr = document.createElement('tr');
     tr.dataset.idx = idx;
     tr.innerHTML = `
       <td style="text-align:center;color:var(--text-secondary);font-size:.8rem;padding-top:10px">${idx + 1}</td>
       <td>
         <select class="item-product" onchange="Billing._onProductSelect(${idx},this)">
-          <option value="">— Custom / Type below —</option>
-          ${productOpts}
+          <option value="">— Select Product or Type Below —</option>
+          ${this._getProductOptions(item.productId)}
         </select>
-        <input class="item-name" value="${item.name || ''}" placeholder="Description…" style="margin-top:4px" oninput="Billing._recalc('${biz.stateCode}')">
+        <input class="item-name" value="${item.name || ''}" placeholder="Product description…" style="margin-top:4px" oninput="Billing._recalc('${biz.stateCode}')">
       </td>
       <td><input class="item-hsn" value="${item.hsn || ''}" placeholder="HSN/SAC" oninput="Billing._recalc('${biz.stateCode}')"></td>
       <td><input class="item-qty" type="number" value="${item.qty || 1}" min="0.01" step="0.01" oninput="Billing._recalc('${biz.stateCode}')"></td>
-      <td><select class="item-unit">${UNITS.map(u => `<option ${u === (item.unit || 'Nos') ? 'selected' : ''}>${u}</option>`).join('')}</select></td>
+      <td><select class="item-unit" onchange="Billing._recalc('${biz.stateCode}')">${UNITS.map(u => `<option value="${u}" ${u === (item.unit || 'Nos') ? 'selected' : ''}>${u}</option>`).join('')}</select></td>
       <td><input class="item-rate" type="number" value="${item.rate || 0}" min="0" step="0.01" oninput="Billing._recalc('${biz.stateCode}')"></td>
       <td><input class="item-disc" type="number" value="${item.discount || 0}" min="0" max="100" step="0.01" oninput="Billing._recalc('${biz.stateCode}')"></td>
       <td><select class="item-gst" onchange="Billing._recalc('${biz.stateCode}')">${GST_RATES.map(r => `<option value="${r}" ${parseFloat(item.gstRate) === r ? 'selected' : ''}>${r}%</option>`).join('')}</select></td>
@@ -390,7 +396,7 @@ const Billing = {
       <td class="td-action"><button class="remove-row-btn" onclick="Billing._removeRow(${idx})"><span class="material-icons">close</span></button></td>
     `;
 
-    // Pre-select product
+    // Pre-select product in dropdown
     if (item.productId) {
       const sel = tr.querySelector('.item-product');
       if (sel) sel.value = item.productId;
@@ -399,13 +405,13 @@ const Billing = {
     tbody.appendChild(tr);
   },
 
-  _addRow() {
+  _addRow(itemData = null) {
     const biz = DB.getBiz();
     if (!window._iItems) window._iItems = [];
-    const newItem = { productId: '', name: '', hsn: '', unit: 'Nos', qty: 1, rate: 0, discount: 0, gstRate: 18 };
+    const newItem = itemData || { productId: '', name: '', hsn: '', unit: 'Nos', qty: 1, rate: 0, discount: 0, gstRate: 18 };
     window._iItems.push(newItem);
     const idx = window._iItems.length - 1;
-    this._appendRow(idx, newItem, DB.getProducts(), '', '', '', biz);
+    this._appendRow(idx, newItem);
     this._recalc(biz.stateCode);
   },
 
@@ -425,17 +431,28 @@ const Billing = {
 
   _onProductSelect(idx, sel) {
     const productId = sel.value;
-    if (!productId) return;
-    const p = DB.getProductById(productId);
-    if (!p) return;
     const row = sel.closest('tr');
     if (!row) return;
-    row.querySelector('.item-name').value = p.name;
+
+    if (!productId) {
+      row.querySelector('.item-name')?.focus();
+      return;
+    }
+
+    const p = DB.getProductById(productId);
+    if (!p) return;
+
+    const isSales = window._iType === 'sales';
+    row.querySelector('.item-name').value = p.name || '';
     row.querySelector('.item-hsn').value = p.hsn || '';
-    row.querySelector('.item-rate').value = window._iType === 'sales' ? p.sellingPrice : p.purchasePrice;
-    row.querySelector('.item-gst').value = p.gstRate;
+    row.querySelector('.item-rate').value = isSales ? (p.sellingPrice || 0) : (p.purchasePrice || 0);
+
+    const gstSel = row.querySelector('.item-gst');
+    if (gstSel && p.gstRate !== undefined) gstSel.value = p.gstRate;
+
     const unitSel = row.querySelector('.item-unit');
-    if (unitSel) unitSel.value = p.unit || 'Nos';
+    if (unitSel && p.unit) unitSel.value = p.unit;
+
     this._recalc(DB.getBiz().stateCode);
   },
 
