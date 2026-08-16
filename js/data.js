@@ -565,7 +565,7 @@ const DB = {
   /* ─── Remote Google Sheet Licensing & Telemetry Engine ─── */
   getRemoteConfig() {
     return this._get(this.K.REMOTE) || {
-      webhookUrl: '',
+      webhookUrl: 'https://script.google.com/macros/s/AKfycbzPyugDKIdgwdbcqSkPWNYJcyQBhgzMz_mYz6YR9gw_wHzwMnTIbs_z6kzB2S2esOTt/exec',
       lastSyncDate: null,
       lastSyncStatus: null,
       autoSync: true
