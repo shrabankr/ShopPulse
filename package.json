@@ -1,8 +1,34 @@
 {
   "name": "shoppulse",
   "version": "1.0.0",
-  "description": "GST-compliant billing, inventory & CRM for Indian IT/CCTV businesses",
-  "author": "shrabankr",
+  "description": "GST-compliant billing, inventory, and CRM desktop & web software for Indian IT & CCTV businesses",
+  "author": {
+    "name": "Shraban Kumar",
+    "url": "https://github.com/shrabankr"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/shrabankr/ShopPulse#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shrabankr/ShopPulse.git"
+  },
+  "bugs": {
+    "url": "https://github.com/shrabankr/ShopPulse/issues"
+  },
+  "keywords": [
+    "gst",
+    "billing-software",
+    "invoice-generator",
+    "inventory-management",
+    "crm",
+    "india-gst",
+    "gstr-1",
+    "gstr-3b",
+    "it-business",
+    "cctv-business",
+    "electron",
+    "desktop-app"
+  ],
   "main": "electron/main.js",
   "scripts": {
     "desktop": "electron .",
