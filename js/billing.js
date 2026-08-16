@@ -189,14 +189,58 @@ const Billing = {
         </div>
 
         <!-- Party Selection -->
-        <div class="invoice-section-title"><span class="material-icons">person</span>${isSales ? 'Bill To (Customer)' : 'Bill From (Supplier)'}</div>
-        <div class="form-grid" style="margin-bottom:20px">
+        <div class="invoice-section-title" style="display:flex;justify-content:space-between;align-items:center">
+          <span><span class="material-icons">person</span>${isSales ? 'Bill To (Customer)' : 'Bill From (Supplier)'}</span>
+          <button type="button" class="btn btn-xs btn-secondary" onclick="Billing.toggleQuickParty(true)" style="display:inline-flex;align-items:center;gap:4px">
+            <span class="material-icons" style="font-size:14px">person_add</span> + New ${isSales ? 'Customer' : 'Supplier'}
+          </button>
+        </div>
+        <div class="form-grid" style="margin-bottom:12px">
           <div class="form-group form-full autocomplete-wrap">
-            <label>${isSales ? 'Customer' : 'Supplier'} <span class="required">*</span></label>
-            <select id="if-party" onchange="Billing._onPartyChange()">
-              <option value="">— Select —</option>
-              ${partyOpts}
-            </select>
+            <div style="display:flex;gap:8px">
+              <select id="if-party" onchange="Billing._onPartyChange()" style="flex:1">
+                <option value="">— Select ${isSales ? 'Customer' : 'Supplier'} —</option>
+                <option value="__NEW__" style="font-weight:700;color:var(--primary)">➕ + Add New ${isSales ? 'Customer' : 'Supplier'}...</option>
+                ${partyOpts}
+              </select>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="Billing.toggleQuickParty(true)" title="Create New ${isSales ? 'Customer' : 'Supplier'}">
+                <span class="material-icons" style="font-size:16px">person_add</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Inline Quick Add Party Drawer -->
+        <div id="quick-party-drawer" style="display:none;margin-bottom:16px;padding:14px;background:var(--primary-light);border:1px solid hsl(221,60%,85%);border-radius:var(--radius)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <strong style="color:var(--primary-dark);font-size:.9rem"><span class="material-icons" style="font-size:16px;vertical-align:middle">person_add</span> Quick Add ${isSales ? 'Customer' : 'Supplier'}</strong>
+            <button type="button" class="btn btn-xs btn-ghost" onclick="Billing.toggleQuickParty(false)">✕ Close</button>
+          </div>
+          <div class="form-grid" style="margin-bottom:10px">
+            <div class="form-group form-full">
+              <label>${isSales ? 'Customer' : 'Supplier'} Name <span class="required">*</span></label>
+              <input id="qp-name" placeholder="e.g. Acme Enterprises or Rahul Sharma">
+            </div>
+            <div class="form-group">
+              <label>Phone / Mobile</label>
+              <input id="qp-phone" placeholder="98XXXXXXXX">
+            </div>
+            <div class="form-group">
+              <label>GSTIN (Optional)</label>
+              <input id="qp-gstin" placeholder="27AAAAA0000A1Z5" maxlength="15" style="text-transform:uppercase;font-family:monospace">
+            </div>
+            <div class="form-group">
+              <label>State</label>
+              <select id="qp-state">${stateOpts}</select>
+            </div>
+            <div class="form-group">
+              <label>City / Location</label>
+              <input id="qp-city" placeholder="e.g. Pune">
+            </div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:8px">
+            <button type="button" class="btn btn-sm btn-ghost" onclick="Billing.toggleQuickParty(false)">Cancel</button>
+            <button type="button" class="btn btn-sm btn-primary" onclick="Billing.saveQuickParty()"><span class="material-icons">check</span> Save &amp; Select</button>
           </div>
         </div>
         <div class="invoice-parties-grid" id="party-preview">
@@ -384,10 +428,81 @@ const Billing = {
     this._recalc(DB.getBiz().stateCode);
   },
 
+  toggleQuickParty(show) {
+    const drawer = document.getElementById('quick-party-drawer');
+    if (!drawer) return;
+    drawer.style.display = show ? 'block' : 'none';
+    if (show) {
+      const biz = DB.getBiz();
+      const stateEl = document.getElementById('qp-state');
+      if (stateEl && biz.stateCode) stateEl.value = biz.stateCode;
+      setTimeout(() => document.getElementById('qp-name')?.focus(), 100);
+    }
+  },
+
+  saveQuickParty() {
+    const isSales = window._iType === 'sales';
+    const name = document.getElementById('qp-name')?.value.trim();
+    if (!name) {
+      App.toast('Name is required', 'error');
+      document.getElementById('qp-name')?.focus();
+      return;
+    }
+    const gstin = document.getElementById('qp-gstin')?.value.toUpperCase().trim() || '';
+    if (gstin && !validateGSTIN(gstin)) {
+      App.toast('Invalid GSTIN format (must be 15 alphanumeric characters)', 'error');
+      return;
+    }
+    const phone = document.getElementById('qp-phone')?.value.trim() || '';
+    const city = document.getElementById('qp-city')?.value.trim() || '';
+    const stateEl = document.getElementById('qp-state');
+    const state = INDIAN_STATES.find(s => s.code === stateEl?.value);
+
+    const contact = {
+      name,
+      gstin,
+      phone,
+      city,
+      state: state?.name || '',
+      stateCode: stateEl?.value || '',
+      address: city,
+      pincode: '',
+      email: '',
+      pan: gstin ? gstin.slice(2, 12) : '',
+      contactPerson: name,
+      notes: 'Created from Billing screen'
+    };
+
+    const saved = isSales ? DB.saveCustomer(contact) : DB.saveSupplier(contact);
+
+    // Refresh party dropdown in invoice form
+    const parties = isSales ? DB.getCustomers() : DB.getSuppliers();
+    const partyOpts = parties.map(p => `<option value="${p.id}">${p.name}${p.gstin ? ' — ' + p.gstin : ''}</option>`).join('');
+    const partySelect = document.getElementById('if-party');
+    if (partySelect) {
+      partySelect.innerHTML = `
+        <option value="">— Select ${isSales ? 'Customer' : 'Supplier'} —</option>
+        <option value="__NEW__" style="font-weight:700;color:var(--primary)">➕ + Add New ${isSales ? 'Customer' : 'Supplier'}...</option>
+        ${partyOpts}
+      `;
+      partySelect.value = saved.id;
+    }
+
+    // Hide drawer & trigger party preview update
+    this.toggleQuickParty(false);
+    this._onPartyChange();
+    App.toast(`${isSales ? 'Customer' : 'Supplier'} "${name}" added & selected! 🎯`, 'success');
+  },
+
   _onPartyChange() {
     const partyEl = document.getElementById('if-party');
     if (!partyEl) return;
     const partyId = partyEl.value;
+    if (partyId === '__NEW__') {
+      partyEl.value = '';
+      this.toggleQuickParty(true);
+      return;
+    }
     const isSales = window._iType === 'sales';
     const party = isSales ? DB.getCustomerById(partyId) : DB.getSupplierById(partyId);
     const preview = document.getElementById('buyer-preview');
