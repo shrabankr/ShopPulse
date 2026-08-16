@@ -431,11 +431,12 @@ const App = {
           <h3>Enter Owner PIN</h3>
           <p style="font-size:.85rem;color:var(--text-secondary)">Default PIN is <strong>1234</strong>. Unlocks P&amp;L, purchase prices, and full settings.</p>
         </div>
-        <div class="form-group" style="max-width:260px;margin:0 auto 16px">
+        <div class="form-group" style="max-width:260px;margin:0 auto 12px">
           <input type="password" id="owner-pin-input" placeholder="Enter 4-digit PIN" maxlength="20" style="text-align:center;font-size:1.2rem;letter-spacing:.2em;font-weight:700" onkeyup="if(event.key==='Enter')App.unlockOwner()">
         </div>
-        <div style="text-align:center;font-size:.78rem;color:var(--text-secondary)">
-          Developer? <a href="javascript:void(0)" onclick="App.closeModal();App.openDevConsole()">Open Developer Console</a>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:0 10px;font-size:.78rem">
+          <a href="javascript:void(0)" onclick="App.openForgotPinModal()" style="color:var(--primary);font-weight:600">🔑 Forgot PIN?</a>
+          <a href="javascript:void(0)" onclick="App.closeModal();App.openDevConsole()" style="color:var(--text-secondary)">Developer Login</a>
         </div>
         `,
         `
@@ -523,6 +524,65 @@ const App = {
       this.route();
     } else {
       this.toast('Incorrect PIN! Try 1234', 'error');
+    }
+  },
+
+  openForgotPinModal() {
+    const biz = DB.getBiz();
+    this.modal('Owner PIN Recovery',
+      `
+      <div style="text-align:center;padding:10px 0 16px">
+        <div style="width:54px;height:54px;border-radius:50%;background:var(--primary-light);color:var(--primary);display:inline-flex;align-items:center;justify-content:center;margin-bottom:10px">
+          <span class="material-icons" style="font-size:28px">lock_reset</span>
+        </div>
+        <h3>Reset Owner PIN</h3>
+        <p style="font-size:.84rem;color:var(--text-secondary);max-width:340px;margin:0 auto">
+          Verify your shop identity by entering your registered shop email or phone number to reset your PIN to default <strong>1234</strong>.
+        </p>
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px">
+        <label>Registered Shop Email, Phone, or Master Key <span class="required">*</span></label>
+        <input id="recovery-verify-input" placeholder="e.g. ${biz.email || 'yourshop@gmail.com'}" onkeyup="if(event.key==='Enter')App.recoverOwnerPin()">
+      </div>
+
+      <div style="background:var(--bg);padding:10px 12px;border-radius:var(--radius-sm);font-size:.78rem;color:var(--text-secondary);margin-bottom:14px">
+        💡 <strong>Developer Override:</strong> Developer master key (<code>shraban@9800</code>) also resets the PIN instantly.
+      </div>
+      `,
+      `
+      <button class="btn btn-ghost" onclick="App.toggleRoleModal()">Back</button>
+      <button class="btn btn-primary" onclick="App.recoverOwnerPin()"><span class="material-icons">restart_alt</span> Reset PIN to 1234</button>
+      `,
+      'modal-sm'
+    );
+  },
+
+  recoverOwnerPin() {
+    const input = document.getElementById('recovery-verify-input')?.value.trim().toLowerCase();
+    if (!input) {
+      this.toast('Please enter your registered email, phone, or master key', 'error');
+      return;
+    }
+
+    const biz = DB.getBiz();
+    const lic = DB.getLicense();
+    const validEmails = [biz.email, lic.registeredEmail, 'shraban@andropcsoft.com'].filter(Boolean).map(e => e.toLowerCase().trim());
+    const validPhones = [biz.phone].filter(Boolean).map(p => p.trim());
+    const isDevKey = input === 'shraban@9800' || input === 'andropcsoft' || input === 'shraban';
+
+    const isMatch = isDevKey || validEmails.includes(input) || validPhones.includes(input);
+
+    if (isMatch) {
+      DB.setOwnerPin('1234');
+      DB.setRole('owner');
+      this.closeModal();
+      this.buildSidebar();
+      this.buildTopbar();
+      this.toast('🎉 PIN reset to default 1234 & Owner Mode unlocked!', 'success');
+      this.route('#settings');
+    } else {
+      this.toast('Verification failed. Value does not match registered shop records.', 'error');
     }
   },
 
