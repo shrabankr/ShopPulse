@@ -167,18 +167,42 @@ const AI = {
     if (q.includes('stock') || q.includes('inventory') || q.includes('reorder')) return this._reorderAnalysis();
     if (q.includes('customer') || q.includes('top') || q.includes('best')) return this._topPerformers();
     if (q.includes('summary') || q.includes('health') || q.includes('report')) return this._businessSummary();
-    if (q.includes('invoice') || q.includes('bill') || q.includes('create') || q.includes('generate')) return this._billGenGuide();
+    if (q.includes('expense') || q.includes('cost') || q.includes('spending') || q.includes('opex')) {
+      const expenses = DB.getExpenses();
+      const totalExp = expenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+      const itcExp = expenses.filter(e => e.isItc).reduce((s, e) => s + (parseFloat(e.gstAmt) || 0), 0);
+      const catMap = {};
+      expenses.forEach(e => {
+        const c = e.category || 'Other';
+        catMap[c] = (catMap[c] || 0) + (parseFloat(e.amount) || 0);
+      });
+      const topCats = Object.entries(catMap).sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+      return `💸 <strong>Operating Expenses Breakdown:</strong><br><br>
+        • Total Expenses: <strong>${fmtCurrency(totalExp)}</strong> across ${expenses.length} records<br>
+        • GST ITC Claimable: <strong>${fmtCurrency(itcExp)}</strong> (Direct tax savings!)<br><br>
+        <strong>Top Spending Categories:</strong>
+        <ul>
+          ${topCats.map(([cat, amt]) => `<li>${cat}: <strong>${fmtCurrency(amt)}</strong></li>`).join('')}
+        </ul>
+        💡 <strong>Tip:</strong> Always collect GST tax invoices for commercial rent, broadband, and tools to claim 100% Input Tax Credit in GSTR-3B.`;
+    }
     if (q.includes('profit') || q.includes('margin')) {
       const totalRevenue = sales.filter(s => s.status === 'paid').reduce((s, i) => s + i.total, 0);
       const totalCost = purchases.filter(p => p.status === 'paid').reduce((s, b) => s + b.total, 0);
-      const profit = totalRevenue - totalCost;
-      const margin = totalRevenue > 0 ? (profit / totalRevenue * 100).toFixed(1) : 0;
-      return `📊 <strong>Profit Analysis:</strong><br><br>
+      const expenses = DB.getExpenses();
+      const totalExp = expenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+      const grossProfit = totalRevenue - totalCost;
+      const netProfit = grossProfit - totalExp;
+      const netMargin = totalRevenue > 0 ? (netProfit / totalRevenue * 100).toFixed(1) : 0;
+      return `📊 <strong>Profit & Loss Analysis:</strong><br><br>
         • Total Revenue: <strong>${fmtCurrency(totalRevenue)}</strong><br>
-        • Total Purchases: <strong>${fmtCurrency(totalCost)}</strong><br>
-        • Gross Profit: <strong>${fmtCurrency(profit)}</strong><br>
-        • Profit Margin: <strong>${margin}%</strong><br><br>
-        ${parseFloat(margin) < 15 ? '⚠️ Margin below 15% — consider reviewing your pricing.' : parseFloat(margin) > 30 ? '✅ Excellent margin above 30%!' : '✅ Healthy profit margin.'}`;
+        • Product Purchases (COGS): <strong>${fmtCurrency(totalCost)}</strong><br>
+        • Operating Expenses: <strong>${fmtCurrency(totalExp)}</strong><br>
+        • Gross Profit: <strong>${fmtCurrency(grossProfit)}</strong><br>
+        • Net Operating Profit: <strong>${fmtCurrency(netProfit)}</strong><br>
+        • Net Profit Margin: <strong>${netMargin}%</strong><br><br>
+        ${parseFloat(netMargin) < 15 ? '⚠️ Margin below 15% — consider reviewing operating expenses and service pricing.' : parseFloat(netMargin) > 25 ? '✅ Excellent net profit margin!' : '✅ Healthy profit margin.'}`;
     }
     if (q.includes('overdue') || q.includes('unpaid') || q.includes('outstanding')) {
       const overdue = sales.filter(s => s.status === 'overdue');
@@ -194,32 +218,34 @@ const AI = {
       Here's what I can help with:
       <ul>
         <li>Type <strong>"summary"</strong> for business health report</li>
+        <li>Type <strong>"expenses"</strong> for operational costs & ITC savings</li>
         <li>Type <strong>"revenue"</strong> for sales analysis & forecast</li>
         <li>Type <strong>"gst"</strong> for GST compliance review</li>
         <li>Type <strong>"reorder"</strong> for inventory suggestions</li>
-        <li>Type <strong>"profit"</strong> for margin analysis</li>
-        <li>Type <strong>"overdue"</strong> for payment status</li>
-      </ul>
-      Or click a feature card on the left!`;
+        <li>Type <strong>"profit"</strong> for net margin analysis</li>
+      </ul>`;
   },
 
   _businessSummary() {
     const sales = DB.getSales();
     const purchases = DB.getPurchases();
+    const expenses = DB.getExpenses();
     const products = DB.getProducts();
     const biz = DB.getBiz();
 
     const totalRevenue = sales.filter(s => s.status === 'paid').reduce((s, i) => s + i.total, 0);
     const totalCost = purchases.filter(p => p.status === 'paid').reduce((s, b) => s + b.total, 0);
-    const receivables = sales.filter(s => ['unpaid', 'overdue', 'sent'].includes(s.status)).reduce((s, i) => s + i.total, 0);
-    const payables = purchases.filter(p => ['unpaid', 'overdue'].includes(p.status)).reduce((s, b) => s + b.total, 0);
+    const totalExp = expenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+    const grossProfit = totalRevenue - totalCost;
+    const netProfit = grossProfit - totalExp;
+    const receivables = sales.filter(s => s.status !== 'paid').reduce((s, i) => s + i.total, 0);
+    const payables = purchases.filter(p => p.status !== 'paid').reduce((s, b) => s + b.total, 0);
     const lowStock = products.filter(p => p.reorderLevel > 0 && p.stock <= p.reorderLevel).length;
     const outOfStock = products.filter(p => p.stock === 0).length;
     const overdueCount = sales.filter(s => s.status === 'overdue').length;
-    const profit = totalRevenue - totalCost;
 
     const score = Math.min(100, Math.max(0,
-      (profit > 0 ? 30 : 0) +
+      (netProfit > 0 ? 30 : 0) +
       (receivables < totalRevenue * 0.3 ? 25 : 10) +
       (lowStock === 0 ? 20 : lowStock < 3 ? 10 : 0) +
       (overdueCount === 0 ? 25 : overdueCount < 3 ? 12 : 0)
@@ -232,9 +258,10 @@ const AI = {
       <strong>💰 Financials:</strong>
       <ul>
         <li>Total Revenue (Paid): ${fmtCurrency(totalRevenue)}</li>
-        <li>Total Purchases (Paid): ${fmtCurrency(totalCost)}</li>
-        <li>Gross Profit: <strong>${fmtCurrency(profit)}</strong> ${profit >= 0 ? '✅' : '❌'}</li>
-        <li>Profit Margin: ${totalRevenue > 0 ? (profit / totalRevenue * 100).toFixed(1) + '%' : '—'}</li>
+        <li>Product Purchases (COGS): ${fmtCurrency(totalCost)}</li>
+        <li>Operating Expenses: ${fmtCurrency(totalExp)}</li>
+        <li>Net Operating Profit: <strong>${fmtCurrency(netProfit)}</strong> ${netProfit >= 0 ? '✅' : '❌'}</li>
+        <li>Net Profit Margin: ${totalRevenue > 0 ? (netProfit / totalRevenue * 100).toFixed(1) + '%' : '—'}</li>
       </ul>
       <strong>📋 Receivables & Payables:</strong>
       <ul>
@@ -250,7 +277,7 @@ const AI = {
       <ul>
         ${overdueCount > 0 ? '<li>Follow up on ' + overdueCount + ' overdue invoices immediately</li>' : ''}
         ${lowStock > 0 ? '<li>Reorder ' + lowStock + ' items before they run out</li>' : ''}
-        ${profit < 0 ? '<li>⚠️ Operating at a loss — review pricing and costs</li>' : ''}
+        ${netProfit < 0 ? '<li>⚠️ Operating at a loss — review operating expenses and pricing</li>' : ''}
         ${payables > totalRevenue * 0.5 ? '<li>High payables relative to revenue — manage cash flow carefully</li>' : ''}
         <li>Keep GSTR-1 filed on time before 11th of next month</li>
       </ul>`;

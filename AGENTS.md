@@ -22,10 +22,10 @@
 3. **NO backend calls.** All data lives in `localStorage`. No `fetch()` to any API except CDNs.
 4. **Script load order matters** — always in this sequence in `index.html`:
    ```
-   data.js → app.js → billing.js → inventory.js → crm.js → reports.js → ai.js
+   data.js → app.js → billing.js → inventory.js → crm.js → expenses.js → reports.js → ai.js
    ```
 5. **Every module is a plain `const` object** (e.g. `const Billing = { ... }`). Not classes, not ES modules.
-6. **All modules are globally scoped** — `Billing`, `Inventory`, `CRM`, `Reports`, `AI`, `App`, `DB` are all on `window`.
+6. **All modules are globally scoped** — `Billing`, `Inventory`, `CRM`, `Expenses`, `Reports`, `AI`, `App`, `DB` are all on `window`.
 7. **Never touch `localStorage` directly** in module files — always use `DB.*` methods from `data.js`.
 8. **GST logic lives only in `calcTotals()` in `data.js`** — do not duplicate tax calculation elsewhere.
 
@@ -41,12 +41,14 @@ index.html
   └── loads js/billing.js  ← Sales invoices, purchase bills, receivables, payables
   └── loads js/inventory.js← Products, stock management
   └── loads js/crm.js      ← Customers, suppliers
+  └── loads js/expenses.js ← Operating expenses, GST ITC tracking
   └── loads js/reports.js  ← P&L, GSTR-1, GSTR-3B, CSV export
   └── loads js/ai.js       ← Rule-based AI assistant
 
 Routing: hash-based (window.location.hash)
   App.route('#dashboard')   → renders dashboard
   App.route('#billing-sales')→ calls Billing.render(container, 'sales')
+  App.route('#expenses')    → calls Expenses.render(container)
   (etc.)
 
 Rendering: each module has a render(container) method that sets innerHTML
@@ -66,11 +68,13 @@ DB.getProductById(id)             // returns object or undefined
 DB.getCustomers() / getCustomerById(id)
 DB.getSuppliers() / getSupplierById(id)
 DB.getPurchases() / getPurchaseById(id)
+DB.getExpenses() / getExpenseById(id)
 DB.getBiz()                       // returns business profile object
 
 // Write
 DB.saveSale(saleObj, isNew)       // isNew=true appends, false updates by id
 DB.savePurchase(billObj, isNew)
+DB.saveExpense(expenseObj)        // auto-assigns id if null
 DB.saveProduct(productObj)        // auto-assigns id if null
 DB.saveCustomer(contactObj)       // auto-assigns id if null
 DB.saveSupplier(contactObj)
@@ -79,6 +83,7 @@ DB.setBiz(bizObj)
 // Delete
 DB.deleteSale(id)
 DB.deletePurchase(id)
+DB.deleteExpense(id)
 DB.deleteProduct(id)
 DB.deleteCustomer(id)
 DB.deleteSupplier(id)

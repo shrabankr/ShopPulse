@@ -38,6 +38,7 @@ const App = {
           <span class="nav-section-label">Transactions</span>
           <a href="#billing-sales" class="nav-item" data-r="billing-sales"><span class="material-icons">receipt_long</span><span>Sales Invoices</span></a>
           <a href="#billing-purchases" class="nav-item" data-r="billing-purchases"><span class="material-icons">shopping_bag</span><span>Purchase Bills</span></a>
+          <a href="#expenses" class="nav-item" data-r="expenses"><span class="material-icons">receipt</span><span>Expenses</span></a>
           <a href="#receivables" class="nav-item" data-r="receivables"><span class="material-icons">account_balance_wallet</span><span>Receivables</span>${unpaidSales ? `<span class="nav-badge">${unpaidSales}</span>` : ''}</a>
           <a href="#payables" class="nav-item" data-r="payables"><span class="material-icons">payments</span><span>Payables</span>${unpaidBuys ? `<span class="nav-badge">${unpaidBuys}</span>` : ''}</a>
         </div>
@@ -68,6 +69,9 @@ const App = {
       </button>
       <div class="topbar-title" id="tb-title">Dashboard</div>
       <div class="topbar-actions">
+        <button class="btn btn-secondary btn-sm" onclick="Expenses.openForm()">
+          <span class="material-icons">receipt</span> Add Expense
+        </button>
         <button class="btn btn-primary btn-sm" onclick="Billing.openNew('sales')">
           <span class="material-icons">add</span> New Invoice
         </button>
@@ -97,8 +101,8 @@ const App = {
 
     const titles = {
       dashboard: 'Dashboard', 'billing-sales': 'Sales Invoices',
-      'billing-purchases': 'Purchase Bills', receivables: 'Receivables',
-      payables: 'Payables', inventory: 'Inventory',
+      'billing-purchases': 'Purchase Bills', expenses: 'Operating Expenses',
+      receivables: 'Receivables', payables: 'Payables', inventory: 'Inventory',
       customers: 'Customers', suppliers: 'Suppliers',
       reports: 'Reports', gst: 'GST Returns', ai: 'AI Assistant', settings: 'Settings'
     };
@@ -108,6 +112,7 @@ const App = {
       case 'dashboard': this.renderDashboard(c); break;
       case 'billing-sales': Billing.render(c, 'sales'); break;
       case 'billing-purchases': Billing.render(c, 'purchases'); break;
+      case 'expenses': Expenses.render(c); break;
       case 'receivables': Billing.renderReceivables(c); break;
       case 'payables': Billing.renderPayables(c); break;
       case 'inventory': Inventory.render(c); break;

@@ -151,6 +151,20 @@ function calcTotals(items, sellerStateCode, buyerStateCode) {
   return { items: calcItems, subtotal, totalCgst, totalSgst, totalIgst, totalTax, total, isIntra };
 }
 
+const EXPENSE_CATEGORIES = [
+  'Travel & Fuel',
+  'Rent & Electricity',
+  'Internet & Phone',
+  'Tools & Consumables',
+  'Salaries & Wages',
+  'Office & Stationery',
+  'Software & Subscriptions',
+  'Marketing & Promotion',
+  'Repairs & Maintenance',
+  'Tea & Refreshments',
+  'Other / Misc'
+];
+
 /* ─────────────────────────────────────────────
    Database Layer (localStorage)
 ───────────────────────────────────────────── */
@@ -163,6 +177,7 @@ const DB = {
     CATEGORIES: 'sp_categories',
     SALES: 'sp_sales',
     PURCHASES: 'sp_purchases',
+    EXPENSES: 'sp_expenses',
     MOVEMENTS: 'sp_movements',
     SEEDED: 'sp_seeded',
   },
@@ -310,6 +325,24 @@ const DB = {
     this.setBiz({ ...b, billCounter: (b.billCounter || 1) + 1 });
     return no;
   },
+
+  /* Expenses */
+  getExpenses() { return this._get(this.K.EXPENSES) || []; },
+  getExpenseById(id) { return this.getExpenses().find(e => e.id === id); },
+  saveExpense(data) {
+    const list = this.getExpenses();
+    if (data.id) {
+      const i = list.findIndex(e => e.id === data.id);
+      if (i > -1) list[i] = { ...list[i], ...data }; else list.push(data);
+    } else {
+      data.id = genId('EXP');
+      data.createdAt = new Date().toISOString();
+      list.push(data);
+    }
+    this._set(this.K.EXPENSES, list);
+    return data;
+  },
+  deleteExpense(id) { this._set(this.K.EXPENSES, this.getExpenses().filter(e => e.id !== id)); },
 
   /* Stock Movements */
   getMovements() { return this._get(this.K.MOVEMENTS) || []; },
@@ -508,6 +541,21 @@ const DB = {
       [{ productId: p4.id, name: p4.name, hsn: p4.hsn, unit: p4.unit, qty: 30, rate: 1800, discount: 0, gstRate: 18 },
        { productId: p7.id, name: p7.name, hsn: p7.hsn, unit: p7.unit, qty: 15, rate: 4200, discount: 0, gstRate: 18 }],
       'unpaid', null);
+
+    // ── Business Operating Expenses ──
+    const mkExpense = (title, category, amount, date, paidVia, vendor = '', gstAmt = 0, isItc = false, notes = '') => {
+      this.saveExpense({
+        title, category, amount, date, paidVia, vendor, gstAmt, isItc, notes
+      });
+    };
+
+    mkExpense('Office Rent — Hinjewadi Sector 5', 'Rent & Electricity', 22000, daysAgo(45), 'Bank Transfer', 'Shree Realties', 3960, true, 'Monthly commercial shop rent');
+    mkExpense('Technician Fuel & Site Conveyance', 'Travel & Fuel', 4500, daysAgo(38), 'UPI', 'HPCL Fuel Station', 0, false, 'Site visits for CCTV & network installation');
+    mkExpense('Airtel Enterprise Fiber Broadband', 'Internet & Phone', 1499, daysAgo(30), 'UPI', 'Airtel Enterprise', 269.82, true, 'Office 200 Mbps fiber line');
+    mkExpense('Drill Bits, PVC Conduits & Cable Clips', 'Tools & Consumables', 3200, daysAgo(22), 'Cash', 'Pune Hardware Mart', 0, false, 'Installation consumables');
+    mkExpense('Assistant Technician Site Wages', 'Salaries & Wages', 12000, daysAgo(15), 'Bank Transfer', 'Nilesh G. (Tech)', 0, false, 'On-site installation support wages');
+    mkExpense('Office Tea, Water & Client Refreshments', 'Tea & Refreshments', 1850, daysAgo(8), 'Cash', 'Local Vendor', 0, false, 'Monthly pantry expenses');
+    mkExpense('QuickHeal Antivirus License Stock', 'Software & Subscriptions', 5600, daysAgo(3), 'UPI', 'IT Software Hub', 1008, true, 'Antivirus renewals for client PCs');
 
     this._set(this.K.SEEDED, true);
   }

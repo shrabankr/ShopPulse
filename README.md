@@ -34,6 +34,7 @@ ShopPulse/
     ├── billing.js          ← Sales invoices, purchase bills, print, receivables/payables
     ├── inventory.js        ← Product catalog, stock tracking, adjustments
     ├── crm.js              ← Customers & suppliers management
+    ├── expenses.js         ← Operating expenses, GST ITC tracking, category breakdown
     ├── reports.js          ← P&L, GSTR-1, GSTR-3B, HSN summary, CSV export
     └── ai.js               ← AI assistant (business insights, forecasting, reorder)
 ```
@@ -48,6 +49,7 @@ This is the most important file. It contains:
 1. **`DB` object** — The entire data access layer
    - `DB.getSales()` / `DB.saveSale()` / `DB.deleteSale()`
    - `DB.getPurchases()` / `DB.savePurchase()` / `DB.deletePurchase()`
+   - `DB.getExpenses()` / `DB.saveExpense()` / `DB.deleteExpense()`
    - `DB.getProducts()` / `DB.saveProduct()` / `DB.adjustStock()`
    - `DB.getCustomers()` / `DB.saveCustomer()`
    - `DB.getSuppliers()` / `DB.saveSupplier()`

@@ -34,6 +34,7 @@ js/app.js           — router, dashboard, modal API, toast API, settings page
 js/billing.js       — invoice CRUD, print (GST-compliant), receivables, payables
 js/inventory.js     — product CRUD, stock adjustment
 js/crm.js           — customer/supplier CRUD, transaction history
+js/expenses.js      — expense tracking, categories, GST ITC calculation, CSV export
 js/reports.js       — GSTR-1, GSTR-3B, P&L, CSV export
 js/ai.js            — AI assistant (business health, forecast, reorder, GST check)
 README.md           — full human-readable documentation
@@ -45,13 +46,14 @@ AGENTS.md           — AI agent coding instructions (architecture, rules, patte
 ```js
 DB.getSales() / getSaleById(id) / saveSale(obj, isNew) / deleteSale(id)
 DB.getPurchases() / getPurchaseById(id) / savePurchase(obj, isNew) / deletePurchase(id)
+DB.getExpenses() / getExpenseById(id) / saveExpense(obj) / deleteExpense(id)
 DB.getProducts() / getProductById(id) / saveProduct(obj) / deleteProduct(id)
 DB.getCustomers() / getCustomerById(id) / saveCustomer(obj) / deleteCustomer(id)
 DB.getSuppliers() / getSupplierById(id) / saveSupplier(obj) / deleteSupplier(id)
 DB.getBiz() / setBiz(obj)
 DB.adjustStock(productId, delta)
-DB.nextInvoiceNo()  // "TC/2024-25/0001"
-DB.nextBillNo()     // "TC-PO/2024-25/0001"
+DB.nextInvoiceNo()  // "SCS/2024-25/0001"
+DB.nextBillNo()     // "SCS-PO/2024-25/0001"
 ```
 
 ## GST engine

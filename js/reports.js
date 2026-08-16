@@ -7,6 +7,7 @@ const Reports = {
   render(container) {
     const sales = DB.getSales();
     const purchases = DB.getPurchases();
+    const expenses = DB.getExpenses();
 
     // Date filter helpers
     const now = new Date();
@@ -19,15 +20,18 @@ const Reports = {
 
     const mSales = sales.filter(s => new Date(s.date) >= currentMonthStart);
     const mPurchases = purchases.filter(p => new Date(p.date) >= currentMonthStart);
+    const mExpensesList = expenses.filter(e => new Date(e.date) >= currentMonthStart);
     const pmSales = sales.filter(s => { const d = new Date(s.date); return d >= prevMonthStart && d <= prevMonthEnd; });
 
     const mRevenue = mSales.filter(s => s.status === 'paid').reduce((s, i) => s + i.total, 0);
     const pmRevenue = pmSales.filter(s => s.status === 'paid').reduce((s, i) => s + i.total, 0);
     const mPurchaseAmt = mPurchases.filter(p => p.status === 'paid').reduce((s, b) => s + b.total, 0);
-    const mProfit = mRevenue - mPurchaseAmt;
+    const mExpenseAmt = mExpensesList.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+    const mProfit = mRevenue - mPurchaseAmt - mExpenseAmt;
     const mOutputTax = mSales.reduce((s, i) => s + (i.totalTax || 0), 0);
     const mInputTax = mPurchases.reduce((s, b) => s + (b.totalTax || 0), 0);
-    const mNetTax = mOutputTax - mInputTax;
+    const mExpenseItc = mExpensesList.filter(e => e.isItc).reduce((s, e) => s + (parseFloat(e.gstAmt) || 0), 0);
+    const mNetTax = mOutputTax - (mInputTax + mExpenseItc);
 
     const revenueChange = pmRevenue > 0 ? ((mRevenue - pmRevenue) / pmRevenue * 100).toFixed(1) : '—';
 
@@ -38,9 +42,12 @@ const Reports = {
       const label = d.toLocaleString('en-IN', { month: 'short', year: '2-digit' });
       const revenue = sales.filter(s => { const sd = new Date(s.date); return sd.getMonth() === m && sd.getFullYear() === y && s.status === 'paid'; }).reduce((s, x) => s + x.total, 0);
       const purchase = purchases.filter(p => { const pd = new Date(p.date); return pd.getMonth() === m && pd.getFullYear() === y && p.status === 'paid'; }).reduce((s, x) => s + x.total, 0);
+      const exp = expenses.filter(e => { const ed = new Date(e.date); return ed.getMonth() === m && ed.getFullYear() === y; }).reduce((s, x) => s + (parseFloat(x.amount) || 0), 0);
       const outputTax = sales.filter(s => { const sd = new Date(s.date); return sd.getMonth() === m && sd.getFullYear() === y; }).reduce((s, x) => s + (x.totalTax || 0), 0);
       const inputTax = purchases.filter(p => { const pd = new Date(p.date); return pd.getMonth() === m && pd.getFullYear() === y; }).reduce((s, x) => s + (x.totalTax || 0), 0);
-      return { label, revenue, purchase, profit: revenue - purchase, outputTax, inputTax, netTax: outputTax - inputTax };
+      const expItc = expenses.filter(e => { const ed = new Date(e.date); return ed.getMonth() === m && ed.getFullYear() === y && e.isItc; }).reduce((s, x) => s + (parseFloat(x.gstAmt) || 0), 0);
+      const totalItc = inputTax + expItc;
+      return { label, revenue, purchase, expense: exp, profit: revenue - purchase - exp, outputTax, inputTax: totalItc, netTax: outputTax - totalItc };
     });
 
     // Top customers
@@ -81,16 +88,17 @@ const Reports = {
         <div class="kpi-card kpi-warning">
           <div class="kpi-icon"><span class="material-icons">shopping_bag</span></div>
           <div class="kpi-content">
-            <div class="kpi-label">This Month Purchases</div>
-            <div class="kpi-value">${fmtCurrency(mPurchaseAmt)}</div>
+            <div class="kpi-label">Purchases &amp; Expenses</div>
+            <div class="kpi-value">${fmtCurrency(mPurchaseAmt + mExpenseAmt)}</div>
+            <div class="kpi-sub">Cost: ${fmtCurrency(mPurchaseAmt)} | Opex: ${fmtCurrency(mExpenseAmt)}</div>
           </div>
         </div>
         <div class="kpi-card ${mProfit >= 0 ? 'kpi-success' : 'kpi-danger'}">
           <div class="kpi-icon"><span class="material-icons">account_balance</span></div>
           <div class="kpi-content">
-            <div class="kpi-label">This Month Profit</div>
+            <div class="kpi-label">Net Operating Profit</div>
             <div class="kpi-value">${fmtCurrency(mProfit)}</div>
-            <div class="kpi-sub">Margin: ${mRevenue > 0 ? (mProfit / mRevenue * 100).toFixed(1) + '%' : '—'}</div>
+            <div class="kpi-sub">Net Margin: ${mRevenue > 0 ? (mProfit / mRevenue * 100).toFixed(1) + '%' : '—'}</div>
           </div>
         </div>
         <div class="kpi-card ${mNetTax >= 0 ? 'kpi-danger' : 'kpi-success'}">
@@ -98,7 +106,7 @@ const Reports = {
           <div class="kpi-content">
             <div class="kpi-label">Net GST Payable</div>
             <div class="kpi-value">${fmtCurrency(Math.abs(mNetTax))}</div>
-            <div class="kpi-sub">${mNetTax >= 0 ? 'Tax to pay' : 'Input credit'}</div>
+            <div class="kpi-sub">${mNetTax >= 0 ? 'Tax to pay' : 'Input credit'}${mExpenseItc > 0 ? ` (incl. ${fmtCurrency(mExpenseItc)} Exp ITC)` : ''}</div>
           </div>
         </div>
       </div>
@@ -113,9 +121,10 @@ const Reports = {
                 <th>Month</th>
                 <th class="text-right">Revenue</th>
                 <th class="text-right">Purchases</th>
-                <th class="text-right">Gross Profit</th>
+                <th class="text-right">Expenses</th>
+                <th class="text-right">Net Profit</th>
                 <th class="text-right">Output GST</th>
-                <th class="text-right">Input GST (ITC)</th>
+                <th class="text-right">Input ITC</th>
                 <th class="text-right">Net GST</th>
               </tr>
             </thead>
@@ -124,7 +133,8 @@ const Reports = {
                 <tr>
                   <td><strong>${m.label}</strong></td>
                   <td class="text-right text-success font-bold">${fmtCurrency(m.revenue)}</td>
-                  <td class="text-right text-danger">${fmtCurrency(m.purchase)}</td>
+                  <td class="text-right">${fmtCurrency(m.purchase)}</td>
+                  <td class="text-right text-danger">${fmtCurrency(m.expense)}</td>
                   <td class="text-right ${m.profit >= 0 ? 'text-success' : 'text-danger'} font-bold">${fmtCurrency(m.profit)}</td>
                   <td class="text-right text-danger">${fmtCurrency(m.outputTax)}</td>
                   <td class="text-right text-success">${fmtCurrency(m.inputTax)}</td>
@@ -136,6 +146,7 @@ const Reports = {
                 <td><strong>Total</strong></td>
                 <td class="text-right font-bold text-success">${fmtCurrency(months.reduce((s, m) => s + m.revenue, 0))}</td>
                 <td class="text-right font-bold">${fmtCurrency(months.reduce((s, m) => s + m.purchase, 0))}</td>
+                <td class="text-right font-bold text-danger">${fmtCurrency(months.reduce((s, m) => s + m.expense, 0))}</td>
                 <td class="text-right font-bold">${fmtCurrency(months.reduce((s, m) => s + m.profit, 0))}</td>
                 <td class="text-right font-bold">${fmtCurrency(months.reduce((s, m) => s + m.outputTax, 0))}</td>
                 <td class="text-right font-bold">${fmtCurrency(months.reduce((s, m) => s + m.inputTax, 0))}</td>
