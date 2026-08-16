@@ -1,0 +1,118 @@
+# ShopPulse
+
+> GST-compliant billing, inventory, and CRM for Indian IT/CCTV service businesses.
+> Vanilla HTML + CSS + JS SPA. No backend. No npm. Data in browser localStorage.
+
+## What this app does
+
+- Creates GST Tax Invoices (CGST+SGST intra-state, IGST inter-state) with print support
+- Tracks sales invoices and purchase bills (paid / unpaid / overdue)
+- Manages receivables aging and payables aging
+- Manages product inventory with HSN codes and reorder alerts
+- Stores customers and suppliers with GSTIN validation
+- Generates GSTR-1 (B2B, B2C, HSN summary) and GSTR-3B reports
+- Exports to CSV for CA/GST filing
+- AI assistant for business insights (rule-based, no external API)
+
+## Tech stack
+
+- HTML5 + Vanilla CSS + Vanilla JavaScript (ES6, strict mode)
+- Chart.js 4.4.3 (CDN) for dashboard revenue chart
+- Google Material Icons + Inter font (CDN)
+- localStorage for all data persistence
+- Hash-based SPA routing (#dashboard, #billing-sales, etc.)
+
+## File map
+
+```
+index.html          — app shell, loads all scripts in order
+css/index.css       — design tokens, layout, sidebar, print styles
+css/components.css  — buttons, forms, tables, modals, toasts, KPI cards
+css/modules.css     — page-specific styles (billing form, CCTV, AI chat)
+js/data.js          — DB object, GST engine (calcTotals), seed data, global utils
+js/app.js           — router, dashboard, modal API, toast API, settings page
+js/billing.js       — invoice CRUD, print (GST-compliant), receivables, payables
+js/inventory.js     — product CRUD, stock adjustment
+js/crm.js           — customer/supplier CRUD, transaction history
+js/reports.js       — GSTR-1, GSTR-3B, P&L, CSV export
+js/ai.js            — AI assistant (business health, forecast, reorder, GST check)
+README.md           — full human-readable documentation
+AGENTS.md           — AI agent coding instructions (architecture, rules, patterns)
+```
+
+## Core data API (js/data.js)
+
+```js
+DB.getSales() / getSaleById(id) / saveSale(obj, isNew) / deleteSale(id)
+DB.getPurchases() / getPurchaseById(id) / savePurchase(obj, isNew) / deletePurchase(id)
+DB.getProducts() / getProductById(id) / saveProduct(obj) / deleteProduct(id)
+DB.getCustomers() / getCustomerById(id) / saveCustomer(obj) / deleteCustomer(id)
+DB.getSuppliers() / getSupplierById(id) / saveSupplier(obj) / deleteSupplier(id)
+DB.getBiz() / setBiz(obj)
+DB.adjustStock(productId, delta)
+DB.nextInvoiceNo()  // "TC/2024-25/0001"
+DB.nextBillNo()     // "TC-PO/2024-25/0001"
+```
+
+## GST engine
+
+```js
+calcTotals(items, sellerStateCode, buyerStateCode)
+// Same state → CGST + SGST (intra-state)
+// Diff state → IGST (inter-state)
+// Returns: { items[], subtotal, totalCgst, totalSgst, totalIgst, totalTax, total, isIntra }
+```
+
+## Global utilities
+
+```js
+fmtCurrency(n)          // ₹1,23,456.00 (Indian format)
+fmtDate("2024-08-15")   // "15 Aug 2024"
+validateGSTIN(str)      // true/false (15-char format check)
+numberToWords(n)        // "Fifty Thousand Two Hundred..."
+genId("INV")            // "INV-a1b2c3"
+getFY()                 // "2024-25"
+daysBetween(d1, d2)     // integer days
+
+// Constants
+INDIAN_STATES           // [{name, code}] all 37 states/UTs
+GST_RATES               // [0, 0.1, 0.25, 1, 1.5, 3, 5, 7.5, 12, 18, 28]
+UNITS                   // ["Nos", "Pcs", "Box", "Job", "Visit", ...]
+PAYMENT_METHODS         // ["Bank Transfer", "NEFT", "RTGS", "UPI", "Cheque", "Cash"]
+```
+
+## localStorage keys
+
+```
+sp_biz / sp_sales / sp_purchases / sp_products / sp_customers / sp_suppliers
+sp_categories / sp_movements / sp_seeded
+```
+Reset: `localStorage.clear(); location.reload()`
+
+## Business profile (demo seed data)
+
+- Business: TechCare Solutions, Pune, Maharashtra (stateCode: 27)
+- GSTIN: 27AABCT5432R1ZP
+- Invoice prefix: TC → format TC/2024-25/0001
+- 6 customers: IT company, school, hospital, municipal corp, manufacturer (Gujarat), hotel
+- 4 suppliers: Ingram Micro, Rashi Peripherals, Hikvision, Redington
+- 19 products: laptops (HSN 8471), CCTV cams (8525), NVR (8521), switches (8517),
+  UPS (8504), RAM/SSD (8473), cables (8544), AMC service (SAC 998314),
+  CCTV install (998714), network setup (998313), repair (998731)
+- 8 sales invoices + 5 purchase bills (mix of paid/unpaid/overdue)
+
+## How to run
+
+Open `index.html` directly in browser, or:
+```
+python -m http.server 3000
+```
+
+## Strict rules for AI agents
+
+- No npm, no build tools, no ES modules (import/export)
+- Script load order: data.js → app.js → billing.js → inventory.js → crm.js → reports.js → ai.js
+- All modules are plain const objects on window scope
+- Never call localStorage directly — always use DB.*
+- Never duplicate GST logic — always call calcTotals()
+- See AGENTS.md for full coding rules and patterns

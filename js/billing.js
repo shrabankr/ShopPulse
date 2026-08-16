@@ -1,0 +1,994 @@
+'use strict';
+
+/* ─────────────────────────────────────────────
+   Billing Module — Sales Invoices & Purchase Bills
+───────────────────────────────────────────── */
+const Billing = {
+
+  /* ═══════════════════════════════════════════
+     LIST VIEW
+  ═══════════════════════════════════════════ */
+  render(container, type = 'sales') {
+    const isSales = type === 'sales';
+    const docs = isSales ? DB.getSales() : DB.getPurchases();
+    this._renderList(container, docs, type);
+  },
+
+  _renderList(container, docs, type) {
+    const isSales = type === 'sales';
+    const filters = ['all', 'paid', 'unpaid', 'overdue', 'sent', 'draft'];
+    const filterCounts = {};
+    filters.forEach(f => { filterCounts[f] = f === 'all' ? docs.length : docs.filter(d => d.status === f).length; });
+
+    let activeFilter = 'all';
+    let search = '';
+
+    const render = () => {
+      const filtered = docs.filter(d => {
+        const matchFilter = activeFilter === 'all' || d.status === activeFilter;
+        const term = search.toLowerCase();
+        const matchSearch = !term || (isSales
+          ? (d.invoiceNo + d.customerName + (d.customerGstin || '')).toLowerCase().includes(term)
+          : (d.billNo + d.supplierName + (d.supplierGstin || '')).toLowerCase().includes(term));
+        return matchFilter && matchSearch;
+      }).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      const total = filtered.reduce((s, d) => s + d.total, 0);
+      const paidTotal = filtered.filter(d => d.status === 'paid').reduce((s, d) => s + d.total, 0);
+      const unpaidTotal = filtered.filter(d => d.status !== 'paid').reduce((s, d) => s + d.total, 0);
+
+      const tbody = container.querySelector('#bill-tbody');
+      if (!tbody) return;
+
+      const summary = container.querySelector('#bill-summary');
+      if (summary) {
+        summary.innerHTML = `
+          <span>Total: <strong>${fmtCurrency(total)}</strong></span>
+          <span class="text-success" style="margin-left:16px">Paid: <strong>${fmtCurrency(paidTotal)}</strong></span>
+          <span class="text-danger" style="margin-left:16px">Pending: <strong>${fmtCurrency(unpaidTotal)}</strong></span>`;
+      }
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8"><div class="table-empty"><span class="material-icons">${isSales ? 'receipt_long' : 'shopping_bag'}</span><p>No ${type === 'sales' ? 'invoices' : 'bills'} found</p><button class="btn btn-primary btn-sm" onclick="Billing.openNew('${type}')"><span class="material-icons">add</span> Create ${isSales ? 'Invoice' : 'Bill'}</button></div></td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(d => {
+        const isSalesDoc = isSales;
+        const no = isSalesDoc ? d.invoiceNo : d.billNo;
+        const party = isSalesDoc ? d.customerName : d.supplierName;
+        const gstin = isSalesDoc ? d.customerGstin : d.supplierGstin;
+        const taxType = d.isIntra ? 'CGST+SGST' : 'IGST';
+        const today = new Date();
+        const due = new Date(d.dueDate);
+        const isOverdueStyle = d.status === 'overdue' || (d.status !== 'paid' && due < today);
+
+        return `
+          <tr onclick="Billing.viewDoc('${d.id}','${type}')" style="cursor:pointer">
+            <td><span class="mono">${no}</span></td>
+            <td>
+              <div style="font-weight:600;font-size:.875rem">${party}</div>
+              ${gstin ? `<div style="font-size:.72rem;color:var(--text-secondary);font-family:monospace">${gstin}</div>` : '<div style="font-size:.72rem;color:var(--text-tertiary)">Unregistered</div>'}
+            </td>
+            <td style="white-space:nowrap">${fmtDate(d.date)}</td>
+            <td style="white-space:nowrap;${isOverdueStyle ? 'color:var(--danger)' : ''}">${fmtDate(d.dueDate)}</td>
+            <td class="text-right">
+              <div class="amount-cell">${fmtCurrency(d.total)}</div>
+              <div class="tax-cell">${taxType}: ${fmtCurrency(d.totalTax || 0)}</div>
+            </td>
+            <td><span class="badge badge-${d.status}">${d.status.charAt(0).toUpperCase() + d.status.slice(1)}</span></td>
+            <td class="action-col" onclick="event.stopPropagation()">
+              <button class="btn btn-xs btn-secondary" onclick="Billing.viewDoc('${d.id}','${type}')" title="View"><span class="material-icons" style="font-size:14px">visibility</span></button>
+              ${d.status !== 'paid' ? `<button class="btn btn-xs btn-success" onclick="Billing.markPaid('${d.id}','${type}')" title="Mark Paid"><span class="material-icons" style="font-size:14px">check_circle</span></button>` : ''}
+              <button class="btn btn-xs btn-ghost" onclick="Billing.deleteDoc('${d.id}','${type}')" title="Delete"><span class="material-icons" style="font-size:14px;color:var(--danger)">delete</span></button>
+            </td>
+          </tr>`;
+      }).join('');
+    };
+
+    container.innerHTML = `
+      <div class="page-header-row">
+        <h2>${isSales ? 'Sales Invoices' : 'Purchase Bills'}</h2>
+        <div class="actions">
+          <button class="btn btn-primary" onclick="Billing.openNew('${type}')"><span class="material-icons">add</span> New ${isSales ? 'Invoice' : 'Bill'}</button>
+        </div>
+      </div>
+
+      <div class="invoice-list-header">
+        <div class="tabs" id="status-tabs">
+          ${['all', 'paid', 'unpaid', 'overdue', 'sent'].map(f => `
+            <button class="tab-btn ${f === 'all' ? 'active' : ''}" onclick="document.querySelectorAll('#status-tabs .tab-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active');window._bf='${f}';window._bf_render()">
+              ${f.charAt(0).toUpperCase() + f.slice(1)}
+              <span class="tab-count">${filterCounts[f]}</span>
+            </button>`).join('')}
+        </div>
+      </div>
+
+      <div class="filter-bar">
+        <div class="search-box">
+          <span class="material-icons">search</span>
+          <input id="bill-search" placeholder="Search by ${isSales ? 'invoice no, customer, GSTIN' : 'bill no, supplier, GSTIN'}…" oninput="window._bs=this.value;window._bf_render()">
+        </div>
+        <div id="bill-summary" style="font-size:.84rem;color:var(--text-secondary);white-space:nowrap"></div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>${isSales ? 'Invoice No' : 'Bill No'}</th>
+              <th>${isSales ? 'Customer' : 'Supplier'}</th>
+              <th>Date</th>
+              <th>Due Date</th>
+              <th class="text-right">Amount / Tax</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="bill-tbody"></tbody>
+        </table>
+      </div>
+    `;
+
+    window._bf = 'all';
+    window._bs = '';
+    window._bf_render = () => { activeFilter = window._bf; search = window._bs; render(); };
+    render();
+  },
+
+  /* ═══════════════════════════════════════════
+     NEW / EDIT INVOICE FORM
+  ═══════════════════════════════════════════ */
+  openNew(type = 'sales') {
+    this._openForm(null, type);
+  },
+
+  _openForm(existingDoc, type) {
+    const isSales = type === 'sales';
+    const biz = DB.getBiz();
+    const parties = isSales ? DB.getCustomers() : DB.getSuppliers();
+    const products = DB.getProducts();
+    const today = new Date().toISOString().split('T')[0];
+    const dueDate = new Date(Date.now() + (biz.defaultPaymentTerms || 30) * 86400000).toISOString().split('T')[0];
+
+    const stateOpts = INDIAN_STATES.map(s => `<option value="${s.code}">${s.name}</option>`).join('');
+    const partyOpts = parties.map(p => `<option value="${p.id}">${p.name}${p.gstin ? ' — ' + p.gstin : ''}</option>`).join('');
+    const gstOpts = GST_RATES.map(r => `<option value="${r}">${r}%</option>`).join('');
+    const unitOpts = UNITS.map(u => `<option>${u}</option>`).join('');
+    const productOpts = products.map(p => `<option value="${p.id}" data-rate="${p.sellingPrice}" data-hsn="${p.hsn}" data-gst="${p.gstRate}" data-unit="${p.unit}">${p.name} (${p.sku})</option>`).join('');
+
+    const doc = existingDoc;
+    const items = doc ? doc.items : [{ productId: '', name: '', hsn: '', unit: 'Nos', qty: 1, rate: 0, discount: 0, gstRate: 18 }];
+
+    App.modal(doc ? `Edit ${isSales ? 'Invoice' : 'Bill'}` : `New ${isSales ? 'Sales Invoice' : 'Purchase Bill'}`,
+      `
+      <div id="invoice-form">
+        <!-- Invoice Meta -->
+        <div class="invoice-section-title"><span class="material-icons">receipt</span> Invoice Details</div>
+        <div class="form-grid" style="margin-bottom:20px">
+          <div class="form-group">
+            <label>Invoice No <span class="required">*</span></label>
+            <input id="if-no" value="${doc ? (isSales ? doc.invoiceNo : doc.billNo) : '(Auto-generated)'}" ${doc ? '' : 'readonly style="background:var(--bg);color:var(--text-secondary)"'}>
+          </div>
+          <div class="form-group">
+            <label>Date <span class="required">*</span></label>
+            <input id="if-date" type="date" value="${doc ? doc.date : today}">
+          </div>
+          <div class="form-group">
+            <label>Due Date</label>
+            <input id="if-due" type="date" value="${doc ? doc.dueDate : dueDate}">
+          </div>
+          <div class="form-group">
+            <label>Place of Supply <span class="required">*</span></label>
+            <select id="if-pos">${stateOpts}</select>
+          </div>
+          <div class="form-group">
+            <label>Reverse Charge</label>
+            <select id="if-rc"><option value="false">No</option><option value="true">Yes</option></select>
+          </div>
+        </div>
+
+        <!-- Party Selection -->
+        <div class="invoice-section-title"><span class="material-icons">person</span>${isSales ? 'Bill To (Customer)' : 'Bill From (Supplier)'}</div>
+        <div class="form-grid" style="margin-bottom:20px">
+          <div class="form-group form-full autocomplete-wrap">
+            <label>${isSales ? 'Customer' : 'Supplier'} <span class="required">*</span></label>
+            <select id="if-party" onchange="Billing._onPartyChange()">
+              <option value="">— Select —</option>
+              ${partyOpts}
+            </select>
+          </div>
+        </div>
+        <div class="invoice-parties-grid" id="party-preview">
+          <div class="invoice-party-box">
+            <h4>From (Seller)</h4>
+            <div class="party-detail-name">${biz.name}</div>
+            <div class="party-detail-line">${biz.address}${biz.city ? ', ' + biz.city : ''}${biz.pincode ? ' — ' + biz.pincode : ''}</div>
+            <div class="party-detail-gstin">GSTIN: ${biz.gstin || 'Not Set'}</div>
+          </div>
+          <div class="invoice-party-box" id="buyer-preview">
+            <h4>${isSales ? 'To (Buyer)' : 'From (Supplier)'}</h4>
+            <div class="party-detail-line text-muted">Select a ${isSales ? 'customer' : 'supplier'} above…</div>
+          </div>
+        </div>
+
+        <!-- Line Items -->
+        <div class="invoice-section-title" style="margin-top:20px"><span class="material-icons">list</span> Line Items</div>
+        <div class="line-items-wrap">
+          <table class="line-items-table">
+            <thead>
+              <tr>
+                <th style="width:28px">#</th>
+                <th style="min-width:180px">Description / Product</th>
+                <th style="width:90px">HSN/SAC</th>
+                <th style="width:70px">Qty</th>
+                <th style="width:70px">Unit</th>
+                <th style="width:100px">Rate (₹)</th>
+                <th style="width:70px">Disc%</th>
+                <th style="width:80px">GST%</th>
+                <th class="text-right" style="width:100px">Taxable</th>
+                <th class="text-right" style="width:110px">Total</th>
+                <th style="width:36px"></th>
+              </tr>
+            </thead>
+            <tbody id="items-tbody">
+            </tbody>
+          </table>
+          <button class="add-line-btn" onclick="Billing._addRow()"><span class="material-icons">add</span> Add Item</button>
+        </div>
+
+        <!-- Totals & Notes -->
+        <div class="invoice-summary-wrap">
+          <div class="invoice-notes">
+            <div class="form-group">
+              <label>Notes / Narration</label>
+              <textarea id="if-notes" rows="3">${doc ? doc.notes || '' : ''}</textarea>
+            </div>
+          </div>
+          <div class="invoice-totals-table" id="inv-totals">
+          </div>
+        </div>
+      </div>
+      `,
+      `<button class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
+       <button class="btn btn-secondary" onclick="Billing._saveDoc('${type}',true)"><span class="material-icons">save</span> Save as Draft</button>
+       <button class="btn btn-primary" onclick="Billing._saveDoc('${type}',false)"><span class="material-icons">send</span> ${doc ? 'Update' : 'Create'} ${isSales ? 'Invoice' : 'Bill'}</button>`,
+      'modal-xl'
+    );
+
+    // Set Place of Supply
+    const posEl = document.getElementById('if-pos');
+    const initialPOS = doc ? doc.placeOfSupply : biz.stateCode;
+    if (posEl) {
+      posEl.value = initialPOS || biz.stateCode;
+      posEl.addEventListener('change', () => this._recalc(biz.stateCode));
+    }
+
+    // Pre-fill party
+    if (doc) {
+      const partyEl = document.getElementById('if-party');
+      if (partyEl) {
+        partyEl.value = isSales ? doc.customerId : doc.supplierId;
+        this._onPartyChange();
+      }
+    }
+
+    // Render items
+    this._rowCount = 0;
+    window._iItems = JSON.parse(JSON.stringify(items));
+    window._iBiz = biz;
+    window._iType = type;
+    window._iDoc = doc;
+
+    this._renderRows(products, gstOpts, unitOpts, productOpts, biz);
+
+    if (doc && doc.items) {
+      doc.items.forEach(() => { });
+      this._recalc(biz.stateCode);
+    } else {
+      this._recalc(biz.stateCode);
+    }
+  },
+
+  _renderRows(products, gstOpts, unitOpts, productOpts, biz) {
+    const tbody = document.getElementById('items-tbody');
+    if (!tbody) return;
+    const items = window._iItems || [{ productId: '', name: '', hsn: '', unit: 'Nos', qty: 1, rate: 0, discount: 0, gstRate: 18 }];
+    tbody.innerHTML = '';
+    items.forEach((item, i) => this._appendRow(i, item, products, gstOpts, unitOpts, productOpts, biz));
+    this._recalc(biz.stateCode);
+  },
+
+  _appendRow(idx, item, products, gstOpts, unitOpts, productOpts, biz) {
+    const tbody = document.getElementById('items-tbody');
+    if (!tbody) return;
+    const tr = document.createElement('tr');
+    tr.dataset.idx = idx;
+    tr.innerHTML = `
+      <td style="text-align:center;color:var(--text-secondary);font-size:.8rem;padding-top:10px">${idx + 1}</td>
+      <td>
+        <select class="item-product" onchange="Billing._onProductSelect(${idx},this)">
+          <option value="">— Custom / Type below —</option>
+          ${productOpts}
+        </select>
+        <input class="item-name" value="${item.name || ''}" placeholder="Description…" style="margin-top:4px" oninput="Billing._recalc('${biz.stateCode}')">
+      </td>
+      <td><input class="item-hsn" value="${item.hsn || ''}" placeholder="HSN/SAC" oninput="Billing._recalc('${biz.stateCode}')"></td>
+      <td><input class="item-qty" type="number" value="${item.qty || 1}" min="0.01" step="0.01" oninput="Billing._recalc('${biz.stateCode}')"></td>
+      <td><select class="item-unit">${UNITS.map(u => `<option ${u === (item.unit || 'Nos') ? 'selected' : ''}>${u}</option>`).join('')}</select></td>
+      <td><input class="item-rate" type="number" value="${item.rate || 0}" min="0" step="0.01" oninput="Billing._recalc('${biz.stateCode}')"></td>
+      <td><input class="item-disc" type="number" value="${item.discount || 0}" min="0" max="100" step="0.01" oninput="Billing._recalc('${biz.stateCode}')"></td>
+      <td><select class="item-gst" onchange="Billing._recalc('${biz.stateCode}')">${GST_RATES.map(r => `<option value="${r}" ${parseFloat(item.gstRate) === r ? 'selected' : ''}>${r}%</option>`).join('')}</select></td>
+      <td class="td-total item-taxable">₹0.00</td>
+      <td class="td-total item-total">₹0.00</td>
+      <td class="td-action"><button class="remove-row-btn" onclick="Billing._removeRow(${idx})"><span class="material-icons">close</span></button></td>
+    `;
+
+    // Pre-select product
+    if (item.productId) {
+      const sel = tr.querySelector('.item-product');
+      if (sel) sel.value = item.productId;
+    }
+
+    tbody.appendChild(tr);
+  },
+
+  _addRow() {
+    const biz = DB.getBiz();
+    if (!window._iItems) window._iItems = [];
+    const newItem = { productId: '', name: '', hsn: '', unit: 'Nos', qty: 1, rate: 0, discount: 0, gstRate: 18 };
+    window._iItems.push(newItem);
+    const idx = window._iItems.length - 1;
+    this._appendRow(idx, newItem, DB.getProducts(), '', '', '', biz);
+    this._recalc(biz.stateCode);
+  },
+
+  _removeRow(idx) {
+    const tbody = document.getElementById('items-tbody');
+    if (!tbody || tbody.rows.length <= 1) { App.toast('At least one item is required', 'warning'); return; }
+    const row = tbody.querySelector(`tr[data-idx="${idx}"]`);
+    if (row) row.remove();
+    // Re-index
+    Array.from(tbody.querySelectorAll('tr')).forEach((tr, i) => {
+      tr.dataset.idx = i;
+      const srCell = tr.cells[0];
+      if (srCell) srCell.textContent = i + 1;
+    });
+    this._recalc(DB.getBiz().stateCode);
+  },
+
+  _onProductSelect(idx, sel) {
+    const productId = sel.value;
+    if (!productId) return;
+    const p = DB.getProductById(productId);
+    if (!p) return;
+    const row = sel.closest('tr');
+    if (!row) return;
+    row.querySelector('.item-name').value = p.name;
+    row.querySelector('.item-hsn').value = p.hsn || '';
+    row.querySelector('.item-rate').value = window._iType === 'sales' ? p.sellingPrice : p.purchasePrice;
+    row.querySelector('.item-gst').value = p.gstRate;
+    const unitSel = row.querySelector('.item-unit');
+    if (unitSel) unitSel.value = p.unit || 'Nos';
+    this._recalc(DB.getBiz().stateCode);
+  },
+
+  _onPartyChange() {
+    const partyEl = document.getElementById('if-party');
+    if (!partyEl) return;
+    const partyId = partyEl.value;
+    const isSales = window._iType === 'sales';
+    const party = isSales ? DB.getCustomerById(partyId) : DB.getSupplierById(partyId);
+    const preview = document.getElementById('buyer-preview');
+    if (!preview) return;
+
+    if (party) {
+      preview.innerHTML = `
+        <h4>${isSales ? 'To (Buyer)' : 'From (Supplier)'}</h4>
+        <div class="party-detail-name">${party.name}</div>
+        <div class="party-detail-line">${party.address || ''}${party.city ? ', ' + party.city : ''}${party.pincode ? ' — ' + party.pincode : ''}</div>
+        ${party.gstin ? `<div class="party-detail-gstin">GSTIN: ${party.gstin}</div>` : '<div class="party-detail-line text-muted">Unregistered (B2C)</div>'}
+        <div class="party-detail-line">${party.state || ''}</div>`;
+
+      // Auto-set place of supply
+      const posEl = document.getElementById('if-pos');
+      if (posEl && party.stateCode) {
+        posEl.value = party.stateCode;
+      }
+      this._recalc(DB.getBiz().stateCode);
+    } else {
+      preview.innerHTML = `<h4>${isSales ? 'To (Buyer)' : 'From (Supplier)'}</h4><div class="party-detail-line text-muted">Select a party above…</div>`;
+    }
+  },
+
+  _getRows() {
+    const rows = [];
+    const tbody = document.getElementById('items-tbody');
+    if (!tbody) return rows;
+    Array.from(tbody.querySelectorAll('tr')).forEach(tr => {
+      rows.push({
+        productId: tr.querySelector('.item-product')?.value || '',
+        name: tr.querySelector('.item-name')?.value || '',
+        hsn: tr.querySelector('.item-hsn')?.value || '',
+        unit: tr.querySelector('.item-unit')?.value || 'Nos',
+        qty: parseFloat(tr.querySelector('.item-qty')?.value) || 0,
+        rate: parseFloat(tr.querySelector('.item-rate')?.value) || 0,
+        discount: parseFloat(tr.querySelector('.item-disc')?.value) || 0,
+        gstRate: parseFloat(tr.querySelector('.item-gst')?.value) || 0,
+      });
+    });
+    return rows;
+  },
+
+  _recalc(sellerStateCode) {
+    const posEl = document.getElementById('if-pos');
+    const buyerStateCode = posEl ? posEl.value : sellerStateCode;
+    const rows = this._getRows();
+    const t = calcTotals(rows, sellerStateCode, buyerStateCode);
+
+    // Update row totals
+    const tbody = document.getElementById('items-tbody');
+    if (tbody) {
+      Array.from(tbody.querySelectorAll('tr')).forEach((tr, i) => {
+        const item = t.items[i];
+        if (!item) return;
+        const taxEl = tr.querySelector('.item-taxable');
+        const totEl = tr.querySelector('.item-total');
+        if (taxEl) taxEl.textContent = fmtCurrency(item.taxableValue);
+        if (totEl) totEl.textContent = fmtCurrency(item.totalAmt);
+      });
+    }
+
+    // Update summary
+    const totalsEl = document.getElementById('inv-totals');
+    if (!totalsEl) return;
+
+    const taxTypeLabel = t.isIntra ? 'CGST + SGST' : 'IGST';
+    const taxBadge = `<span class="tax-type-badge">${taxTypeLabel}</span>`;
+
+    let taxRows = '';
+    if (t.isIntra) {
+      taxRows = `
+        <div class="totals-row"><span class="totals-label">CGST</span><span class="totals-value">${fmtCurrency(t.totalCgst)}</span></div>
+        <div class="totals-row"><span class="totals-label">SGST</span><span class="totals-value">${fmtCurrency(t.totalSgst)}</span></div>`;
+    } else {
+      taxRows = `<div class="totals-row"><span class="totals-label">IGST</span><span class="totals-value">${fmtCurrency(t.totalIgst)}</span></div>`;
+    }
+
+    totalsEl.innerHTML = `
+      <div class="totals-row"><span class="totals-label">Taxable Value ${taxBadge}</span><span class="totals-value">${fmtCurrency(t.subtotal)}</span></div>
+      ${taxRows}
+      <div class="totals-row"><span class="totals-label">Total Tax</span><span class="totals-value text-danger">${fmtCurrency(t.totalTax)}</span></div>
+      <div class="totals-row grand-total"><span class="totals-label">Grand Total</span><span class="totals-value">${fmtCurrency(t.total)}</span></div>`;
+  },
+
+  _saveDoc(type, isDraft = false) {
+    const isSales = type === 'sales';
+    const biz = DB.getBiz();
+    const partyEl = document.getElementById('if-party');
+    const partyId = partyEl?.value;
+
+    if (!partyId) { App.toast(`Please select a ${isSales ? 'customer' : 'supplier'}`, 'error'); return; }
+
+    const party = isSales ? DB.getCustomerById(partyId) : DB.getSupplierById(partyId);
+    if (!party) { App.toast('Party not found', 'error'); return; }
+
+    const items = this._getRows();
+    if (!items.length || items.every(i => !i.name && !i.productId)) {
+      App.toast('Add at least one line item', 'error'); return;
+    }
+
+    const posEl = document.getElementById('if-pos');
+    const buyerStateCode = posEl?.value || party.stateCode;
+    const t = calcTotals(items, biz.stateCode, buyerStateCode);
+    const date = document.getElementById('if-date')?.value || new Date().toISOString().split('T')[0];
+    const dueDate = document.getElementById('if-due')?.value || date;
+    const notes = document.getElementById('if-notes')?.value || '';
+    const reverseCharge = document.getElementById('if-rc')?.value === 'true';
+    const status = isDraft ? 'draft' : 'sent';
+
+    const existingDoc = window._iDoc;
+
+    if (isSales) {
+      const data = {
+        ...(existingDoc || {}),
+        invoiceNo: existingDoc ? existingDoc.invoiceNo : DB.nextInvoiceNo(),
+        date, dueDate, status: existingDoc ? existingDoc.status : status,
+        customerId: party.id, customerName: party.name,
+        customerGstin: party.gstin || '',
+        customerAddress: `${party.address || ''}, ${party.city || ''} - ${party.pincode || ''}`,
+        customerState: party.state, customerStateCode: party.stateCode,
+        placeOfSupply: buyerStateCode, sellerStateCode: biz.stateCode,
+        reverseCharge, notes, ...t,
+      };
+      if (isDraft) data.status = 'draft';
+      DB.saveSale(data, !existingDoc);
+      App.toast(`Invoice ${data.invoiceNo} ${existingDoc ? 'updated' : 'created'}!`);
+    } else {
+      const data = {
+        ...(existingDoc || {}),
+        billNo: existingDoc ? existingDoc.billNo : DB.nextBillNo(),
+        date, dueDate, status: existingDoc ? existingDoc.status : status,
+        supplierId: party.id, supplierName: party.name,
+        supplierGstin: party.gstin || '',
+        supplierStateCode: party.stateCode,
+        buyerStateCode: biz.stateCode,
+        reverseCharge, notes, ...t,
+      };
+      if (isDraft) data.status = 'draft';
+      DB.savePurchase(data, !existingDoc);
+      App.toast(`Bill ${data.billNo} ${existingDoc ? 'updated' : 'created'}!`);
+    }
+
+    App.closeModal();
+    App.refreshSidebar();
+    setTimeout(() => App.route(), 300);
+  },
+
+  /* ═══════════════════════════════════════════
+     VIEW DOCUMENT
+  ═══════════════════════════════════════════ */
+  viewDoc(id, type) {
+    const isSales = type === 'sales';
+    const doc = isSales ? DB.getSaleById(id) : DB.getPurchaseById(id);
+    if (!doc) return;
+    const biz = DB.getBiz();
+
+    const no = isSales ? doc.invoiceNo : doc.billNo;
+    const partyName = isSales ? doc.customerName : doc.supplierName;
+    const partyGstin = isSales ? (doc.customerGstin || '') : (doc.supplierGstin || '');
+    const partyAddr = isSales ? doc.customerAddress : (doc.supplierAddress || '');
+    const partyState = isSales ? doc.customerState : doc.supplierState;
+
+    const posState = INDIAN_STATES.find(s => s.code === (isSales ? doc.placeOfSupply : doc.buyerStateCode));
+
+    let taxRows = '';
+    if (doc.isIntra) {
+      taxRows = `
+        <tr><td>CGST</td><td class="text-right">${fmtCurrency(doc.totalCgst)}</td></tr>
+        <tr><td>SGST</td><td class="text-right">${fmtCurrency(doc.totalSgst)}</td></tr>`;
+    } else {
+      taxRows = `<tr><td>IGST</td><td class="text-right">${fmtCurrency(doc.totalIgst)}</td></tr>`;
+    }
+
+    const actionButtons = `
+      <button class="btn btn-ghost" onclick="App.closeModal()">Close</button>
+      ${doc.status !== 'paid' ? `<button class="btn btn-success" onclick="App.closeModal();Billing.markPaid('${id}','${type}')"><span class="material-icons">check_circle</span> Mark Paid</button>` : ''}
+      <button class="btn btn-secondary" onclick="Billing.printDoc('${id}','${type}')"><span class="material-icons">print</span> Print</button>
+    `;
+
+    App.modal(`${isSales ? 'Invoice' : 'Bill'}: ${no}`,
+      `
+      <div style="margin-bottom:14px;display:flex;align-items:center;gap:12px;justify-content:space-between">
+        <div>
+          <div style="font-size:1.1rem;font-weight:800;letter-spacing:-.02em">${no}</div>
+          <div style="font-size:.8rem;color:var(--text-secondary)">${fmtDate(doc.date)} · Due ${fmtDate(doc.dueDate)}</div>
+        </div>
+        <div style="text-align:right">
+          <span class="badge badge-${doc.status}">${doc.status}</span>
+          <div style="font-size:1.4rem;font-weight:800;margin-top:4px;letter-spacing:-.03em">${fmtCurrency(doc.total)}</div>
+        </div>
+      </div>
+
+      <div class="invoice-parties-grid" style="margin-bottom:16px">
+        <div class="invoice-party-box">
+          <h4>Seller (From)</h4>
+          <div class="party-detail-name">${biz.name}</div>
+          <div class="party-detail-line">${biz.address}, ${biz.city}</div>
+          <div class="party-detail-gstin">GSTIN: ${biz.gstin || '—'}</div>
+        </div>
+        <div class="invoice-party-box">
+          <h4>${isSales ? 'Buyer (To)' : 'Supplier (From)'}</h4>
+          <div class="party-detail-name">${partyName}</div>
+          <div class="party-detail-line">${partyAddr}</div>
+          ${partyGstin ? `<div class="party-detail-gstin">GSTIN: ${partyGstin}</div>` : '<div class="party-detail-line text-muted">Unregistered (B2C)</div>'}
+        </div>
+      </div>
+
+      <div style="font-size:.78rem;color:var(--text-secondary);margin-bottom:12px">
+        Place of Supply: <strong>${posState?.name || '—'}</strong> &nbsp;|&nbsp;
+        Tax Type: <strong>${doc.isIntra ? 'CGST + SGST (Intra-state)' : 'IGST (Inter-state)'}</strong> &nbsp;|&nbsp;
+        Reverse Charge: <strong>${doc.reverseCharge ? 'Yes' : 'No'}</strong>
+      </div>
+
+      <div class="table-wrap" style="margin-bottom:14px">
+        <table class="table">
+          <thead><tr><th>#</th><th>Description</th><th>HSN/SAC</th><th>Qty</th><th>Unit</th><th class="text-right">Rate</th><th class="text-right">Taxable</th><th class="text-right">Tax</th><th class="text-right">Total</th></tr></thead>
+          <tbody>
+            ${(doc.items || []).map((item, i) => `
+              <tr>
+                <td>${i + 1}</td>
+                <td>${item.name}${item.discount ? `<span class="text-muted" style="font-size:.78rem"> (${item.discount}% disc)</span>` : ''}</td>
+                <td><span class="mono">${item.hsn || '—'}</span></td>
+                <td>${item.qty}</td>
+                <td>${item.unit}</td>
+                <td class="text-right">${fmtCurrency(item.rate)}</td>
+                <td class="text-right">${fmtCurrency(item.taxableValue)}</td>
+                <td class="text-right">${fmtCurrency((item.cgstAmt || 0) + (item.sgstAmt || 0) + (item.igstAmt || 0))}</td>
+                <td class="text-right amount-cell">${fmtCurrency(item.totalAmt)}</td>
+              </tr>`).join('')}
+          </tbody>
+          <tfoot>
+            <tr><td colspan="6"></td><td class="text-right">Subtotal</td><td></td><td class="text-right">${fmtCurrency(doc.subtotal)}</td></tr>
+            ${doc.isIntra ? `<tr><td colspan="7" class="text-right">CGST</td><td></td><td class="text-right">${fmtCurrency(doc.totalCgst)}</td></tr><tr><td colspan="7" class="text-right">SGST</td><td></td><td class="text-right">${fmtCurrency(doc.totalSgst)}</td></tr>` : `<tr><td colspan="7" class="text-right">IGST</td><td></td><td class="text-right">${fmtCurrency(doc.totalIgst)}</td></tr>`}
+            <tr><td colspan="7" class="text-right font-bold">Grand Total</td><td></td><td class="text-right font-bold" style="font-size:1rem">${fmtCurrency(doc.total)}</td></tr>
+          </tfoot>
+        </table>
+      </div>
+      ${doc.notes ? `<div style="font-size:.82rem;color:var(--text-secondary);padding:8px 12px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border)"><strong>Notes:</strong> ${doc.notes}</div>` : ''}
+      ${doc.paymentDate ? `<div style="margin-top:10px;font-size:.82rem"><span class="badge badge-paid">Paid</span> on ${fmtDate(doc.paymentDate)} via ${doc.paymentMethod || '—'}</div>` : ''}
+      `,
+      actionButtons, 'modal-xl'
+    );
+  },
+
+  /* ═══════════════════════════════════════════
+     MARK PAID
+  ═══════════════════════════════════════════ */
+  markPaid(id, type) {
+    const isSales = type === 'sales';
+    const doc = isSales ? DB.getSaleById(id) : DB.getPurchaseById(id);
+    if (!doc) return;
+
+    App.modal('Record Payment',
+      `<div class="payment-summary-box">
+        <div class="amount-due">${fmtCurrency(doc.total)}</div>
+        <p>${isSales ? doc.invoiceNo : doc.billNo} — ${isSales ? doc.customerName : doc.supplierName}</p>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label>Payment Date <span class="required">*</span></label><input id="pay-date" type="date" value="${new Date().toISOString().split('T')[0]}"></div>
+        <div class="form-group"><label>Payment Method</label><select id="pay-method">${PAYMENT_METHODS.map(m => `<option>${m}</option>`).join('')}</select></div>
+        <div class="form-group form-full"><label>Reference / Transaction ID</label><input id="pay-ref" placeholder="Optional UTR/cheque no…"></div>
+      </div>`,
+      `<button class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
+       <button class="btn btn-success" onclick="Billing._confirmPaid('${id}','${type}')"><span class="material-icons">check_circle</span> Confirm Payment</button>`,
+      'modal-sm'
+    );
+  },
+
+  _confirmPaid(id, type) {
+    const payDate = document.getElementById('pay-date')?.value;
+    const payMethod = document.getElementById('pay-method')?.value;
+    const payRef = document.getElementById('pay-ref')?.value;
+    if (!payDate) { App.toast('Please select a payment date', 'error'); return; }
+
+    const isSales = type === 'sales';
+    const doc = isSales ? DB.getSaleById(id) : DB.getPurchaseById(id);
+    if (!doc) return;
+
+    const updated = { ...doc, status: 'paid', paymentDate: payDate, paymentMethod: payMethod, paymentRef: payRef || '' };
+    if (isSales) DB.saveSale(updated, false); else DB.savePurchase(updated, false);
+
+    App.toast(`Payment recorded for ${isSales ? doc.invoiceNo : doc.billNo}!`);
+    App.closeModal();
+    App.refreshSidebar();
+    setTimeout(() => App.route(), 300);
+  },
+
+  /* ═══════════════════════════════════════════
+     DELETE
+  ═══════════════════════════════════════════ */
+  deleteDoc(id, type) {
+    App.modal('Confirm Delete',
+      `<div class="confirm-body">
+        <span class="material-icons">delete_forever</span>
+        <h3>Delete ${type === 'sales' ? 'Invoice' : 'Bill'}?</h3>
+        <p>This cannot be undone. Stock levels will not be reversed automatically.</p>
+      </div>`,
+      `<button class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
+       <button class="btn btn-danger" onclick="Billing._doDelete('${id}','${type}')">Delete</button>`,
+      'modal-sm'
+    );
+  },
+
+  _doDelete(id, type) {
+    if (type === 'sales') DB.deleteSale(id); else DB.deletePurchase(id);
+    App.toast('Deleted successfully');
+    App.closeModal();
+    App.refreshSidebar();
+    setTimeout(() => App.route(), 300);
+  },
+
+  /* ═══════════════════════════════════════════
+     PRINT (GST-COMPLIANT LAYOUT)
+  ═══════════════════════════════════════════ */
+  printDoc(id, type) {
+    const isSales = type === 'sales';
+    const doc = isSales ? DB.getSaleById(id) : DB.getPurchaseById(id);
+    if (!doc) return;
+    const biz = DB.getBiz();
+    const posState = INDIAN_STATES.find(s => s.code === (isSales ? doc.placeOfSupply : doc.buyerStateCode));
+    const no = isSales ? doc.invoiceNo : doc.billNo;
+    const partyName = isSales ? doc.customerName : doc.supplierName;
+    const partyGstin = isSales ? doc.customerGstin : doc.supplierGstin;
+    const partyAddr = isSales ? doc.customerAddress : (doc.supplierAddress || '');
+    const partyState = isSales ? doc.customerState : doc.supplierState;
+
+    let taxCols = doc.isIntra
+      ? `<th>CGST Rate</th><th>CGST Amt</th><th>SGST Rate</th><th>SGST Amt</th>`
+      : `<th>IGST Rate</th><th>IGST Amt</th>`;
+
+    let itemRows = (doc.items || []).map((item, i) => {
+      let taxCells = doc.isIntra
+        ? `<td class="rate">${item.cgstRate}%</td><td class="amount">${fmtCurrency(item.cgstAmt)}</td><td class="rate">${item.sgstRate}%</td><td class="amount">${fmtCurrency(item.sgstAmt)}</td>`
+        : `<td class="rate">${item.igstRate}%</td><td class="amount">${fmtCurrency(item.igstAmt)}</td>`;
+      return `<tr>
+        <td class="sr">${i + 1}</td>
+        <td>${item.name}${item.discount ? ` <em>(${item.discount}% disc)</em>` : ''}</td>
+        <td class="hsn">${item.hsn || ''}</td>
+        <td class="qty">${item.qty}</td>
+        <td>${item.unit}</td>
+        <td class="rate">${fmtCurrency(item.rate)}</td>
+        <td class="amount">${fmtCurrency(item.taxableValue)}</td>
+        ${taxCells}
+        <td class="amount"><strong>${fmtCurrency(item.totalAmt)}</strong></td>
+      </tr>`;
+    }).join('');
+
+    let totalTaxRows = doc.isIntra
+      ? `<tr><td>CGST</td><td>${fmtCurrency(doc.totalCgst)}</td></tr><tr><td>SGST</td><td>${fmtCurrency(doc.totalSgst)}</td></tr>`
+      : `<tr><td>IGST</td><td>${fmtCurrency(doc.totalIgst)}</td></tr>`;
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>${no}</title>
+<style>
+body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #000; margin: 0; padding: 15mm; }
+.inv-header { border: 1.5px solid #222; }
+.inv-title-bar { background: #1a2332; color: #fff; text-align: center; padding: 8px 0 6px; font-size: 13pt; font-weight: 900; letter-spacing: .15em; }
+.inv-biz-row { display: flex; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid #ccc; }
+.inv-biz-name { font-size: 12pt; font-weight: 700; }
+.inv-biz-detail { font-size: 8.5pt; color: #333; line-height: 1.6; }
+.inv-biz-gstin { font-size: 9pt; font-weight: 700; color: #1a2332; margin-top: 4px; }
+.inv-meta-table td { padding: 2px 4px; font-size: 8.5pt; }
+.inv-meta-table td:first-child { color: #555; text-align: right; padding-right: 8px; }
+.inv-meta-table td:last-child { font-weight: 700; }
+.inv-parties { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid #ccc; }
+.inv-party { padding: 10px 14px; }
+.inv-party:first-child { border-right: 1px solid #ccc; }
+.inv-party-label { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #555; margin-bottom: 4px; }
+.inv-party-name { font-size: 10.5pt; font-weight: 700; margin-bottom: 2px; }
+.inv-party-addr { font-size: 8.5pt; color: #333; line-height: 1.5; }
+.inv-party-gstin { font-size: 8.5pt; font-weight: 700; color: #1a2332; margin-top: 4px; }
+.supply-bar { padding: 5px 14px; background: #f5f5f5; border-bottom: 1px solid #ccc; font-size: 8.5pt; color: #333; }
+.supply-bar strong { color: #000; }
+table.items { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
+table.items th { background: #e8eaf0; padding: 6px 5px; text-align: center; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .03em; border: .5pt solid #aaa; }
+table.items td { border: .5pt solid #bbb; padding: 5px 5px; vertical-align: middle; }
+table.items .sr, table.items .qty, table.items .hsn { text-align: center; }
+table.items .rate, table.items .amount { text-align: right; }
+.inv-footer { display: grid; grid-template-columns: 1fr auto; border-top: 1px solid #ccc; }
+.inv-bank { padding: 10px 14px; border-right: 1px solid #ccc; }
+.inv-bank h4 { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #555; margin-bottom: 6px; }
+.inv-bank table td { padding: 2px 6px 2px 0; font-size: 8pt; }
+.inv-bank table td:first-child { color: #555; min-width: 80px; font-size: 7.5pt; }
+.inv-bank table td:last-child { font-weight: 600; }
+.inv-totals { min-width: 220px; }
+.inv-totals table { width: 100%; border-collapse: collapse; }
+.inv-totals table td { padding: 4px 10px; border-bottom: .5pt solid #eee; font-size: 8.5pt; }
+.inv-totals table td:last-child { text-align: right; font-weight: 600; }
+.grand-total td { background: #1a2332 !important; color: #fff !important; font-weight: 800 !important; font-size: 10pt !important; padding: 7px 10px !important; }
+.inv-words { border-top: 1px solid #ccc; padding: 6px 14px; font-size: 8pt; font-style: italic; }
+.inv-sign { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid #ccc; }
+.inv-sign-box { padding: 10px 14px; min-height: 60px; font-size: 8pt; color: #555; }
+.inv-sign-box:first-child { border-right: 1px solid #ccc; }
+.inv-sign-name { font-weight: 700; font-size: 9pt; color: #000; margin-top: 24px; }
+.rc-note { font-size: 7.5pt; color: #777; padding: 4px 14px; border-top: .5pt solid #ccc; }
+@media print { @page { margin: 10mm; } body { padding: 0; } }
+</style>
+</head>
+<body>
+<div class="inv-header">
+  <div class="inv-title-bar">TAX INVOICE</div>
+  <div class="inv-biz-row">
+    <div>
+      <div class="inv-biz-name">${biz.name}</div>
+      <div class="inv-biz-detail">${biz.address}, ${biz.city} — ${biz.pincode}<br>Phone: ${biz.phone} | Email: ${biz.email}</div>
+      <div class="inv-biz-gstin">GSTIN: ${biz.gstin || 'Not Registered'} &nbsp;|&nbsp; PAN: ${biz.pan || '—'}</div>
+    </div>
+    <div>
+      <table class="inv-meta-table">
+        <tr><td>Invoice No.</td><td>${no}</td></tr>
+        <tr><td>Invoice Date</td><td>${fmtDate(doc.date)}</td></tr>
+        <tr><td>Due Date</td><td>${fmtDate(doc.dueDate)}</td></tr>
+        <tr><td>Status</td><td>${doc.status.toUpperCase()}</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="inv-parties">
+    <div class="inv-party">
+      <div class="inv-party-label">Seller / Supplier</div>
+      <div class="inv-party-name">${biz.name}</div>
+      <div class="inv-party-addr">${biz.address}, ${biz.city} — ${biz.pincode}<br>${biz.state}</div>
+      <div class="inv-party-gstin">GSTIN: ${biz.gstin || '—'}</div>
+    </div>
+    <div class="inv-party">
+      <div class="inv-party-label">Buyer / Recipient</div>
+      <div class="inv-party-name">${partyName}</div>
+      <div class="inv-party-addr">${partyAddr}<br>${partyState || ''}</div>
+      <div class="inv-party-gstin">${partyGstin ? 'GSTIN: ' + partyGstin : 'Unregistered (Consumer)'}</div>
+    </div>
+  </div>
+  <div class="supply-bar">
+    Place of Supply: <strong>${posState?.name || '—'}</strong> &nbsp;&nbsp;|&nbsp;&nbsp;
+    Tax: <strong>${doc.isIntra ? 'CGST + SGST (Intra-state)' : 'IGST (Inter-state)'}</strong> &nbsp;&nbsp;|&nbsp;&nbsp;
+    Reverse Charge: <strong>${doc.reverseCharge ? 'YES' : 'No'}</strong>
+  </div>
+  <table class="items">
+    <thead>
+      <tr>
+        <th style="width:22px">Sr.</th>
+        <th>Description of Goods/Services</th>
+        <th style="width:70px">HSN/SAC</th>
+        <th style="width:40px">Qty</th>
+        <th style="width:40px">Unit</th>
+        <th style="width:75px">Unit Price (₹)</th>
+        <th style="width:80px">Taxable Value (₹)</th>
+        ${taxCols}
+        <th style="width:85px">Total (₹)</th>
+      </tr>
+    </thead>
+    <tbody>${itemRows}</tbody>
+    <tfoot>
+      <tr style="background:#f5f5f5;font-weight:700">
+        <td colspan="6" style="text-align:right">Total</td>
+        <td class="amount">${fmtCurrency(doc.subtotal)}</td>
+        ${doc.isIntra ? `<td></td><td class="amount">${fmtCurrency(doc.totalCgst)}</td><td></td><td class="amount">${fmtCurrency(doc.totalSgst)}</td>` : `<td></td><td class="amount">${fmtCurrency(doc.totalIgst)}</td>`}
+        <td class="amount">${fmtCurrency(doc.total)}</td>
+      </tr>
+    </tfoot>
+  </table>
+  <div class="inv-footer">
+    <div class="inv-bank">
+      <h4>Bank Details</h4>
+      <table>
+        <tr><td>Bank Name</td><td>${biz.bankName || '—'}</td></tr>
+        <tr><td>Account No.</td><td>${biz.bankAccount || '—'}</td></tr>
+        <tr><td>IFSC Code</td><td>${biz.bankIFSC || '—'}</td></tr>
+        <tr><td>Branch</td><td>${biz.bankBranch || '—'}</td></tr>
+      </table>
+      ${doc.notes ? `<div style="margin-top:8px;font-size:8pt;color:#333"><strong>Notes:</strong> ${doc.notes}</div>` : ''}
+      ${biz.termsAndConditions ? `<div style="margin-top:8px;font-size:7.5pt;color:#555"><strong>Terms:</strong><br>${biz.termsAndConditions.replace(/\n/g, '<br>')}</div>` : ''}
+    </div>
+    <div class="inv-totals">
+      <table>
+        <tr><td>Taxable Value</td><td>${fmtCurrency(doc.subtotal)}</td></tr>
+        ${totalTaxRows}
+        <tr><td><strong>Total Tax</strong></td><td>${fmtCurrency(doc.totalTax)}</td></tr>
+        <tr class="grand-total"><td>GRAND TOTAL</td><td>${fmtCurrency(doc.total)}</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="inv-words">
+    Amount in Words: <strong>${numberToWords(doc.total)}</strong>
+  </div>
+  <div class="inv-sign">
+    <div class="inv-sign-box">
+      <div>Received goods / services in good condition.</div>
+      <div class="inv-sign-name">Receiver's Signature &amp; Seal</div>
+    </div>
+    <div class="inv-sign-box" style="text-align:right">
+      <div>For <strong>${biz.name}</strong></div>
+      <div class="inv-sign-name">${biz.signatory || 'Authorized Signatory'}</div>
+    </div>
+  </div>
+  <div class="rc-note">This is a computer-generated invoice and does not require a physical signature. ${doc.reverseCharge ? '<strong>Tax is payable on reverse charge basis.</strong>' : 'Tax is not payable on reverse charge basis.'}</div>
+</div>
+<script>window.onload=function(){window.print();}</script>
+</body></html>`;
+
+    const w = window.open('', '_blank');
+    if (w) { w.document.write(html); w.document.close(); }
+    App.closeModal();
+  },
+
+  /* ═══════════════════════════════════════════
+     RECEIVABLES
+  ═══════════════════════════════════════════ */
+  renderReceivables(container) {
+    const sales = DB.getSales().filter(s => s.status !== 'paid' && s.status !== 'draft');
+    const today = new Date();
+
+    const aging = {
+      current: sales.filter(s => daysBetween(today, new Date(s.dueDate)) >= 0),
+      d30: sales.filter(s => { const d = daysBetween(today, new Date(s.dueDate)); return d < 0 && d >= -30; }),
+      d60: sales.filter(s => { const d = daysBetween(today, new Date(s.dueDate)); return d < -30 && d >= -60; }),
+      d90: sales.filter(s => daysBetween(today, new Date(s.dueDate)) < -60),
+    };
+
+    container.innerHTML = `
+      <div class="page-header-row"><h2>Receivables (Unpaid Invoices)</h2></div>
+      <div class="aging-grid">
+        ${[
+      { label: 'Not Due', cls: 'aging-current', items: aging.current },
+      { label: '1–30 Days Overdue', cls: 'aging-30', items: aging.d30 },
+      { label: '31–60 Days Overdue', cls: 'aging-60', items: aging.d60 },
+      { label: '60+ Days Overdue', cls: 'aging-90', items: aging.d90 },
+    ].map(a => `
+          <div class="aging-card ${a.cls}">
+            <div class="aging-label">${a.label}</div>
+            <div class="aging-amount">${fmtCurrency(a.items.reduce((s, i) => s + i.total, 0))}</div>
+            <div class="aging-count">${a.items.length} invoice${a.items.length !== 1 ? 's' : ''}</div>
+          </div>`).join('')}
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Invoice No</th><th>Customer</th><th>Invoice Date</th><th>Due Date</th><th>Days Overdue</th><th class="text-right">Amount</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            ${sales.length === 0 ? `<tr><td colspan="8"><div class="table-empty"><span class="material-icons">check_circle</span><p>All invoices are paid! 🎉</p></div></td></tr>` :
+        sales.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).map(s => {
+          const daysOver = -daysBetween(today, new Date(s.dueDate));
+          const isOver = daysOver > 0;
+          return `<tr onclick="Billing.viewDoc('${s.id}','sales')" style="cursor:pointer">
+                <td><span class="mono">${s.invoiceNo}</span></td>
+                <td><div style="font-weight:600">${s.customerName}</div><div style="font-size:.72rem;color:var(--text-secondary);font-family:monospace">${s.customerGstin || 'Unregistered'}</div></td>
+                <td>${fmtDate(s.date)}</td>
+                <td style="${isOver ? 'color:var(--danger);font-weight:600' : ''}">${fmtDate(s.dueDate)}</td>
+                <td>${isOver ? `<span class="badge badge-overdue">${daysOver} days</span>` : '<span class="badge badge-success">Not due</span>'}</td>
+                <td class="text-right amount-cell ${isOver ? 'due' : ''}">${fmtCurrency(s.total)}</td>
+                <td><span class="badge badge-${s.status}">${s.status}</span></td>
+                <td class="action-col" onclick="event.stopPropagation()"><button class="btn btn-xs btn-success" onclick="Billing.markPaid('${s.id}','sales')"><span class="material-icons" style="font-size:13px">check</span> Pay</button></td>
+              </tr>`;
+        }).join('')}
+          </tbody>
+          ${sales.length > 0 ? `<tfoot><tr><td colspan="5" class="text-right">Total Outstanding</td><td colspan="2" class="text-right font-bold">${fmtCurrency(sales.reduce((s, i) => s + i.total, 0))}</td><td></td></tr></tfoot>` : ''}
+        </table>
+      </div>`;
+  },
+
+  /* ═══════════════════════════════════════════
+     PAYABLES
+  ═══════════════════════════════════════════ */
+  renderPayables(container) {
+    const purchases = DB.getPurchases().filter(p => p.status !== 'paid' && p.status !== 'draft');
+    const today = new Date();
+
+    const aging = {
+      current: purchases.filter(p => daysBetween(today, new Date(p.dueDate)) >= 0),
+      d30: purchases.filter(p => { const d = daysBetween(today, new Date(p.dueDate)); return d < 0 && d >= -30; }),
+      d60: purchases.filter(p => { const d = daysBetween(today, new Date(p.dueDate)); return d < -30 && d >= -60; }),
+      d90: purchases.filter(p => daysBetween(today, new Date(p.dueDate)) < -60),
+    };
+
+    container.innerHTML = `
+      <div class="page-header-row"><h2>Payables (Bills to Pay)</h2></div>
+      <div class="aging-grid">
+        ${[
+      { label: 'Not Due', cls: 'aging-current', items: aging.current },
+      { label: '1–30 Days Overdue', cls: 'aging-30', items: aging.d30 },
+      { label: '31–60 Days Overdue', cls: 'aging-60', items: aging.d60 },
+      { label: '60+ Days Overdue', cls: 'aging-90', items: aging.d90 },
+    ].map(a => `
+          <div class="aging-card ${a.cls}">
+            <div class="aging-label">${a.label}</div>
+            <div class="aging-amount">${fmtCurrency(a.items.reduce((s, b) => s + b.total, 0))}</div>
+            <div class="aging-count">${a.items.length} bill${a.items.length !== 1 ? 's' : ''}</div>
+          </div>`).join('')}
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Bill No</th><th>Supplier</th><th>Bill Date</th><th>Due Date</th><th>Days Overdue</th><th class="text-right">Amount</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            ${purchases.length === 0 ? `<tr><td colspan="8"><div class="table-empty"><span class="material-icons">check_circle</span><p>No pending bills! 🎉</p></div></td></tr>` :
+        purchases.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).map(p => {
+          const daysOver = -daysBetween(today, new Date(p.dueDate));
+          const isOver = daysOver > 0;
+          return `<tr onclick="Billing.viewDoc('${p.id}','purchases')" style="cursor:pointer">
+                <td><span class="mono">${p.billNo}</span></td>
+                <td><div style="font-weight:600">${p.supplierName}</div><div style="font-size:.72rem;color:var(--text-secondary);font-family:monospace">${p.supplierGstin || '—'}</div></td>
+                <td>${fmtDate(p.date)}</td>
+                <td style="${isOver ? 'color:var(--danger);font-weight:600' : ''}">${fmtDate(p.dueDate)}</td>
+                <td>${isOver ? `<span class="badge badge-overdue">${daysOver} days</span>` : '<span class="badge badge-success">Not due</span>'}</td>
+                <td class="text-right amount-cell ${isOver ? 'due' : ''}">${fmtCurrency(p.total)}</td>
+                <td><span class="badge badge-${p.status}">${p.status}</span></td>
+                <td class="action-col" onclick="event.stopPropagation()"><button class="btn btn-xs btn-success" onclick="Billing.markPaid('${p.id}','purchases')"><span class="material-icons" style="font-size:13px">check</span> Pay</button></td>
+              </tr>`;
+        }).join('')}
+          </tbody>
+          ${purchases.length > 0 ? `<tfoot><tr><td colspan="5" class="text-right">Total Payable</td><td colspan="2" class="text-right font-bold">${fmtCurrency(purchases.reduce((s, b) => s + b.total, 0))}</td><td></td></tr></tfoot>` : ''}
+        </table>
+      </div>`;
+  }
+};
