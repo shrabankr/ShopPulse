@@ -87,8 +87,8 @@ DB.deleteSupplier(id)
 DB.adjustStock(productId, delta)  // delta can be negative
 
 // Auto-numbering
-DB.nextInvoiceNo()  // returns "TC/2024-25/0009"
-DB.nextBillNo()     // returns "TC-PO/2024-25/0007"
+DB.nextInvoiceNo()  // returns "SCS/2024-25/0009"
+DB.nextBillNo()     // returns "SCS-PO/2024-25/0007"
 ```
 
 ---
@@ -251,7 +251,7 @@ daysBetween(date1, date2) // → integer (negative = date2 is in past)
 | Computer repair | 998731 | 18% |
 
 ### Invoice Number Format
-`TC/2024-25/0001` = `{prefix}/{financial-year}/{4-digit-serial}`
+`SCS/2024-25/0001` = `{prefix}/{financial-year}/{4-digit-serial}`
 
 ### Financial Year
 April 1 – March 31. `getFY()` returns `"2024-25"`.

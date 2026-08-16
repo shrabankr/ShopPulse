@@ -60,7 +60,7 @@ This is the most important file. It contains:
    - Returns: `{ items[], subtotal, totalCgst, totalSgst, totalIgst, totalTax, total, isIntra }`
 
 3. **`DB.seed()`** — Pre-loads demo data on first run
-   - Business: TechCare Solutions, Pune, Maharashtra (GST state code: 27)
+   - Business: SysCare Computer Services, Pune, Maharashtra (GST state code: 27)
    - 6 customers (schools, hospitals, municipal corp, hotels, IT companies)
    - 4 suppliers (Ingram Micro, Rashi Peripherals, Hikvision, Redington)
    - 19 products (laptops, desktops, CCTV cameras, NVR, networking, UPS, RAM, SSD + AMC/service items)
@@ -325,7 +325,7 @@ npx serve .
 ```
 Then open: `http://localhost:3000`
 
-**First run:** Demo data auto-loads (TechCare Solutions, Pune — IT/CCTV business)
+**First run:** Demo data auto-loads (SysCare Computer Services, Pune — IT/CCTV business)
 
 **Reset data:** Open browser console (F12) → `localStorage.clear(); location.reload()`
 

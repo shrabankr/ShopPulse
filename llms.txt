@@ -91,9 +91,9 @@ Reset: `localStorage.clear(); location.reload()`
 
 ## Business profile (demo seed data)
 
-- Business: TechCare Solutions, Pune, Maharashtra (stateCode: 27)
+- Business: SysCare Computer Services, Pune, Maharashtra (stateCode: 27)
 - GSTIN: 27AABCT5432R1ZP
-- Invoice prefix: TC → format TC/2024-25/0001
+- Invoice prefix: SCS → format SCS/2024-25/0001
 - 6 customers: IT company, school, hospital, municipal corp, manufacturer (Gujarat), hotel
 - 4 suppliers: Ingram Micro, Rashi Peripherals, Hikvision, Redington
 - 19 products: laptops (HSN 8471), CCTV cams (8525), NVR (8521), switches (8517),

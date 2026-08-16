@@ -327,14 +327,14 @@ const DB = {
     if (this._get(this.K.SEEDED)) return;
 
     this.setBiz({
-      name: 'TechCare Solutions', gstin: '27AABCT5432R1ZP', pan: 'AABCT5432R',
+      name: 'SysCare Computer Services', gstin: '27AABCT5432R1ZP', pan: 'AABCT5432R',
       address: '12, IT Park Road, Sector 5', city: 'Pune',
       state: 'Maharashtra', stateCode: '27', pincode: '411057',
-      phone: '+91 98600 12345', email: 'accounts@techcaresolutions.in',
-      website: 'www.techcaresolutions.in',
+      phone: '+91 98600 12345', email: 'accounts@syscare.in',
+      website: 'www.syscare.in',
       bankName: 'ICICI Bank', bankAccount: '012305001234567',
       bankIFSC: 'ICIC0000123', bankBranch: 'Hinjewadi, Pune',
-      invoicePrefix: 'TC', invoiceCounter: 9,
+      invoicePrefix: 'SCS', invoiceCounter: 9,
       billPrefix: 'PO', billCounter: 6,
       defaultPaymentTerms: 30, signatory: 'Ankit Mehta',
       termsAndConditions: 'All goods carry manufacturer warranty only. No returns after installation.\nAMC services are non-refundable once commenced.\nInterest @18% p.a. on delayed payments. Subject to Pune Jurisdiction.',
@@ -421,7 +421,7 @@ const DB = {
 
     // ── Sales Invoices ──
     // INV 001 — CCTV supply & installation for school (PAID)
-    mkSale('TC/2024-25/0001', daysAgo(60), c2,
+    mkSale('SCS/2024-25/0001', daysAgo(60), c2,
       [{ productId: p4.id, name: p4.name, hsn: p4.hsn, unit: p4.unit, qty: 16, rate: 2800, discount: 5, gstRate: 18 },
        { productId: p6.id, name: p6.name, hsn: p6.hsn, unit: p6.unit, qty: 2,  rate: 12500, discount: 0, gstRate: 18 },
        { productId: p7.id, name: p7.name, hsn: p7.hsn, unit: p7.unit, qty: 2,  rate: 5500, discount: 0, gstRate: 18 },
@@ -429,47 +429,47 @@ const DB = {
       'paid', daysAgo(45), 'Bank Transfer', 'CCTV installation — Main building & Hostel block');
 
     // INV 002 — Laptops + networking for IT company (PAID)
-    mkSale('TC/2024-25/0002', daysAgo(50), c1,
+    mkSale('SCS/2024-25/0002', daysAgo(50), c1,
       [{ productId: p1.id, name: p1.name, hsn: p1.hsn, unit: p1.unit, qty: 10, rate: 56000, discount: 3, gstRate: 18 },
        { productId: p8.id, name: p8.name, hsn: p8.hsn, unit: p8.unit, qty: 1,  rate: 7200,  discount: 0, gstRate: 18 },
        { productId: p17.id, name: p17.name, hsn: p17.hsn, unit: p17.unit, qty: 1, rate: 4500, discount: 0, gstRate: 18 }],
       'paid', daysAgo(35), 'NEFT', 'New office IT setup');
 
     // INV 003 — AMC renewal for hospital (PAID)
-    mkSale('TC/2024-25/0003', daysAgo(40), c3,
+    mkSale('SCS/2024-25/0003', daysAgo(40), c3,
       [{ productId: p14.id, name: p14.name, hsn: p14.hsn, unit: p14.unit, qty: 25, rate: 3500, discount: 0, gstRate: 18 },
        { productId: p15.id, name: p15.name, hsn: p15.hsn, unit: p15.unit, qty: 3,  rate: 8000, discount: 0, gstRate: 18 }],
       'paid', daysAgo(25), 'Cheque', 'AMC 2024-25 — 25 computers + 3 CCTV systems');
 
     // INV 004 — Desktop supply + UPS for hotel (PAID)
-    mkSale('TC/2024-25/0004', daysAgo(30), c6,
+    mkSale('SCS/2024-25/0004', daysAgo(30), c6,
       [{ productId: p2.id,  name: p2.name,  hsn: p2.hsn,  unit: p2.unit,  qty: 5, rate: 38500, discount: 2, gstRate: 18 },
        { productId: p11.id, name: p11.name, hsn: p11.hsn, unit: p11.unit, qty: 5, rate: 15500, discount: 0, gstRate: 18 },
        { productId: p17.id, name: p17.name, hsn: p17.hsn, unit: p17.unit, qty: 1, rate: 4500, discount: 0, gstRate: 18 }],
       'paid', daysAgo(15), 'Bank Transfer', 'Front desk + back office computers');
 
     // INV 005 — CCTV supply for manufacturer in Gujarat (inter-state IGST) (PAID)
-    mkSale('TC/2024-25/0005', daysAgo(25), c5,
+    mkSale('SCS/2024-25/0005', daysAgo(25), c5,
       [{ productId: p5.id, name: p5.name, hsn: p5.hsn, unit: p5.unit, qty: 20, rate: 4800, discount: 5, gstRate: 18 },
        { productId: p6.id, name: p6.name, hsn: p6.hsn, unit: p6.unit, qty: 3,  rate: 12500, discount: 0, gstRate: 18 },
        { productId: p10.id, name: p10.name, hsn: p10.hsn, unit: p10.unit, qty: 4, rate: 4500, discount: 0, gstRate: 18 }],
       'paid', daysAgo(10), 'RTGS', 'Factory-wide CCTV surveillance system');
 
     // INV 006 — Firewall + network for Municipal Corporation (SENT — awaiting payment)
-    mkSale('TC/2024-25/0006', daysAgo(18), c4,
+    mkSale('SCS/2024-25/0006', daysAgo(18), c4,
       [{ productId: p9.id,  name: p9.name,  hsn: p9.hsn,  unit: p9.unit,  qty: 2,  rate: 36000, discount: 0, gstRate: 18 },
        { productId: p8.id,  name: p8.name,  hsn: p8.hsn,  unit: p8.unit,  qty: 3,  rate: 7200,  discount: 0, gstRate: 18 },
        { productId: p17.id, name: p17.name, hsn: p17.hsn, unit: p17.unit, qty: 2,  rate: 4500,  discount: 0, gstRate: 18 }],
       'sent', null, null, 'Network upgradation — IT dept Nagpur Corp');
 
     // INV 007 — AMC renewal for school (UNPAID)
-    mkSale('TC/2024-25/0007', daysAgo(10), c2,
+    mkSale('SCS/2024-25/0007', daysAgo(10), c2,
       [{ productId: p14.id, name: p14.name, hsn: p14.hsn, unit: p14.unit, qty: 30, rate: 3500, discount: 0, gstRate: 18 },
        { productId: p15.id, name: p15.name, hsn: p15.hsn, unit: p15.unit, qty: 2,  rate: 8000, discount: 0, gstRate: 18 }],
       'unpaid', null, null, 'Annual AMC 2025-26 — Computer lab & CCTV');
 
     // INV 008 — CCTV expansion for hospital (OVERDUE)
-    mkSale('TC/2024-25/0008', daysAgo(55), c3,
+    mkSale('SCS/2024-25/0008', daysAgo(55), c3,
       [{ productId: p5.id, name: p5.name, hsn: p5.hsn, unit: p5.unit, qty: 8,  rate: 4800, discount: 0, gstRate: 18 },
        { productId: p7.id, name: p7.name, hsn: p7.hsn, unit: p7.unit, qty: 2,  rate: 5500, discount: 0, gstRate: 18 },
        { productId: p16.id, name: p16.name, hsn: p16.hsn, unit: p16.unit, qty: 1, rate: 5000, discount: 0, gstRate: 18 }],
@@ -477,34 +477,34 @@ const DB = {
 
     // ── Purchase Bills ──
     // PO 001 — Laptops from Ingram Micro (PAID)
-    mkPurchase('TC-PO/2024-25/0001', daysAgo(65), s1,
+    mkPurchase('SCS-PO/2024-25/0001', daysAgo(65), s1,
       [{ productId: p1.id, name: p1.name, hsn: p1.hsn, unit: p1.unit, qty: 15, rate: 48000, discount: 0, gstRate: 18 },
        { productId: p2.id, name: p2.name, hsn: p2.hsn, unit: p2.unit, qty: 8,  rate: 32000, discount: 0, gstRate: 18 }],
       'paid', daysAgo(50));
 
     // PO 002 — CCTV cameras from Hikvision (PAID)
-    mkPurchase('TC-PO/2024-25/0002', daysAgo(55), s3,
+    mkPurchase('SCS-PO/2024-25/0002', daysAgo(55), s3,
       [{ productId: p4.id, name: p4.name, hsn: p4.hsn, unit: p4.unit, qty: 50, rate: 1800, discount: 2, gstRate: 18 },
        { productId: p5.id, name: p5.name, hsn: p5.hsn, unit: p5.unit, qty: 30, rate: 3200, discount: 2, gstRate: 18 },
        { productId: p6.id, name: p6.name, hsn: p6.hsn, unit: p6.unit, qty: 10, rate: 8500, discount: 0, gstRate: 18 }],
       'paid', daysAgo(40));
 
     // PO 003 — Networking equipment from Rashi Peripherals (UNPAID)
-    mkPurchase('TC-PO/2024-25/0003', daysAgo(20), s2,
+    mkPurchase('SCS-PO/2024-25/0003', daysAgo(20), s2,
       [{ productId: p8.id,  name: p8.name,  hsn: p8.hsn,  unit: p8.unit,  qty: 10, rate: 5500, discount: 0, gstRate: 18 },
        { productId: p9.id,  name: p9.name,  hsn: p9.hsn,  unit: p9.unit,  qty: 5,  rate: 28000, discount: 0, gstRate: 18 },
        { productId: p10.id, name: p10.name, hsn: p10.hsn, unit: p10.unit, qty: 20, rate: 3200, discount: 0, gstRate: 18 }],
       'unpaid', null);
 
     // PO 004 — Server parts from Redington (OVERDUE)
-    mkPurchase('TC-PO/2024-25/0004', daysAgo(52), s4,
+    mkPurchase('SCS-PO/2024-25/0004', daysAgo(52), s4,
       [{ productId: p12.id, name: p12.name, hsn: p12.hsn, unit: p12.unit, qty: 50, rate: 2800, discount: 0, gstRate: 18 },
        { productId: p13.id, name: p13.name, hsn: p13.hsn, unit: p13.unit, qty: 30, rate: 3200, discount: 0, gstRate: 18 },
        { productId: p11.id, name: p11.name, hsn: p11.hsn, unit: p11.unit, qty: 10, rate: 12000, discount: 0, gstRate: 18 }],
       'overdue', null);
 
     // PO 005 — Additional CCTV stock (UNPAID — recent)
-    mkPurchase('TC-PO/2024-25/0005', daysAgo(5), s3,
+    mkPurchase('SCS-PO/2024-25/0005', daysAgo(5), s3,
       [{ productId: p4.id, name: p4.name, hsn: p4.hsn, unit: p4.unit, qty: 30, rate: 1800, discount: 0, gstRate: 18 },
        { productId: p7.id, name: p7.name, hsn: p7.hsn, unit: p7.unit, qty: 15, rate: 4200, discount: 0, gstRate: 18 }],
       'unpaid', null);
