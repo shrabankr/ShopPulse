@@ -79,6 +79,7 @@ const Billing = {
             <td><span class="badge badge-${d.status}">${d.status.charAt(0).toUpperCase() + d.status.slice(1)}</span></td>
             <td class="action-col" onclick="event.stopPropagation()">
               <button class="btn btn-xs btn-secondary" onclick="Billing.viewDoc('${d.id}','${type}')" title="View"><span class="material-icons" style="font-size:14px">visibility</span></button>
+              <button class="btn btn-xs btn-secondary" onclick="Billing.shareWhatsApp('${d.id}','${type}')" title="Share WhatsApp"><span class="material-icons" style="font-size:14px;color:#25d366">chat</span></button>
               ${d.status !== 'paid' ? `<button class="btn btn-xs btn-success" onclick="Billing.markPaid('${d.id}','${type}')" title="Mark Paid"><span class="material-icons" style="font-size:14px">check_circle</span></button>` : ''}
               ${DB.getRole() !== 'staff' ? `<button class="btn btn-xs btn-ghost" onclick="Billing.deleteDoc('${d.id}','${type}')" title="Delete"><span class="material-icons" style="font-size:14px;color:var(--danger)">delete</span></button>` : ''}
             </td>
@@ -728,10 +729,19 @@ const Billing = {
       taxRows = `<tr><td>IGST</td><td class="text-right">${fmtCurrency(doc.totalIgst)}</td></tr>`;
     }
 
+    const limits = DB.getTrialLimits();
+    const isLicensed = !limits.isTrial;
+
     const actionButtons = `
       <button class="btn btn-ghost" onclick="App.closeModal()">Close</button>
+      <button class="btn btn-secondary" onclick="Billing.shareWhatsApp('${id}','${type}')" title="${isLicensed ? 'Share via WhatsApp' : 'Commercial License Required 💎'}">
+        <span class="material-icons" style="color:#25d366">chat</span> WhatsApp ${isLicensed ? '' : '<span style="font-size:10px">💎</span>'}
+      </button>
+      <button class="btn btn-secondary" onclick="Billing.exportPDF('${id}','${type}')" title="${isLicensed ? 'Save / Export as PDF' : 'Commercial License Required 💎'}">
+        <span class="material-icons" style="color:#e74c3c">picture_as_pdf</span> PDF Bill ${isLicensed ? '' : '<span style="font-size:10px">💎</span>'}
+      </button>
       ${doc.status !== 'paid' ? `<button class="btn btn-success" onclick="App.closeModal();Billing.markPaid('${id}','${type}')"><span class="material-icons">check_circle</span> Mark Paid</button>` : ''}
-      <button class="btn btn-secondary" onclick="Billing.printDoc('${id}','${type}')"><span class="material-icons">print</span> Print</button>
+      <button class="btn btn-primary" onclick="Billing.printDoc('${id}','${type}')"><span class="material-icons">print</span> Print</button>
     `;
 
     App.modal(`${isSales ? 'Sales Tax Invoice' : 'Purchase Order / Bill'}: ${no}`,
@@ -882,6 +892,87 @@ const Billing = {
     App.closeModal();
     App.refreshSidebar();
     setTimeout(() => App.route(), 300);
+  },
+
+  /* ═══════════════════════════════════════════
+     SHARE VIA WHATSAPP (LICENSED FEATURE 💎)
+  ═══════════════════════════════════════════ */
+  shareWhatsApp(id, type) {
+    const limits = DB.getTrialLimits();
+    if (limits.isTrial) {
+      App.toast('🔒 WhatsApp Bill Sharing is exclusive to Licensed Commercial users. Activate your license to send WhatsApp invoices.', 'warning');
+      App.openLicenseModal();
+      return;
+    }
+
+    const isSales = type === 'sales';
+    const doc = isSales ? DB.getSaleById(id) : DB.getPurchaseById(id);
+    if (!doc) return;
+
+    const biz = DB.getBiz();
+    const no = isSales ? doc.invoiceNo : doc.billNo;
+    const partyName = isSales ? doc.customerName : doc.supplierName;
+    const partyPhone = isSales ? (doc.customerPhone || DB.getCustomerById(doc.customerId)?.phone || '') : (doc.supplierPhone || DB.getSupplierById(doc.supplierId)?.phone || '');
+
+    const itemsSummary = (doc.items || []).map((it, idx) => `• *${it.name}* (Qty: ${it.qty} ${it.unit || 'Nos'}) - ₹${(it.totalAmt || 0).toLocaleString('en-IN')}`).join('\n');
+
+    let msg = `🧾 *TAX INVOICE — ${biz.name}*\n`;
+    if (biz.tagline) msg += `_${biz.tagline}_\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `📄 *Invoice No:* ${no}\n`;
+    msg += `📅 *Date:* ${fmtDate(doc.date)}\n`;
+    msg += `👤 *Customer:* ${partyName}\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `🛒 *Items Purchased:*\n${itemsSummary}\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `💵 Subtotal: ₹${(doc.subtotal || 0).toLocaleString('en-IN')}\n`;
+    msg += `📊 GST Tax: ₹${(doc.totalTax || 0).toLocaleString('en-IN')}\n`;
+    msg += `💰 *Grand Total:* ₹${(doc.total || 0).toLocaleString('en-IN')}\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━\n`;
+
+    if (doc.status === 'paid') {
+      msg += `✅ *Payment Status: PAID*\nThank you for doing business with us! 🙏\n`;
+    } else {
+      msg += `⏳ *Payment Status: DUE (₹${(doc.total || 0).toLocaleString('en-IN')})*\n`;
+      msg += `⏰ *Due Date:* ${fmtDate(doc.dueDate)}\n\n`;
+      if (biz.bankAccount) {
+        msg += `🏦 *Payment Details:*\n`;
+        msg += `Bank: ${biz.bankName || ''}\n`;
+        msg += `A/C No: ${biz.bankAccount}\n`;
+        msg += `IFSC: ${biz.bankIFSC || ''}\n`;
+        if (biz.bankBranch) msg += `Branch: ${biz.bankBranch}\n`;
+      }
+    }
+
+    if (biz.phone || biz.email) {
+      msg += `\n📞 Support / Inquiry: ${biz.phone || ''} ${biz.email ? '| ' + biz.email : ''}\n`;
+    }
+    msg += `_Generated by ShopPulse_`;
+
+    let cleanPhone = (partyPhone || '').replace(/\D/g, '');
+    if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
+
+    const waUrl = cleanPhone 
+      ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`
+      : `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
+
+    window.open(waUrl, '_blank');
+    App.toast(`Opening WhatsApp for ${no}…`, 'success');
+  },
+
+  /* ═══════════════════════════════════════════
+     EXPORT / SAVE AS PDF (LICENSED FEATURE 💎)
+  ═══════════════════════════════════════════ */
+  exportPDF(id, type) {
+    const limits = DB.getTrialLimits();
+    if (limits.isTrial) {
+      App.toast('🔒 1-Click PDF Bill Export is exclusive to Licensed Commercial users. Activate your license to unlock PDF generation.', 'warning');
+      App.openLicenseModal();
+      return;
+    }
+
+    this.printDoc(id, type);
+    App.toast('Document ready! In the print dialog, select "Save as PDF" 📄', 'success');
   },
 
   /* ═══════════════════════════════════════════

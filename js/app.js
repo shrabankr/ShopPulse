@@ -726,7 +726,7 @@ const App = {
       </div>
       ` : `
       <div class="card" style="padding:12px;margin-bottom:14px;background:hsl(142,76%,96%);border:1px solid hsl(142,60%,85%);font-size:.85rem;color:hsl(142,70%,25%)">
-        <span class="material-icons" style="font-size:18px;vertical-align:middle">diamond</span> <strong>Commercial License Active:</strong> Unlimited invoices, unlimited customers &amp; suppliers, and zero watermark forever!
+        <span class="material-icons" style="font-size:18px;vertical-align:middle">diamond</span> <strong>Commercial License Active:</strong> Unlimited invoices, custom logo &amp; tagline, 1-click PDF export, instant WhatsApp sharing, and zero watermark forever!
       </div>
       `}
 
