@@ -12,17 +12,27 @@ const App = {
     this.buildTopbar();
     window.addEventListener('hashchange', () => this.route());
     this.route(location.hash || '#dashboard');
+
+    // Developer shortcut: Ctrl + Shift + D
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        this.openDevConsole();
+      }
+    });
   },
 
   /* ─── Sidebar ─── */
   buildSidebar() {
     const biz = DB.getBiz();
+    const role = DB.getRole();
+    const isStaff = role === 'staff';
     const unpaidSales = DB.getSales().filter(s => ['unpaid', 'overdue'].includes(s.status)).length;
     const unpaidBuys = DB.getPurchases().filter(p => ['unpaid', 'overdue'].includes(p.status)).length;
     const lowStock = DB.getProducts().filter(p => p.reorderLevel > 0 && p.stock <= p.reorderLevel).length;
 
     document.getElementById('sidebar').innerHTML = `
-      <div class="sidebar-logo">
+      <div class="sidebar-logo" onclick="App._handleLogoClick()" title="Triple click for Developer Tools">
         <div class="logo-icon"><span class="material-icons">electric_bolt</span></div>
         <div>
           <span class="logo-name">ShopPulse</span>
@@ -37,45 +47,78 @@ const App = {
         <div class="nav-section">
           <span class="nav-section-label">Transactions</span>
           <a href="#billing-sales" class="nav-item" data-r="billing-sales"><span class="material-icons">receipt_long</span><span>Sales Invoices</span></a>
+          ${isStaff ? '' : `
           <a href="#billing-purchases" class="nav-item" data-r="billing-purchases"><span class="material-icons">shopping_bag</span><span>Purchase Bills</span></a>
           <a href="#expenses" class="nav-item" data-r="expenses"><span class="material-icons">receipt</span><span>Expenses</span></a>
+          `}
           <a href="#receivables" class="nav-item" data-r="receivables"><span class="material-icons">account_balance_wallet</span><span>Receivables</span>${unpaidSales ? `<span class="nav-badge">${unpaidSales}</span>` : ''}</a>
-          <a href="#payables" class="nav-item" data-r="payables"><span class="material-icons">payments</span><span>Payables</span>${unpaidBuys ? `<span class="nav-badge">${unpaidBuys}</span>` : ''}</a>
+          ${isStaff ? '' : `<a href="#payables" class="nav-item" data-r="payables"><span class="material-icons">payments</span><span>Payables</span>${unpaidBuys ? `<span class="nav-badge">${unpaidBuys}</span>` : ''}</a>`}
         </div>
         <div class="nav-section">
           <span class="nav-section-label">Management</span>
           <a href="#inventory" class="nav-item" data-r="inventory"><span class="material-icons">inventory_2</span><span>Inventory</span>${lowStock ? `<span class="nav-badge warn">${lowStock}</span>` : ''}</a>
           <a href="#customers" class="nav-item" data-r="customers"><span class="material-icons">people</span><span>Customers</span></a>
-          <a href="#suppliers" class="nav-item" data-r="suppliers"><span class="material-icons">local_shipping</span><span>Suppliers</span></a>
+          ${isStaff ? '' : `<a href="#suppliers" class="nav-item" data-r="suppliers"><span class="material-icons">local_shipping</span><span>Suppliers</span></a>`}
         </div>
         <div class="nav-section">
-          <span class="nav-section-label">Analytics</span>
-          <a href="#reports" class="nav-item" data-r="reports"><span class="material-icons">bar_chart</span><span>Reports</span></a>
-          <a href="#gst" class="nav-item" data-r="gst"><span class="material-icons">receipt</span><span>GST Returns</span></a>
+          <span class="nav-section-label">Analytics &amp; System</span>
+          ${isStaff ? `
+            <a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked in Staff Mode"><span class="material-icons">lock</span><span>Reports (Locked)</span></a>
+          ` : `
+            <a href="#reports" class="nav-item" data-r="reports"><span class="material-icons">bar_chart</span><span>Reports &amp; P&amp;L</span></a>
+            <a href="#gst" class="nav-item" data-r="gst"><span class="material-icons">receipt</span><span>GST Returns</span></a>
+          `}
           <a href="#ai" class="nav-item" data-r="ai"><span class="material-icons">auto_awesome</span><span>AI Assistant</span><span class="nav-chip">AI</span></a>
-        </div>
-        <div class="nav-section">
-          <a href="#settings" class="nav-item" data-r="settings"><span class="material-icons">settings</span><span>Settings</span></a>
+          <a href="#settings" class="nav-item" data-r="settings"><span class="material-icons">settings</span><span>Settings &amp; Backup</span></a>
         </div>
       </nav>
     `;
   },
 
+  _logoClicks: 0,
+  _handleLogoClick() {
+    this._logoClicks = (this._logoClicks || 0) + 1;
+    if (this._logoClicks >= 3) {
+      this._logoClicks = 0;
+      this.openDevConsole();
+    } else {
+      setTimeout(() => { this._logoClicks = 0; }, 1200);
+    }
+  },
+
   /* ─── Topbar ─── */
   buildTopbar() {
+    const role = DB.getRole();
+    let modeBadge = '';
+    if (role === 'staff') {
+      modeBadge = `<button class="btn btn-xs btn-secondary" onclick="App.toggleRoleModal()" title="Click to unlock Owner Mode" style="border-radius:20px;padding:3px 10px;font-size:.78rem"><span class="material-icons" style="font-size:13px;color:var(--text-secondary)">lock</span> Staff Mode</button>`;
+    } else if (role === 'developer') {
+      modeBadge = `<button class="btn btn-xs" onclick="App.openDevConsole()" title="Developer Master Console" style="border-radius:20px;padding:3px 10px;font-size:.78rem;background:hsl(271,78%,50%);color:#fff"><span class="material-icons" style="font-size:13px">terminal</span> Dev Mode</button>`;
+    } else {
+      modeBadge = `<button class="btn btn-xs btn-secondary" onclick="App.toggleRoleModal()" title="Click to switch to Staff Mode" style="border-radius:20px;padding:3px 10px;font-size:.78rem;color:var(--primary);border-color:var(--primary-light)"><span class="material-icons" style="font-size:13px">admin_panel_settings</span> Owner Mode</button>`;
+    }
+
     document.getElementById('topbar').innerHTML = `
       <button class="sidebar-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">
         <span class="material-icons">menu</span>
       </button>
-      <div class="topbar-title" id="tb-title">Dashboard</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="topbar-title" id="tb-title">Dashboard</div>
+        ${modeBadge}
+      </div>
       <div class="topbar-actions">
+        ${role === 'staff' ? '' : `
         <button class="btn btn-secondary btn-sm" onclick="Expenses.openForm()">
           <span class="material-icons">receipt</span> Add Expense
         </button>
+        `}
         <button class="btn btn-primary btn-sm" onclick="Billing.openNew('sales')">
           <span class="material-icons">add</span> New Invoice
         </button>
-        <button class="icon-btn" onclick="App.route('#settings')" title="Settings">
+        <button class="icon-btn" onclick="App.downloadBackup()" title="1-Click Backup Database (.json)">
+          <span class="material-icons">cloud_download</span>
+        </button>
+        <button class="icon-btn" onclick="App.route('#settings')" title="Settings & Backup Hub">
           <span class="material-icons">manage_accounts</span>
         </button>
       </div>
@@ -311,6 +354,267 @@ const App = {
     return Object.entries(map).map(([name, revenue]) => ({ name, revenue })).sort((a, b) => b.revenue - a.revenue);
   },
 
+  /* ─── Mode Switching Modal ─── */
+  toggleRoleModal() {
+    const currentRole = DB.getRole();
+    if (currentRole === 'staff') {
+      this.modal('Unlock Owner Mode',
+        `
+        <div style="text-align:center;padding:10px 0 20px">
+          <div style="width:54px;height:54px;border-radius:50%;background:var(--primary-light);color:var(--primary);display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px">
+            <span class="material-icons" style="font-size:28px">admin_panel_settings</span>
+          </div>
+          <h3>Enter Owner PIN</h3>
+          <p style="font-size:.85rem;color:var(--text-secondary)">Default PIN is <strong>1234</strong>. Unlocks P&amp;L, purchase prices, and full settings.</p>
+        </div>
+        <div class="form-group" style="max-width:260px;margin:0 auto 16px">
+          <input type="password" id="owner-pin-input" placeholder="Enter 4-digit PIN" maxlength="20" style="text-align:center;font-size:1.2rem;letter-spacing:.2em;font-weight:700" onkeyup="if(event.key==='Enter')App.unlockOwner()">
+        </div>
+        <div style="text-align:center;font-size:.78rem;color:var(--text-secondary)">
+          Developer? <a href="javascript:void(0)" onclick="App.closeModal();App.openDevConsole()">Open Developer Console</a>
+        </div>
+        `,
+        `
+        <button class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="App.unlockOwner()"><span class="material-icons">lock_open</span> Unlock</button>
+        `,
+        'modal-sm'
+      );
+      setTimeout(() => document.getElementById('owner-pin-input')?.focus(), 200);
+    } else {
+      this.modal('Switch to Staff Mode',
+        `
+        <div style="text-align:center;padding:10px 0 10px">
+          <div style="width:54px;height:54px;border-radius:50%;background:var(--warning-light);color:var(--warning);display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px">
+            <span class="material-icons" style="font-size:28px">lock</span>
+          </div>
+          <h3>Lock to Counter / Staff Mode?</h3>
+          <p style="font-size:.85rem;color:var(--text-secondary)">Hides sensitive profit margins, purchase costs, expenses, and GST returns for counter staff.</p>
+        </div>
+        `,
+        `
+        <button class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
+        <button class="btn btn-warning" onclick="App.lockStaffMode()"><span class="material-icons">lock</span> Lock to Staff Mode</button>
+        `,
+        'modal-sm'
+      );
+    }
+  },
+
+  unlockOwner() {
+    const pin = document.getElementById('owner-pin-input')?.value.trim();
+    if (DB.verifyOwnerPin(pin)) {
+      DB.setRole('owner');
+      this.closeModal();
+      this.buildSidebar();
+      this.buildTopbar();
+      this.toast('Owner mode unlocked! 👑', 'success');
+      this.route();
+    } else {
+      this.toast('Incorrect PIN! Try 1234', 'error');
+    }
+  },
+
+  lockStaffMode() {
+    DB.setRole('staff');
+    this.closeModal();
+    this.buildSidebar();
+    this.buildTopbar();
+    this.toast('Switched to Staff Mode 🧾', 'info');
+    this.route('#billing-sales');
+  },
+
+  /* ─── Backup & Restore Functions ─── */
+  downloadBackup() {
+    const filename = DB.downloadBackup();
+    this.toast(`Backup downloaded: ${filename}`, 'success');
+  },
+
+  triggerRestore() {
+    const input = document.getElementById('restore-file-input') || document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    input.style.display = 'none';
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const parsed = JSON.parse(evt.target.result);
+          if (!parsed.data) throw new Error('File is missing ShopPulse database payload.');
+
+          const stats = parsed.stats || {};
+          App.modal('Confirm Database Restore',
+            `
+            <div style="text-align:center;padding:10px 0 14px">
+              <div style="width:54px;height:54px;border-radius:50%;background:var(--danger-light);color:var(--danger);display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px">
+                <span class="material-icons" style="font-size:28px">warning</span>
+              </div>
+              <h3>Restore from Backup?</h3>
+              <p style="font-size:.85rem;color:var(--text-secondary)">This will overwrite current records with backup from <strong>${fmtDate(parsed.exportedAt || new Date().toISOString())}</strong>.</p>
+            </div>
+            <div style="background:var(--bg);padding:12px;border-radius:var(--radius-sm);font-size:.84rem;margin-bottom:12px">
+              <div><strong>Business:</strong> ${parsed.businessName || '—'} (${parsed.gstin || 'No GSTIN'})</div>
+              <div style="margin-top:6px;color:var(--text-secondary)">
+                Invoices: <strong>${stats.salesCount ?? (parsed.data.sales || []).length}</strong> &nbsp;|&nbsp;
+                Products: <strong>${stats.productsCount ?? (parsed.data.products || []).length}</strong> &nbsp;|&nbsp;
+                Customers: <strong>${stats.customersCount ?? (parsed.data.customers || []).length}</strong>
+              </div>
+            </div>
+            `,
+            `
+            <button class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
+            <button class="btn btn-danger" onclick="App._executeRestore(${JSON.stringify(parsed).replace(/"/g, '&quot;')})"><span class="material-icons">restore</span> Proceed Restore</button>
+            `,
+            'modal-sm'
+          );
+        } catch (err) {
+          App.toast('Invalid JSON backup file: ' + err.message, 'error');
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  },
+
+  _executeRestore(backupObj) {
+    try {
+      DB.restoreBackup(backupObj);
+      this.closeModal();
+      this.toast('Database restored successfully! Reloading…', 'success');
+      setTimeout(() => location.reload(), 1000);
+    } catch (e) {
+      this.toast('Restore failed: ' + e.message, 'error');
+    }
+  },
+
+  restoreSnapshot(id) {
+    const snaps = DB.getSnapshots();
+    const snap = snaps.find(s => s.id === id);
+    if (!snap) return;
+    if (confirm(`Restore snapshot from ${fmtDate(snap.date)}?\nCurrent data will be replaced.`)) {
+      DB.restoreBackup(snap.data);
+      this.toast('Snapshot restored! Reloading…', 'success');
+      setTimeout(() => location.reload(), 800);
+    }
+  },
+
+  /* ─── Developer Master Console ─── */
+  openDevConsole() {
+    const biz = DB.getBiz();
+    const sales = DB.getSales();
+    const purchases = DB.getPurchases();
+    const products = DB.getProducts();
+    const customers = DB.getCustomers();
+    const suppliers = DB.getSuppliers();
+    const expenses = DB.getExpenses();
+
+    const storageUsageKB = (JSON.stringify(localStorage).length / 1024).toFixed(2);
+
+    this.modal('🛠️ Developer Master Console',
+      `
+      <div style="margin-bottom:16px;padding:12px 16px;background:hsl(271,78%,96%);border:1px solid hsl(271,60%,85%);border-radius:var(--radius);display:flex;align-items:center;gap:14px">
+        <div style="width:44px;height:44px;border-radius:12px;background:hsl(271,78%,50%);color:#fff;display:flex;align-items:center;justify-content:center">
+          <span class="material-icons">developer_mode</span>
+        </div>
+        <div>
+          <div style="font-weight:700;color:hsl(271,78%,30%)">ShopPulse — Developer Master Control</div>
+          <div style="font-size:.8rem;color:hsl(271,50%,40%)">Author: <strong>Shraban Kumar Mahato</strong> (shraban@andropcsoft.com) &nbsp;|&nbsp; <strong>AndroPCSoft</strong></div>
+        </div>
+      </div>
+
+      <div class="kpi-grid" style="margin-bottom:18px">
+        <div class="kpi-card kpi-primary">
+          <div class="kpi-content">
+            <div class="kpi-label">Local Storage Used</div>
+            <div class="kpi-value">${storageUsageKB} KB</div>
+            <div class="kpi-sub">Client browser storage</div>
+          </div>
+        </div>
+        <div class="kpi-card kpi-success">
+          <div class="kpi-content">
+            <div class="kpi-label">Sales &amp; Purchases</div>
+            <div class="kpi-value">${sales.length + purchases.length} Docs</div>
+            <div class="kpi-sub">${sales.length} Invoices / ${purchases.length} POs</div>
+          </div>
+        </div>
+        <div class="kpi-card kpi-warning">
+          <div class="kpi-content">
+            <div class="kpi-label">Catalog &amp; Parties</div>
+            <div class="kpi-value">${products.length + customers.length} Entities</div>
+            <div class="kpi-sub">${products.length} Products / ${customers.length} Cust</div>
+          </div>
+        </div>
+        <div class="kpi-card kpi-danger">
+          <div class="kpi-content">
+            <div class="kpi-label">Expenses Logged</div>
+            <div class="kpi-value">${expenses.length} Records</div>
+            <div class="kpi-sub">${fmtCurrency(expenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0))}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+        <div class="card" style="padding:14px">
+          <h4 style="margin-bottom:8px"><span class="material-icons" style="font-size:16px;vertical-align:middle">cloud_sync</span> Database Backup &amp; Migration</h4>
+          <p style="font-size:.8rem;color:var(--text-secondary);margin-bottom:12px">Export complete JSON database dump for safe migration or customer support.</p>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm btn-primary" onclick="App.downloadBackup()"><span class="material-icons">download</span> Full Backup (.json)</button>
+            <button class="btn btn-sm btn-secondary" onclick="App.triggerRestore()"><span class="material-icons">upload</span> Restore File</button>
+          </div>
+        </div>
+
+        <div class="card" style="padding:14px">
+          <h4 style="margin-bottom:8px"><span class="material-icons" style="font-size:16px;vertical-align:middle">restart_alt</span> Client Setup &amp; Factory Reset</h4>
+          <p style="font-size:.8rem;color:var(--text-secondary);margin-bottom:12px">Quickly prepare a fresh database for a new client install or reload demo data.</p>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm btn-danger" onclick="if(confirm('Wipe all data and prepare fresh blank shop?')){DB.factoryReset(false);location.reload();}"><span class="material-icons">cleaning_services</span> Fresh Client Wipe</button>
+            <button class="btn btn-sm btn-secondary" onclick="if(confirm('Reload SysCare demo dataset?')){DB.factoryReset(true);location.reload();}"><span class="material-icons">dataset</span> Reload Demo Data</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:14px">
+        <h4 style="margin-bottom:8px"><span class="material-icons" style="font-size:16px;vertical-align:middle">code</span> Raw Database Collections</h4>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <button class="btn btn-xs btn-ghost" onclick="App._inspectCollection('sales')">Inspect Sales (${sales.length})</button>
+          <button class="btn btn-xs btn-ghost" onclick="App._inspectCollection('purchases')">Inspect Purchases (${purchases.length})</button>
+          <button class="btn btn-xs btn-ghost" onclick="App._inspectCollection('expenses')">Inspect Expenses (${expenses.length})</button>
+          <button class="btn btn-xs btn-ghost" onclick="App._inspectCollection('products')">Inspect Products (${products.length})</button>
+          <button class="btn btn-xs btn-ghost" onclick="App._inspectCollection('customers')">Inspect Customers (${customers.length})</button>
+          <button class="btn btn-xs btn-ghost" onclick="App._inspectCollection('suppliers')">Inspect Suppliers (${suppliers.length})</button>
+        </div>
+      </div>
+      `,
+      `
+      <button class="btn btn-ghost" onclick="App.closeModal()">Close</button>
+      <button class="btn btn-secondary" onclick="DB.setRole('developer');App.closeModal();App.buildTopbar();App.toast('Developer Mode Enabled')">Set Dev Mode</button>
+      `,
+      'modal-xl'
+    );
+  },
+
+  _inspectCollection(colName) {
+    let data = [];
+    if (colName === 'sales') data = DB.getSales();
+    else if (colName === 'purchases') data = DB.getPurchases();
+    else if (colName === 'expenses') data = DB.getExpenses();
+    else if (colName === 'products') data = DB.getProducts();
+    else if (colName === 'customers') data = DB.getCustomers();
+    else if (colName === 'suppliers') data = DB.getSuppliers();
+
+    this.modal(`Raw Collection: ${colName.toUpperCase()} (${data.length} items)`,
+      `
+      <div style="font-family:monospace;font-size:.78rem;background:#1a2332;color:#a6e22e;padding:12px;border-radius:var(--radius-sm);max-height:400px;overflow:auto;white-space:pre-wrap">
+${JSON.stringify(data, null, 2)}
+      </div>
+      `,
+      `<button class="btn btn-ghost" onclick="App.openDevConsole()">Back to Dev Console</button>`,
+      'modal-xl'
+    );
+  },
+
   /* ─── Modal ─── */
   modal(title, body, footer, size = '') {
     const o = document.getElementById('modal-overlay');
@@ -349,9 +653,15 @@ const App = {
   /* ─── Settings ─── */
   renderSettings(container) {
     const b = DB.getBiz();
+    const auth = DB.getAuth();
+    const snapshots = DB.getSnapshots();
     const stateOpts = INDIAN_STATES.map(s => `<option value="${s.code}" ${b.stateCode === s.code ? 'selected' : ''}>${s.name}</option>`).join('');
     container.innerHTML = `
-      <div class="page-header"><h2>Business Settings</h2><p>Your GST-registered business profile used on all invoices.</p></div>
+      <div class="page-header">
+        <h2>Business Settings &amp; Data Safety</h2>
+        <p>Manage your GST profile, backup your database, and configure staff security.</p>
+      </div>
+
       <div class="settings-grid">
         <div class="card">
           <div class="card-header"><h3>GST Business Profile</h3></div>
@@ -372,7 +682,7 @@ const App = {
           </div>
         </div>
         <div class="card">
-          <div class="card-header"><h3>Bank Details (for Invoice)</h3></div>
+          <div class="card-header"><h3>Bank Details (for Invoices)</h3></div>
           <div class="card-body">
             <div class="form-grid">
               <div class="form-group"><label>Bank Name</label><input id="s-bank" value="${b.bankName || ''}"></div>
@@ -382,8 +692,64 @@ const App = {
             </div>
           </div>
         </div>
+
+        <div class="card" style="border-left:4px solid var(--primary)">
+          <div class="card-header">
+            <h3><span class="material-icons" style="vertical-align:middle;font-size:20px;color:var(--primary)">cloud_sync</span> Data Backup &amp; Restore Hub</h3>
+            <span class="badge badge-paid">Offline &amp; Safe</span>
+          </div>
+          <div class="card-body">
+            <p style="font-size:.85rem;color:var(--text-secondary);margin-bottom:14px">
+              Your business data is stored safely on your computer. Download a <strong>JSON backup file</strong> regularly to protect against computer hardware failure.
+            </p>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+              <button class="btn btn-primary" onclick="App.downloadBackup()"><span class="material-icons">cloud_download</span> Download Backup (.json)</button>
+              <button class="btn btn-secondary" onclick="App.triggerRestore()"><span class="material-icons">cloud_upload</span> Restore from File (.json)</button>
+            </div>
+            <div style="font-size:.8rem;color:var(--text-secondary)">
+              Last Backup Exported: <strong>${auth.lastBackupDate ? fmtDate(auth.lastBackupDate) : 'Never exported'}</strong>
+            </div>
+
+            ${snapshots.length ? `
+            <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+              <h4 style="font-size:.85rem;margin-bottom:8px">Recent Local Rolling Snapshots</h4>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                ${snapshots.map(s => `
+                  <div style="display:flex;justify-content:space-between;align-items:center;font-size:.8rem;padding:6px 10px;background:var(--bg);border-radius:var(--radius-sm)">
+                    <span>${s.label} (${fmtDate(s.date)})</span>
+                    <button class="btn btn-xs btn-ghost text-danger" onclick="App.restoreSnapshot('${s.id}')">Rollback</button>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+            ` : ''}
+          </div>
+        </div>
+
         <div class="card">
-          <div class="card-header"><h3>Invoice Settings</h3></div>
+          <div class="card-header"><h3><span class="material-icons" style="vertical-align:middle;font-size:20px">lock</span> Security &amp; Mode Settings</h3></div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Owner Access PIN (4-digits)</label>
+                <input type="password" id="s-owner-pin" value="${auth.ownerPin || '1234'}" maxlength="10" placeholder="1234">
+              </div>
+              <div class="form-group" style="align-self:flex-end">
+                <button class="btn btn-secondary" onclick="App.saveOwnerPin()"><span class="material-icons">key</span> Update PIN</button>
+              </div>
+            </div>
+            <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <div style="font-weight:600;font-size:.88rem">Developer Master Console</div>
+                <div style="font-size:.78rem;color:var(--text-secondary)">By Shraban Kumar Mahato (AndroPCSoft)</div>
+              </div>
+              <button class="btn btn-sm btn-ghost" onclick="App.openDevConsole()"><span class="material-icons">terminal</span> Open Console</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><h3>Invoice Customization</h3></div>
           <div class="card-body">
             <div class="form-grid">
               <div class="form-group"><label>Sales Invoice Prefix</label><input id="s-invpfx" value="${b.invoicePrefix || 'INV'}" maxlength="6"></div>
@@ -394,11 +760,17 @@ const App = {
           </div>
         </div>
         <div class="settings-footer">
-          <button class="btn btn-primary" onclick="App.saveSettings()"><span class="material-icons">save</span> Save Settings</button>
-          <button class="btn btn-ghost btn-danger" onclick="App.clearAll()"><span class="material-icons">delete_forever</span> Reset All Data</button>
+          <button class="btn btn-primary" onclick="App.saveSettings()"><span class="material-icons">save</span> Save All Settings</button>
         </div>
       </div>
     `;
+  },
+
+  saveOwnerPin() {
+    const pin = document.getElementById('s-owner-pin')?.value.trim();
+    if (!pin) { this.toast('PIN cannot be empty', 'error'); return; }
+    DB.setOwnerPin(pin);
+    this.toast('Owner PIN updated successfully!');
   },
 
   saveSettings() {

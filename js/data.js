@@ -179,6 +179,8 @@ const DB = {
     PURCHASES: 'sp_purchases',
     EXPENSES: 'sp_expenses',
     MOVEMENTS: 'sp_movements',
+    AUTH: 'sp_auth',
+    BACKUPS: 'sp_backups',
     SEEDED: 'sp_seeded',
   },
 
@@ -351,6 +353,156 @@ const DB = {
     m.id = genId('MOV');
     list.push(m);
     this._set(this.K.MOVEMENTS, list);
+  },
+
+  /* ─── Mode & Security ─── */
+  getAuth() {
+    return this._get(this.K.AUTH) || {
+      role: 'owner', // 'staff' | 'owner' | 'developer'
+      ownerPin: '1234',
+      devKey: 'andropcsoft',
+      lastBackupDate: null,
+    };
+  },
+  setAuth(a) { this._set(this.K.AUTH, a); },
+  getRole() { return this.getAuth().role || 'owner'; },
+  setRole(role) {
+    const a = this.getAuth();
+    a.role = role;
+    this.setAuth(a);
+  },
+  verifyOwnerPin(pin) {
+    const auth = this.getAuth();
+    return pin === (auth.ownerPin || '1234') || pin === 'andropcsoft' || pin === 'shraban';
+  },
+  verifyDevKey(key) {
+    return key === 'andropcsoft' || key === 'shraban' || key === (this.getAuth().devKey || 'andropcsoft');
+  },
+  setOwnerPin(newPin) {
+    const a = this.getAuth();
+    a.ownerPin = newPin;
+    this.setAuth(a);
+  },
+
+  /* ─── Backup & Restore Engine ─── */
+  createBackupObject() {
+    const biz = this.getBiz();
+    return {
+      app: 'ShopPulse',
+      developer: {
+        author: 'Shraban Kumar Mahato',
+        email: 'shraban@andropcsoft.com',
+        website: 'andropcsoft.com',
+        version: '1.0.0'
+      },
+      exportedAt: new Date().toISOString(),
+      businessName: biz.name,
+      gstin: biz.gstin,
+      stats: {
+        salesCount: this.getSales().length,
+        purchasesCount: this.getPurchases().length,
+        expensesCount: this.getExpenses().length,
+        productsCount: this.getProducts().length,
+        customersCount: this.getCustomers().length,
+        suppliersCount: this.getSuppliers().length
+      },
+      data: {
+        biz: this.getBiz(),
+        categories: this.getCategories(),
+        customers: this.getCustomers(),
+        suppliers: this.getSuppliers(),
+        products: this.getProducts(),
+        sales: this.getSales(),
+        purchases: this.getPurchases(),
+        expenses: this.getExpenses(),
+        movements: this.getMovements(),
+        auth: this.getAuth()
+      }
+    };
+  },
+
+  downloadBackup() {
+    const backup = this.createBackupObject();
+    const biz = this.getBiz();
+    const jsonStr = JSON.stringify(backup, null, 2);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const safeBiz = (biz.name || 'ShopPulse').replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `ShopPulse_Backup_${safeBiz}_${dateStr}.json`;
+
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    // Update last backup timestamp & save local snapshot
+    const auth = this.getAuth();
+    auth.lastBackupDate = new Date().toISOString();
+    this.setAuth(auth);
+    this.saveSnapshot(`Manual Backup Export (${filename})`);
+    return filename;
+  },
+
+  saveSnapshot(label = 'Auto Snapshot') {
+    try {
+      const history = this._get(this.K.BACKUPS) || [];
+      const snap = {
+        id: genId('SNAP'),
+        date: new Date().toISOString(),
+        label,
+        data: this.createBackupObject()
+      };
+      history.unshift(snap);
+      if (history.length > 5) history.length = 5; // keep last 5 snapshots
+      this._set(this.K.BACKUPS, history);
+    } catch (e) {
+      console.warn('Snapshot storage limit reached', e);
+    }
+  },
+
+  getSnapshots() {
+    return this._get(this.K.BACKUPS) || [];
+  },
+
+  restoreBackup(backupData) {
+    if (!backupData || !backupData.data) {
+      throw new Error('Invalid backup file format: missing data payload');
+    }
+    const d = backupData.data;
+    if (d.biz) this.setBiz(d.biz);
+    if (d.categories) this.saveCategories(d.categories);
+    if (d.customers) this._set(this.K.CUSTOMERS, d.customers);
+    if (d.suppliers) this._set(this.K.SUPPLIERS, d.suppliers);
+    if (d.products) this._set(this.K.PRODUCTS, d.products);
+    if (d.sales) this._set(this.K.SALES, d.sales);
+    if (d.purchases) this._set(this.K.PURCHASES, d.purchases);
+    if (d.expenses) this._set(this.K.EXPENSES, d.expenses);
+    if (d.movements) this._set(this.K.MOVEMENTS, d.movements);
+    if (d.auth) this.setAuth(d.auth);
+    this._set(this.K.SEEDED, true);
+    return true;
+  },
+
+  factoryReset(seedDemo = false) {
+    localStorage.clear();
+    if (seedDemo) {
+      this.seed();
+    } else {
+      this._set(this.K.SEEDED, true);
+      this.setBiz({
+        name: 'My Computer Shop', gstin: '', pan: '',
+        address: '', city: '', state: 'Maharashtra', stateCode: '27',
+        pincode: '', phone: '', email: '', website: '',
+        bankName: '', bankAccount: '', bankIFSC: '', bankBranch: '',
+        invoicePrefix: 'INV', invoiceCounter: 1,
+        billPrefix: 'PO', billCounter: 1,
+        defaultPaymentTerms: 30, signatory: '',
+        termsAndConditions: 'All goods carry manufacturer warranty only. No returns after installation.\nSubject to local jurisdiction.'
+      });
+      this.saveCategories(['Laptops', 'Desktops', 'Printers', 'CCTV', 'Networking', 'Storage', 'UPS & Power', 'Computer Parts', 'AMC Services', 'Installation', 'Support']);
+    }
   },
 
   /* ──────────────────────────────────────────
