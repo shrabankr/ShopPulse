@@ -571,19 +571,31 @@ const Billing = {
     }
 
     // Commercial User — Open AI Smart Paste Input Modal
-    App.modal('✨ AI Smart Fill from WhatsApp / Email',
+    App.modal(`✨ AI Smart Fill — ${isSales ? 'Sales Invoice (Customer)' : 'Purchase Bill (Supplier)'}`,
       `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding:8px 12px;background:var(--bg);border-radius:var(--radius-sm)">
+        <span style="font-weight:600;font-size:.85rem;color:var(--text-secondary)">Active Document Target:</span>
+        <span class="badge ${isSales ? 'badge-info' : 'badge-warning'}" style="font-size:.78rem;padding:3px 8px">
+          ${isSales ? '🧾 Sales Invoice (Client Order)' : '📦 Purchase Bill (Vendor Invoice)'}
+        </span>
+      </div>
+
       <div style="margin-bottom:12px;font-size:.84rem;color:var(--text-secondary)">
-        Paste your client's WhatsApp order, vendor quotation, or email text below. The AI will parse party name, products, quantities, rates, and discounts automatically.
+        Paste your raw WhatsApp message, vendor quotation, or email text below. The AI will automatically extract party details, products, quantities, rates, discounts, HSN, and GST.
       </div>
 
       <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+        ${isSales ? `
         <button type="button" class="btn btn-xs btn-secondary" onclick="document.getElementById('ai-raw-text').value = 'Client: Apex Computers Pune\\n4 pcs Hikvision 2MP CCTV Camera @ 1450\\n1 Box Cat6 LAN Cable Roll @ 3200\\n2 Nos 4-Port PoE Switch @ 2100 with 5% discount\\n1 Job CCTV Installation Service @ 1500';"><span class="material-icons" style="font-size:12px">chat</span> Load WhatsApp CCTV Demo</button>
-        <button type="button" class="btn btn-xs btn-secondary" onclick="document.getElementById('ai-raw-text').value = 'Vendor: Matrix Tech Mumbai\\n5 Nos 500GB SSD NVMe Kingston @ 2800\\n10 Pcs 8GB DDR4 RAM @ 1650\\n2 Nos 24-Port Gigabit Switch @ 5400';"><span class="material-icons" style="font-size:12px">inventory_2</span> Load IT Hardware PO Demo</button>
+        <button type="button" class="btn btn-xs btn-secondary" onclick="document.getElementById('ai-raw-text').value = 'Customer: Rahul Sharma\\n1 Nos Dell 24-inch IPS Monitor @ 9800\\n1 Pcs Logitech Wireless Keyboard Mouse @ 1450\\n1 Nos Kingston 500GB NVMe SSD @ 2800';"><span class="material-icons" style="font-size:12px">laptop</span> Load Computer Hardware Demo</button>
+        ` : `
+        <button type="button" class="btn btn-xs btn-secondary" onclick="document.getElementById('ai-raw-text').value = 'Supplier: Matrix Tech Mumbai\\n5 Nos 500GB SSD NVMe Kingston @ 2250\\n10 Pcs 8GB DDR4 RAM @ 1250\\n2 Nos 24-Port Gigabit Switch @ 4200';"><span class="material-icons" style="font-size:12px">inventory_2</span> Load IT Hardware PO Demo</button>
+        <button type="button" class="btn btn-xs btn-secondary" onclick="document.getElementById('ai-raw-text').value = 'Vendor: CP Plus Official Distributor\\n10 Pcs CP Plus 2.4MP Dome Camera @ 1100\\n2 Nos 8-Channel NVR @ 3400\\n4 Boxes Cat6 LAN Cable @ 2700';"><span class="material-icons" style="font-size:12px">videocam</span> Load CCTV Wholesale PO Demo</button>
+        `}
       </div>
 
       <div class="form-group" style="margin-bottom:12px">
-        <textarea id="ai-raw-text" rows="8" placeholder="Paste WhatsApp message or email text here...&#10;&#10;Example:&#10;Hi Shraban, please send invoice for Apex Computers Pune:&#10;4 pcs Hikvision 2MP CCTV Camera @ 1450&#10;1 Box Cat6 LAN Cable @ 3200&#10;2 Nos 4-Port PoE Switch @ 2100 with 5% discount" style="font-family:monospace;font-size:.84rem;line-height:1.4"></textarea>
+        <textarea id="ai-raw-text" rows="8" placeholder="Paste WhatsApp message or email text here...&#10;&#10;Example:&#10;${isSales ? 'Client: Apex Computers Pune\n4 pcs Hikvision 2MP CCTV Camera @ 1450\n1 Box Cat6 LAN Cable @ 3200\n2 Nos 4-Port PoE Switch @ 2100 with 5% discount' : 'Supplier: Matrix Tech Mumbai\n5 Nos 500GB SSD NVMe Kingston @ 2250\n10 Pcs 8GB DDR4 RAM @ 1250'}" style="font-family:monospace;font-size:.84rem;line-height:1.4"></textarea>
       </div>
       `,
       `
@@ -710,12 +722,33 @@ const Billing = {
       return;
     }
 
-    // 1. If party found, select or set
-    if (parsed.party && parsed.party.id) {
+    // 1. If party found, select or auto-create in CRM
+    if (parsed.party) {
       const partySelect = document.getElementById('if-party');
       if (partySelect) {
-        partySelect.value = parsed.party.id;
-        this._onPartyChange();
+        if (parsed.party.id) {
+          partySelect.value = parsed.party.id;
+          this._onPartyChange();
+        } else if (parsed.party.name) {
+          // Auto-create new contact in CRM
+          const newContact = {
+            name: parsed.party.name,
+            state: DB.getBiz().state,
+            stateCode: DB.getBiz().stateCode,
+            city: DB.getBiz().city,
+            notes: 'Auto-created by AI Smart Fill'
+          };
+          const saved = isSales ? DB.saveCustomer(newContact) : DB.saveSupplier(newContact);
+          const allParties = isSales ? DB.getCustomers() : DB.getSuppliers();
+          const partyOpts = allParties.map(p => `<option value="${p.id}">${p.name}${p.gstin ? ' — ' + p.gstin : ''}</option>`).join('');
+          partySelect.innerHTML = `
+            <option value="">— Select ${isSales ? 'Customer' : 'Supplier'} —</option>
+            <option value="__NEW__" style="font-weight:700;color:var(--primary)">➕ + Add New ${isSales ? 'Customer' : 'Supplier'}...</option>
+            ${partyOpts}
+          `;
+          partySelect.value = saved.id;
+          this._onPartyChange();
+        }
       }
     }
 
@@ -728,7 +761,7 @@ const Billing = {
     }
 
     App.closeModal();
-    App.toast(`🎉 AI Smart Fill added ${parsed.items.length} item${parsed.items.length > 1 ? 's' : ''}! ⚡`, 'success');
+    App.toast(`🎉 AI Smart Fill added ${parsed.items.length} item${parsed.items.length > 1 ? 's' : ''} to ${isSales ? 'Invoice' : 'Purchase Bill'}! ⚡`, 'success');
   },
 
   _onPartyChange() {
