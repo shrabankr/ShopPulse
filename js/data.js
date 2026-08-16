@@ -610,24 +610,46 @@ const DB = {
       cfg.lastSyncStatus = 'success';
       this.setRemoteConfig(cfg);
 
-      // Handle Remote Killswitch & Trial Extension commands from Google Sheet
+      // Handle Remote Killswitch, Online Auto-Activation & Trial Extension
       if (data && data.command) {
         const cmd = data.command.toUpperCase().trim();
+        const l = this.getLicense();
+
         if (cmd === 'BLOCK' || cmd === 'LOCK') {
-          const l = this.getLicense();
           l.status = 'blocked';
           l.blockReason = data.message || 'License suspended by developer. Please contact support.';
           this.setLicense(l);
           return { command: 'BLOCK', message: l.blockReason };
+        } else if (cmd === 'ACTIVATE_1YR' || cmd === 'ACTIVATE_ANNUAL' || (data.plan === 'annual' && (cmd === 'ALLOW' || cmd === 'ACTIVATE'))) {
+          const nextYear = new Date().getFullYear() + 1;
+          const expiryDate = data.expiryDate || `${nextYear}-12-31`;
+          const email = l.registeredEmail || biz.email || 'client@shoppulse.com';
+          const key = data.licenseKey || this.generateLicenseKey(email, '1YR', parseInt(expiryDate.split('-')[0]));
+          l.plan = 'annual';
+          l.expiryDate = expiryDate;
+          l.licenseKey = key;
+          l.status = 'active';
+          delete l.blockReason;
+          this.setLicense(l);
+          return { command: 'ACTIVATED', plan: 'annual', message: '1-Year Commercial License Activated Online!' };
+        } else if (cmd === 'ACTIVATE_LIFE' || cmd === 'ACTIVATE_LIFETIME' || (data.plan === 'lifetime' && (cmd === 'ALLOW' || cmd === 'ACTIVATE'))) {
+          const email = l.registeredEmail || biz.email || 'client@shoppulse.com';
+          const key = data.licenseKey || this.generateLicenseKey(email, 'LIFE', 2099);
+          l.plan = 'lifetime';
+          l.expiryDate = '2099-12-31';
+          l.licenseKey = key;
+          l.status = 'active';
+          delete l.blockReason;
+          this.setLicense(l);
+          return { command: 'ACTIVATED', plan: 'lifetime', message: 'Lifetime Unlimited License Activated Online!' };
         } else if (cmd === 'UNBLOCK' || cmd === 'ALLOW') {
-          const l = this.getLicense();
           if (l.status === 'blocked') {
             l.status = 'active';
             delete l.blockReason;
             this.setLicense(l);
           }
         } else if (cmd === 'EXTEND' && data.extendDays) {
-          this.extendTrial(parseInt(data.extendDays) || 14);
+          this.extendTrial(parseInt(data.extendDays) || 30);
         }
       }
 

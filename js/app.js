@@ -741,7 +741,8 @@ const App = {
       </div>
 
       <div class="card" style="padding:14px;border-left:4px solid var(--primary);margin-bottom:14px">
-        <h4 style="margin-bottom:10px;font-size:.9rem"><span class="material-icons" style="font-size:16px;vertical-align:middle">vpn_key</span> Enter License Key to Unlock Unlimited</h4>
+        <h4 style="margin-bottom:10px;font-size:.9rem"><span class="material-icons" style="font-size:16px;vertical-align:middle">vpn_key</span> Method 1: Offline License Key Activation (No Internet Required)</h4>
+        <p style="font-size:.78rem;color:var(--text-secondary);margin-bottom:8px">Enter the cryptographic key sent to you via SMS, WhatsApp, or Email by Shraban.</p>
         <div class="form-grid" style="margin-bottom:10px">
           <div class="form-group form-full">
             <label>Your Registered Gmail Address <span class="required">*</span></label>
@@ -752,7 +753,17 @@ const App = {
             <input id="lic-in-key" placeholder="e.g. SPS-1YR-XXXXXX-2027" style="font-family:monospace;letter-spacing:.08em;text-transform:uppercase" value="${lic.licenseKey || ''}">
           </div>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="App.activateLicense()"><span class="material-icons">check_circle</span> Activate License</button>
+        <button class="btn btn-primary btn-sm" onclick="App.activateLicense()"><span class="material-icons">check_circle</span> Activate Offline Key</button>
+      </div>
+
+      <div class="card" style="padding:14px;border-left:4px solid #0f9d58;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <div>
+            <h4 style="font-size:.9rem;color:#0f9d58"><span class="material-icons" style="font-size:16px;vertical-align:middle">cloud_sync</span> Method 2: Online 1-Click Activation</h4>
+            <p style="font-size:.78rem;color:var(--text-secondary);margin-top:2px">If you already paid via UPI/GPay, click below to sync and auto-activate from server.</p>
+          </div>
+          <button class="btn btn-sm btn-secondary" onclick="App.checkOnlineActivation()"><span class="material-icons">sync</span> Check Online Status</button>
+        </div>
       </div>
 
       <div style="text-align:center;font-size:.82rem;color:var(--text-secondary)">
@@ -765,6 +776,36 @@ const App = {
       `,
       'modal-lg'
     );
+  },
+
+  async checkOnlineActivation() {
+    this.toast('Connecting to server to check license status…', 'info');
+    try {
+      const res = await DB.syncRemoteLicense();
+      if (res && res.command === 'ACTIVATED') {
+        this.closeModal();
+        this.buildTopbar();
+        this.toast(`🎉 ${res.message || 'Commercial License Activated Online!'}`, 'success');
+        this.route();
+      } else if (res && res.command === 'BLOCK') {
+        this.toast('⚠️ License is suspended by administrator.', 'error');
+        this.route();
+      } else if (res && res.success) {
+        const lic = DB.getLicenseStatus();
+        if (!lic.isTrial) {
+          this.closeModal();
+          this.buildTopbar();
+          this.toast(`🎉 Active Commercial License detected (${lic.planName})!`, 'success');
+          this.route();
+        } else {
+          this.toast('Server checked: Currently in Trial mode. Please send payment to activate.', 'info');
+        }
+      } else {
+        this.toast('Could not verify online. Check your internet connection or use Method 1 (Offline Key).', 'warning');
+      }
+    } catch (e) {
+      this.toast('Online check failed: ' + e.message, 'error');
+    }
   },
 
   activateLicense() {
