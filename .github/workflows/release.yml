@@ -26,29 +26,38 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Package Desktop App
+      - name: Build Windows Installer (.exe)
+        run: npx electron-builder --win nsis
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Package Portable App
         run: npm run pack
 
-      - name: Create ZIP archive
+      - name: Create Portable ZIP archive
         shell: pwsh
         run: |
-          Compress-Archive -Path "dist/ShopPulse-win32-x64/*" -DestinationPath "ShopPulse-windows-x64.zip" -Force
+          Compress-Archive -Path "dist/ShopPulse-win32-x64/*" -DestinationPath "dist/ShopPulse-v1.0.0-windows-portable.zip" -Force
 
-      - name: Create GitHub Release
+      - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            ShopPulse-windows-x64.zip
-          name: Release ${{ github.ref_name }}
+            dist/*.exe
+            dist/*.zip
+          name: ShopPulse v${{ github.ref_name }} — Official Desktop Release
           body: |
-            ## ShopPulse Desktop ${{ github.ref_name }}
+            ## ⚡ ShopPulse Desktop ${{ github.ref_name }}
             
-            GST-compliant billing, inventory, and CRM for IT/CCTV businesses.
+            GST-compliant billing, inventory, and CRM for Indian IT & CCTV businesses.
             
-            ### Installation Instructions (Windows)
-            1. Download `ShopPulse-windows-x64.zip` below.
-            2. Extract the ZIP archive to any folder.
-            3. Run `ShopPulse.exe` to launch the application.
+            ### 📥 Download Options:
+            - **`ShopPulse Setup 1.0.0.exe`** (Recommended) — 1-Click Windows installer with desktop shortcut.
+            - **`ShopPulse-v1.0.0-windows-portable.zip`** — Standalone portable folder (no installation required).
+            
+            ### 🚀 How to Run:
+            1. **Installer**: Download `ShopPulse Setup 1.0.0.exe` and double-click to install.
+            2. **Portable**: Extract `ShopPulse-v1.0.0-windows-portable.zip` and run `ShopPulse.exe`.
           draft: false
           prerelease: false
