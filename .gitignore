@@ -16,5 +16,9 @@ desktop.ini
 *.tmp
 *.temp
 
-# No node_modules (this project has none, but just in case)
+# Electron / Node
 node_modules/
+dist/
+out/
+electron/icon.ico
+electron/icon.icns

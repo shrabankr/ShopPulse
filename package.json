@@ -1,0 +1,58 @@
+{
+  "name": "shoppulse",
+  "version": "1.0.0",
+  "description": "GST-compliant billing, inventory & CRM for Indian IT/CCTV businesses",
+  "author": "shrabankr",
+  "main": "electron/main.js",
+  "scripts": {
+    "desktop": "electron .",
+    "pack": "electron-packager . ShopPulse --platform=win32 --arch=x64 --out=dist --overwrite --ignore=\"^/(dist|\\.git)\"",
+    "build": "electron-builder --win --x64"
+  },
+  "build": {
+    "appId": "in.shoppulse.app",
+    "productName": "ShopPulse",
+    "copyright": "Copyright © 2024 ShopPulse",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "index.html",
+      "css/**",
+      "js/**",
+      "electron/**",
+      "!node_modules/**",
+      "!dist/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ShopPulse"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.business"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Office"
+    }
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  }
+}
