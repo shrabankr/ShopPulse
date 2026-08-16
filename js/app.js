@@ -1438,13 +1438,20 @@ ${JSON.stringify(data, null, 2)}
           </div>
         </div>
         <div class="card">
-          <div class="card-header"><h3>Bank Details (for Invoices)</h3></div>
+          <div class="card-header"><h3>Bank &amp; UPI Payment Details</h3></div>
           <div class="card-body">
             <div class="form-grid">
               <div class="form-group"><label>Bank Name</label><input id="s-bank" value="${b.bankName || ''}"></div>
               <div class="form-group"><label>Account Number</label><input id="s-acc" value="${b.bankAccount || ''}"></div>
               <div class="form-group"><label>IFSC Code</label><input id="s-ifsc" value="${b.bankIFSC || ''}"></div>
               <div class="form-group"><label>Branch</label><input id="s-branch" value="${b.bankBranch || ''}"></div>
+              <div class="form-group form-full">
+                <label>UPI ID / VPA <span style="font-weight:400;font-size:.78rem;color:var(--text-secondary)">(for Automatic Payment QR Code on Due Invoices)</span></label>
+                <input id="s-upi" value="${b.upiId || ''}" placeholder="e.g. yourshop@okaxis, 9823001122@upi, syscare@icici">
+                <div class="form-hint" style="font-size:.75rem;color:var(--text-secondary);margin-top:4px">
+                  ⚡ <strong>Licensed Feature:</strong> A dynamic UPI QR Code will print on unpaid/due invoices so customers can scan with PhonePe, Google Pay, Paytm, or BHIM to pay instantly. Once marked Paid, the QR code is automatically hidden.
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1642,6 +1649,7 @@ ${JSON.stringify(data, null, 2)}
       bankAccount: document.getElementById('s-acc').value.trim(),
       bankIFSC: document.getElementById('s-ifsc').value.trim(),
       bankBranch: document.getElementById('s-branch').value.trim(),
+      upiId: document.getElementById('s-upi')?.value.trim() || '',
       invoicePrefix: document.getElementById('s-invpfx').value.trim() || 'INV',
       billPrefix: document.getElementById('s-billpfx').value.trim() || 'PO',
       defaultPaymentTerms: parseInt(document.getElementById('s-terms').value) || 30,
