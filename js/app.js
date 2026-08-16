@@ -149,13 +149,8 @@ const App = {
         <button class="btn btn-primary btn-sm" onclick="Billing.openNew('sales')">
           <span class="material-icons">add</span> New Invoice
         </button>
-        ${role === 'staff' ? '' : `
-        <button class="icon-btn" onclick="App.downloadBackup()" title="1-Click Backup Database (.json)">
-          <span class="material-icons">cloud_download</span>
-        </button>
-        `}
         <button class="icon-btn" onclick="App.route('#settings')" title="Settings &amp; Backup Hub">
-          <span class="material-icons">manage_accounts</span>
+          <span class="material-icons">settings</span>
         </button>
         <button class="icon-btn" onclick="App.route('#help')" title="Help &amp; Developer Support">
           <span class="material-icons">help_outline</span>
