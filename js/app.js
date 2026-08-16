@@ -45,12 +45,19 @@ const App = {
     const unpaidBuys = DB.getPurchases().filter(p => ['unpaid', 'overdue'].includes(p.status)).length;
     const lowStock = DB.getProducts().filter(p => p.reorderLevel > 0 && p.stock <= p.reorderLevel).length;
 
+    const limits = DB.getTrialLimits();
+    const hasBranding = limits.canSetBranding;
+    const showLogo = hasBranding && biz.logo;
+    const showTagline = hasBranding && biz.tagline;
+
     document.getElementById('sidebar').innerHTML = `
       <div class="sidebar-logo" onclick="App._handleLogoClick()" title="Triple click for Developer Tools">
-        <div class="logo-icon"><span class="material-icons">electric_bolt</span></div>
+        <div class="logo-icon" style="${showLogo ? 'background:transparent;' : ''}">
+          ${showLogo ? `<img src="${biz.logo}" style="width:30px;height:30px;object-fit:contain;border-radius:4px">` : `<span class="material-icons">electric_bolt</span>`}
+        </div>
         <div>
           <span class="logo-name">ShopPulse</span>
-          <span class="logo-biz">${biz.name}</span>
+          <span class="logo-biz">${biz.name}${showTagline ? `<span style="display:block;font-size:0.68rem;font-weight:400;opacity:.8;margin-top:1px">${biz.tagline}</span>` : ''}</span>
         </div>
       </div>
       <nav class="sidebar-nav">
@@ -1217,6 +1224,45 @@ ${JSON.stringify(data, null, 2)}
           </div>
         </div>
 
+        <div class="card" style="border-left:4px solid ${DB.getTrialLimits().canSetBranding ? 'var(--primary)' : 'var(--border)'}">
+          <div class="card-header">
+            <h3><span class="material-icons" style="vertical-align:middle;font-size:20px;color:${DB.getTrialLimits().canSetBranding ? 'var(--primary)' : 'var(--text-secondary)'}">branding_watermark</span> Company Logo &amp; Business Tagline</h3>
+            <span class="badge ${DB.getTrialLimits().canSetBranding ? 'badge-paid' : 'badge-warning'}">${DB.getTrialLimits().canSetBranding ? 'Commercial Feature Active' : 'Commercial License Only 💎'}</span>
+          </div>
+          <div class="card-body">
+            ${DB.getTrialLimits().canSetBranding ? `
+            <div class="form-grid">
+              <div class="form-group form-full">
+                <label>Business Tagline / Slogan (Printed below Shop Name on Invoices)</label>
+                <input id="s-tagline" value="${b.tagline || ''}" placeholder="e.g. Sales, Service &amp; Installation of CCTV and IT Systems">
+              </div>
+              <div class="form-group form-full">
+                <label>Company Logo</label>
+                <div style="display:flex;gap:14px;align-items:center">
+                  <div id="s-logo-preview" style="width:68px;height:68px;border:1px dashed var(--border);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;background:var(--bg);overflow:hidden">
+                    ${b.logo ? `<img src="${b.logo}" style="max-width:100%;max-height:100%;object-fit:contain">` : `<span class="material-icons" style="color:var(--text-secondary)">image</span>`}
+                  </div>
+                  <div>
+                    <input type="file" id="s-logo-file" accept="image/*" style="display:none" onchange="App._handleLogoUpload(this)">
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('s-logo-file').click()"><span class="material-icons">upload</span> Upload Logo</button>
+                    ${b.logo ? `<button type="button" class="btn btn-sm btn-ghost text-danger" onclick="App._removeLogo()">Remove</button>` : ''}
+                    <div class="form-hint">PNG, JPG or SVG (max 1MB)</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            ` : `
+            <p style="font-size:.85rem;color:var(--text-secondary);margin-bottom:12px">
+              🔒 <strong>Custom Logo &amp; Business Tagline</strong> are exclusive to Licensed Commercial users. Trial invoices print with standard business name and details.
+            </p>
+            <div class="form-grid" style="margin-bottom:12px;opacity:0.55;pointer-events:none">
+              <div class="form-group form-full"><label>Business Tagline</label><input disabled placeholder="Available in Commercial License"></div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="App.openLicenseModal()"><span class="material-icons">vpn_key</span> Unlock with License</button>
+            `}
+          </div>
+        </div>
+
         <div class="card" style="border-left:4px solid hsl(271,78%,50%)">
           <div class="card-header">
             <h3><span class="material-icons" style="vertical-align:middle;font-size:20px;color:hsl(271,78%,50%)">vpn_key</span> Subscription &amp; Gmail License</h3>
@@ -1252,6 +1298,32 @@ ${JSON.stringify(data, null, 2)}
     `;
   },
 
+  _handleLogoUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+    if (file.size > 1024 * 1024) {
+      this.toast('Logo file size must be under 1MB', 'error');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const biz = DB.getBiz();
+      biz.logo = e.target.result;
+      DB.setBiz(biz);
+      this.toast('Logo uploaded! Click "Save All Settings" to confirm.', 'success');
+      this.renderSettings(document.getElementById('page-content'));
+    };
+    reader.readAsDataURL(file);
+  },
+
+  _removeLogo() {
+    const biz = DB.getBiz();
+    biz.logo = '';
+    DB.setBiz(biz);
+    this.toast('Logo removed', 'info');
+    this.renderSettings(document.getElementById('page-content'));
+  },
+
   saveOwnerPin() {
     const pin = document.getElementById('s-owner-pin')?.value.trim();
     if (!pin) { this.toast('PIN cannot be empty', 'error'); return; }
@@ -1262,9 +1334,13 @@ ${JSON.stringify(data, null, 2)}
   saveSettings() {
     const stateEl = document.getElementById('s-state');
     const selectedState = INDIAN_STATES.find(s => s.code === stateEl.value);
+    const limits = DB.getTrialLimits();
+    const taglineEl = document.getElementById('s-tagline');
+
     const biz = {
       ...DB.getBiz(),
       name: document.getElementById('s-name').value.trim(),
+      tagline: limits.canSetBranding && taglineEl ? taglineEl.value.trim() : (DB.getBiz().tagline || ''),
       gstin: document.getElementById('s-gstin').value.toUpperCase().trim(),
       pan: document.getElementById('s-pan').value.toUpperCase().trim(),
       address: document.getElementById('s-addr').value.trim(),

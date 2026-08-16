@@ -193,7 +193,7 @@ const DB = {
   /* Business */
   getBiz() {
     return this._get(this.K.BIZ) || {
-      name: 'My Business', gstin: '', pan: '',
+      name: 'My Business', tagline: '', logo: '', gstin: '', pan: '',
       address: '', city: '', state: 'Maharashtra', stateCode: '27',
       pincode: '', phone: '', email: '', website: '',
       bankName: '', bankAccount: '', bankIFSC: '', bankBranch: '',
@@ -526,6 +526,7 @@ const DB = {
         canAddCustomer: true,
         canAddSupplier: true,
         canCreateBill: true,
+        canSetBranding: true,
         isWatermarkNeeded: false,
         summaryText: 'Unlimited Commercial License (No Restrictions)'
       };
@@ -554,6 +555,7 @@ const DB = {
       currentBills: billCount,
       isWatermarkNeeded,
       canCreateBill,
+      canSetBranding: false,
       billsRemaining: Math.max(0, maxTotalBills - billCount),
       cleanBillsRemaining: Math.max(0, maxCleanBills - billCount),
       summaryText: `60-Day Trial: ${custCount}/${maxCustomers} Cust, ${suppCount}/${maxSuppliers} Supp, ${billCount}/${maxTotalBills} Bills (${isWatermarkNeeded ? 'Watermarked' : 'Clean Print'})`

@@ -1007,10 +1007,14 @@ table.items .rate, table.items .amount { text-align: right; }
 <div class="inv-header">
   <div class="inv-title-bar">${isSales ? 'TAX INVOICE' : 'PURCHASE ORDER'}</div>
   <div class="inv-biz-row">
-    <div>
-      <div class="inv-biz-name">${biz.name}</div>
-      <div class="inv-biz-detail">${biz.address}, ${biz.city} — ${biz.pincode}<br>Phone: ${biz.phone} | Email: ${biz.email}</div>
-      <div class="inv-biz-gstin">GSTIN: ${biz.gstin || 'Not Registered'} &nbsp;|&nbsp; PAN: ${biz.pan || '—'}</div>
+    <div style="display:flex;align-items:center;gap:12px">
+      ${!limits.isTrial && biz.logo ? `<img src="${biz.logo}" style="max-height:52px;max-width:90px;object-fit:contain">` : ''}
+      <div>
+        <div class="inv-biz-name">${biz.name}</div>
+        ${!limits.isTrial && biz.tagline ? `<div style="font-size:8pt;color:#555;font-style:italic;margin-bottom:2px">${biz.tagline}</div>` : ''}
+        <div class="inv-biz-detail">${biz.address}, ${biz.city} — ${biz.pincode}<br>Phone: ${biz.phone} | Email: ${biz.email}</div>
+        <div class="inv-biz-gstin">GSTIN: ${biz.gstin || 'Not Registered'} &nbsp;|&nbsp; PAN: ${biz.pan || '—'}</div>
+      </div>
     </div>
     <div>
       <table class="inv-meta-table">
