@@ -761,7 +761,7 @@ const App = {
       `,
       `
       <button class="btn btn-ghost" onclick="App.closeModal()">Close</button>
-      <a href="mailto:shraban@andropcsoft.com?subject=ShopPulse%20License%20Inquiry%20-%20${encodeURIComponent(biz.name)}" class="btn btn-secondary"><span class="material-icons">mail</span> Contact for Key</a>
+      <a href="mailto:shraban@andropcsoft.com?subject=${encodeURIComponent(`ShopPulse Commercial License Request — ${biz.name || 'My Shop'}`)}&body=${encodeURIComponent(`Hi Shraban,\n\nI would like to purchase / activate a ShopPulse Commercial License for my shop.\n\nMy Shop Details:\n• Shop Name: ${biz.name}\n• Registered Gmail: ${lic.registeredEmail || biz.email || ''}\n• Phone / WhatsApp: ${biz.phone || ''}\n• City & State: ${biz.city || ''}, ${biz.state || ''}\n• Machine Install ID: ${lic.machineId}\n• Plan Requested: 1-Year Commercial License (₹1,999) / Lifetime License (₹4,999)\n\nPlease share your UPI QR Code / Payment details and activation key.\n\nThank you,\n${biz.name}`)}" class="btn btn-primary"><span class="material-icons">mail</span> 📧 Email for License Key</a>
       `,
       'modal-lg'
     );
