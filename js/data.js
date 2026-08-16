@@ -43,8 +43,8 @@ const INDIAN_STATES = [
 
 const GST_RATES = [0, 0.1, 0.25, 1, 1.5, 3, 5, 7.5, 12, 18, 28];
 const PAYMENT_METHODS = ['Cash', 'Bank Transfer', 'UPI', 'Cheque', 'NEFT', 'RTGS', 'Credit Card', 'Other'];
-const UNITS = ['Nos', 'Pcs', 'Kg', 'Gm', 'Ltr', 'Ml', 'Mtr', 'Cm', 'Box', 'Pack', 'Set', 'Roll', 'Job', 'Hours', 'Pair'];
-const DECIMAL_UNITS = ['Kg', 'Gm', 'Ltr', 'Ml', 'Mtr', 'Cm', 'Roll'];
+const UNITS = ['Nos', 'Pcs', 'Box', 'Pack', 'Set', 'Roll', 'Mtr', 'Job', 'Visit', 'License', 'Year', 'Month'];
+const DECIMAL_UNITS = ['Mtr', 'Roll'];
 
 function isDecimalUnit(unit) {
   return DECIMAL_UNITS.includes(unit);
