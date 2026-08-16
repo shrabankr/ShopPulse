@@ -529,60 +529,61 @@ const App = {
 
   openForgotPinModal() {
     const biz = DB.getBiz();
-    this.modal('Owner PIN Recovery',
+    const lic = DB.getLicense();
+    this.modal('Owner PIN Assistance',
       `
       <div style="text-align:center;padding:10px 0 16px">
-        <div style="width:54px;height:54px;border-radius:50%;background:var(--primary-light);color:var(--primary);display:inline-flex;align-items:center;justify-content:center;margin-bottom:10px">
-          <span class="material-icons" style="font-size:28px">lock_reset</span>
+        <div style="width:54px;height:54px;border-radius:50%;background:hsl(0,80%,94%);color:var(--danger);display:inline-flex;align-items:center;justify-content:center;margin-bottom:10px">
+          <span class="material-icons" style="font-size:28px">security</span>
         </div>
-        <h3>Reset Owner PIN</h3>
+        <h3>Developer PIN Authorization</h3>
         <p style="font-size:.84rem;color:var(--text-secondary);max-width:340px;margin:0 auto">
-          Verify your shop identity by entering your registered shop email or phone number to reset your PIN to default <strong>1234</strong>.
+          To prevent unauthorized counter staff access to profit/cost data, PIN resets require <strong>Developer Authorization</strong>.
         </p>
       </div>
 
-      <div class="form-group" style="margin-bottom:12px">
-        <label>Registered Shop Email, Phone, or Master Key <span class="required">*</span></label>
-        <input id="recovery-verify-input" placeholder="e.g. ${biz.email || 'yourshop@gmail.com'}" onkeyup="if(event.key==='Enter')App.recoverOwnerPin()">
+      <div style="background:var(--bg);padding:10px 14px;border-radius:var(--radius-sm);font-size:.8rem;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <span style="color:var(--text-secondary)">Shop Name:</span>
+          <strong>${biz.name}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between">
+          <span style="color:var(--text-secondary)">Machine ID:</span>
+          <strong class="mono">${lic.machineId}</strong>
+        </div>
       </div>
 
-      <div style="background:var(--bg);padding:10px 12px;border-radius:var(--radius-sm);font-size:.78rem;color:var(--text-secondary);margin-bottom:14px">
-        💡 <strong>Developer Override:</strong> Developer master key (<code>shraban@9800</code>) also resets the PIN instantly.
+      <div class="form-group" style="margin-bottom:12px">
+        <label>Developer Master Authorization Key <span class="required">*</span></label>
+        <input id="recovery-verify-input" type="password" placeholder="Enter Developer Master Key" onkeyup="if(event.key==='Enter')App.recoverOwnerPin()">
       </div>
       `,
       `
       <button class="btn btn-ghost" onclick="App.toggleRoleModal()">Back</button>
-      <button class="btn btn-primary" onclick="App.recoverOwnerPin()"><span class="material-icons">restart_alt</span> Reset PIN to 1234</button>
+      <button class="btn btn-primary" onclick="App.recoverOwnerPin()"><span class="material-icons">restart_alt</span> Unlock &amp; Reset PIN</button>
+      <a href="mailto:shraban@andropcsoft.com?subject=${encodeURIComponent(`PIN Reset Request — ${biz.name}`)}&body=${encodeURIComponent(`Hi Shraban,\n\nI forgot my ShopPulse Owner PIN.\n\nShop Name: ${biz.name}\nMachine ID: ${lic.machineId}\n\nPlease help me unlock/reset my Owner PIN.\n\nThank you,\n${biz.name}`)}" class="btn btn-secondary"><span class="material-icons">mail</span> Contact Shraban</a>
       `,
-      'modal-sm'
+      'modal-md'
     );
   },
 
   recoverOwnerPin() {
-    const input = document.getElementById('recovery-verify-input')?.value.trim().toLowerCase();
+    const input = document.getElementById('recovery-verify-input')?.value.trim();
     if (!input) {
-      this.toast('Please enter your registered email, phone, or master key', 'error');
+      this.toast('Please enter Developer Master Key', 'error');
       return;
     }
 
-    const biz = DB.getBiz();
-    const lic = DB.getLicense();
-    const validEmails = [biz.email, lic.registeredEmail, 'shraban@andropcsoft.com'].filter(Boolean).map(e => e.toLowerCase().trim());
-    const validPhones = [biz.phone].filter(Boolean).map(p => p.trim());
-    const isDevKey = input === 'shraban@9800' || input === 'andropcsoft' || input === 'shraban';
-
-    const isMatch = isDevKey || validEmails.includes(input) || validPhones.includes(input);
-
-    if (isMatch) {
+    if (DB.verifyDevKey(input)) {
       DB.setOwnerPin('1234');
       DB.setRole('owner');
       this.closeModal();
       this.buildSidebar();
       this.buildTopbar();
-      this.toast('🎉 PIN reset to default 1234 & Owner Mode unlocked!', 'success');
+      this.toast('🎉 Developer authorization successful! PIN reset to 1234 & Owner Mode unlocked.', 'success');
       this.route('#settings');
     } else {
-      this.toast('Verification failed. Value does not match registered shop records.', 'error');
+      this.toast('Invalid Developer Master Key. Access denied.', 'error');
     }
   },
 
