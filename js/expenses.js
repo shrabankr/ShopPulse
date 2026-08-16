@@ -172,7 +172,7 @@ const Expenses = {
                     <td class="text-right font-bold amount-cell" style="font-size:.95rem">${fmtCurrency(e.amount)}</td>
                     <td class="action-col">
                       <button class="btn btn-ghost btn-xs icon-btn" onclick="Expenses.openForm('${e.id}')" title="Edit"><span class="material-icons">edit</span></button>
-                      <button class="btn btn-ghost btn-xs icon-btn text-danger" onclick="Expenses.delete('${e.id}')" title="Delete"><span class="material-icons">delete</span></button>
+                      ${DB.getRole() !== 'staff' ? `<button class="btn btn-ghost btn-xs icon-btn text-danger" onclick="Expenses.delete('${e.id}')" title="Delete"><span class="material-icons">delete</span></button>` : ''}
                     </td>
                   </tr>
                 `).join('')}
@@ -315,6 +315,11 @@ const Expenses = {
   },
 
   delete(id) {
+    if (DB.getRole() === 'staff') {
+      App.toast('🔒 Staff cannot delete expenses. Owner Mode required.', 'error');
+      App.toggleRoleModal();
+      return;
+    }
     const exp = DB.getExpenseById(id);
     if (!exp) return;
 

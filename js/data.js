@@ -181,6 +181,7 @@ const DB = {
     MOVEMENTS: 'sp_movements',
     AUTH: 'sp_auth',
     BACKUPS: 'sp_backups',
+    LICENSE: 'sp_license',
     SEEDED: 'sp_seeded',
   },
 
@@ -382,6 +383,121 @@ const DB = {
     const a = this.getAuth();
     a.ownerPin = newPin;
     this.setAuth(a);
+  },
+
+  /* ─── Gmail & Subscription Licensing Engine ─── */
+  getLicense() {
+    let lic = this._get(this.K.LICENSE);
+    if (!lic) {
+      const now = new Date();
+      const expiry = new Date(now.getTime() + 14 * 86400000);
+      lic = {
+        machineId: 'SP-' + Math.random().toString(36).substring(2, 6).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase(),
+        registeredEmail: '',
+        registeredShop: '',
+        plan: 'trial', // 'trial' | 'annual' | 'lifetime'
+        trialStartDate: now.toISOString().split('T')[0],
+        trialDays: 14,
+        expiryDate: expiry.toISOString().split('T')[0],
+        licenseKey: '',
+        status: 'active'
+      };
+      this.setLicense(lic);
+    }
+    return lic;
+  },
+
+  setLicense(l) { this._set(this.K.LICENSE, l); },
+
+  _hashKey(email, plan, year) {
+    const raw = `ANDRO_${email.toLowerCase().trim()}_${plan.toUpperCase()}_${year}_KEY`;
+    let hash = 0;
+    for (let i = 0; i < raw.length; i++) {
+      hash = ((hash << 5) - hash) + raw.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash).toString(36).toUpperCase().padStart(6, '0');
+  },
+
+  generateLicenseKey(email, plan = '1YR', expiryYear = 2027) {
+    const cleanEmail = (email || '').toLowerCase().trim();
+    if (!cleanEmail) throw new Error('Email is required to generate license');
+    const hash = this._hashKey(cleanEmail, plan, expiryYear);
+    const prefix = plan === 'LIFE' ? 'SPS-LIFE' : 'SPS-1YR';
+    return `${prefix}-${hash}-${expiryYear}`;
+  },
+
+  verifyLicenseKey(email, key) {
+    if (!email || !key) return { valid: false, message: 'Email and License Key are required' };
+    const cleanEmail = email.toLowerCase().trim();
+    const cleanKey = key.toUpperCase().trim();
+    const parts = cleanKey.split('-');
+    if (parts.length < 4 || parts[0] !== 'SPS') {
+      return { valid: false, message: 'Invalid key format. Expected format: SPS-1YR-XXXXXX-YYYY' };
+    }
+    const plan = parts[1]; // '1YR' or 'LIFE'
+    const keyHash = parts[2];
+    const year = parseInt(parts[3]) || 2027;
+
+    const expectedHash = this._hashKey(cleanEmail, plan, year);
+    if (keyHash !== expectedHash) {
+      return { valid: false, message: 'License key does not match this Gmail address!' };
+    }
+
+    const expiryDate = plan === 'LIFE' ? '2099-12-31' : `${year}-12-31`;
+    return {
+      valid: true,
+      plan: plan === 'LIFE' ? 'lifetime' : 'annual',
+      expiryDate,
+      message: `Verified successfully! ${plan === 'LIFE' ? 'Lifetime' : '1-Year Annual'} License.`
+    };
+  },
+
+  activateLicense(email, key, shopName) {
+    const res = this.verifyLicenseKey(email, key);
+    if (!res.valid) throw new Error(res.message);
+
+    const lic = this.getLicense();
+    lic.registeredEmail = email.toLowerCase().trim();
+    lic.registeredShop = shopName || DB.getBiz().name;
+    lic.plan = res.plan;
+    lic.expiryDate = res.expiryDate;
+    lic.licenseKey = key.toUpperCase().trim();
+    lic.status = 'active';
+    this.setLicense(lic);
+    return lic;
+  },
+
+  extendTrial(extraDays = 14) {
+    const lic = this.getLicense();
+    const curExp = new Date(lic.expiryDate || new Date());
+    const newExp = new Date(curExp.getTime() + extraDays * 86400000);
+    lic.expiryDate = newExp.toISOString().split('T')[0];
+    lic.trialDays = (lic.trialDays || 14) + extraDays;
+    lic.status = 'active';
+    this.setLicense(lic);
+    return lic;
+  },
+
+  getLicenseStatus() {
+    const lic = this.getLicense();
+    const now = new Date();
+    const exp = new Date(lic.expiryDate + 'T23:59:59');
+    const diffDays = Math.ceil((exp - now) / 86400000);
+    const isExpired = diffDays < 0;
+
+    let planName = '14-Day Free Trial';
+    if (lic.plan === 'annual') planName = '1-Year Commercial License';
+    if (lic.plan === 'lifetime') planName = 'Lifetime Unlimited License';
+
+    return {
+      ...lic,
+      daysLeft: Math.max(0, diffDays),
+      isExpired,
+      planName,
+      isTrial: lic.plan === 'trial',
+      isLifetime: lic.plan === 'lifetime',
+    };
   },
 
   /* ─── Backup & Restore Engine ─── */

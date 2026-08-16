@@ -93,7 +93,7 @@ const CRM = {
                     </td>
                     <td class="action-col" onclick="event.stopPropagation()">
                       <button class="btn btn-xs btn-secondary" onclick="CRM.openForm('${type}','${c.id}')" title="Edit"><span class="material-icons" style="font-size:14px">edit</span></button>
-                      <button class="btn btn-xs btn-ghost" onclick="CRM.deleteContact('${c.id}','${type}')" title="Delete"><span class="material-icons" style="font-size:14px;color:var(--danger)">delete</span></button>
+                      ${DB.getRole() !== 'staff' ? `<button class="btn btn-xs btn-ghost" onclick="CRM.deleteContact('${c.id}','${type}')" title="Delete"><span class="material-icons" style="font-size:14px;color:var(--danger)">delete</span></button>` : ''}
                     </td>
                   </tr>`;
       }).join('')}
@@ -286,6 +286,11 @@ const CRM = {
   },
 
   deleteContact(id, type) {
+    if (DB.getRole() === 'staff') {
+      App.toast(`🔒 Staff cannot delete ${type}. Owner Mode required.`, 'error');
+      App.toggleRoleModal();
+      return;
+    }
     const isCustomer = type === 'customers';
     const c = isCustomer ? DB.getCustomerById(id) : DB.getSupplierById(id);
     App.modal('Delete Contact',

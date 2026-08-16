@@ -61,7 +61,7 @@ const Inventory = {
                     <td><span class="mono">${p.hsn || '—'}</span></td>
                     <td>${p.category || '—'}</td>
                     <td><span class="badge badge-primary">${p.gstRate || 0}%</span></td>
-                    <td class="text-right">${fmtCurrency(p.purchasePrice)}</td>
+                    <td class="text-right">${DB.getRole() === 'staff' ? '<span class="text-muted">🔒 Hidden</span>' : fmtCurrency(p.purchasePrice)}</td>
                     <td class="text-right font-bold">${fmtCurrency(p.sellingPrice)}</td>
                     <td class="text-right">
                       <span style="font-weight:700;font-size:.95rem">${p.stock}</span>
@@ -71,7 +71,7 @@ const Inventory = {
                     <td class="action-col">
                       <button class="btn btn-xs btn-secondary" onclick="Inventory.adjustStock('${p.id}')" title="Adjust Stock"><span class="material-icons" style="font-size:14px">tune</span></button>
                       <button class="btn btn-xs btn-secondary" onclick="Inventory.openForm('${p.id}')" title="Edit"><span class="material-icons" style="font-size:14px">edit</span></button>
-                      <button class="btn btn-xs btn-ghost" onclick="Inventory.deleteProduct('${p.id}')" title="Delete"><span class="material-icons" style="font-size:14px;color:var(--danger)">delete</span></button>
+                      ${DB.getRole() !== 'staff' ? `<button class="btn btn-xs btn-ghost" onclick="Inventory.deleteProduct('${p.id}')" title="Delete"><span class="material-icons" style="font-size:14px;color:var(--danger)">delete</span></button>` : ''}
                     </td>
                   </tr>`;
       }).join('')}
@@ -79,8 +79,8 @@ const Inventory = {
             <tfoot>
               <tr>
                 <td colspan="5"></td>
-                <td class="text-right">Total Value (Purchase)</td>
-                <td class="text-right">${fmtCurrency(filtered.reduce((s, p) => s + p.stock * p.purchasePrice, 0))}</td>
+                <td class="text-right">${DB.getRole() === 'staff' ? '' : 'Total Value (Purchase)'}</td>
+                <td class="text-right">${DB.getRole() === 'staff' ? '' : fmtCurrency(filtered.reduce((s, p) => s + p.stock * p.purchasePrice, 0))}</td>
                 <td colspan="3"></td>
               </tr>
             </tfoot>
@@ -229,6 +229,11 @@ const Inventory = {
   },
 
   deleteProduct(id) {
+    if (DB.getRole() === 'staff') {
+      App.toast('🔒 Staff cannot delete products. Owner Mode required.', 'error');
+      App.toggleRoleModal();
+      return;
+    }
     const p = DB.getProductById(id);
     App.modal('Delete Product',
       `<div class="confirm-body">

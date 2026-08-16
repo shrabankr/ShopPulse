@@ -90,6 +90,8 @@ const App = {
   /* ─── Topbar ─── */
   buildTopbar() {
     const role = DB.getRole();
+    const lic = DB.getLicenseStatus();
+
     let modeBadge = '';
     if (role === 'staff') {
       modeBadge = `<button class="btn btn-xs btn-secondary" onclick="App.toggleRoleModal()" title="Click to unlock Owner Mode" style="border-radius:20px;padding:3px 10px;font-size:.78rem"><span class="material-icons" style="font-size:13px;color:var(--text-secondary)">lock</span> Staff Mode</button>`;
@@ -99,13 +101,23 @@ const App = {
       modeBadge = `<button class="btn btn-xs btn-secondary" onclick="App.toggleRoleModal()" title="Click to switch to Staff Mode" style="border-radius:20px;padding:3px 10px;font-size:.78rem;color:var(--primary);border-color:var(--primary-light)"><span class="material-icons" style="font-size:13px">admin_panel_settings</span> Owner Mode</button>`;
     }
 
+    let licBadge = '';
+    if (lic.isTrial) {
+      licBadge = `<button class="btn btn-xs ${lic.isExpired ? 'btn-danger' : 'btn-warning'}" onclick="App.openLicenseModal()" title="Click to Activate / Register License" style="border-radius:20px;padding:3px 10px;font-size:.76rem;font-weight:600">⏳ ${lic.isExpired ? 'Trial Expired' : `Trial (${lic.daysLeft}d left)`}</button>`;
+    } else if (lic.plan === 'annual') {
+      licBadge = `<button class="btn btn-xs btn-success" onclick="App.openLicenseModal()" title="1-Year Annual License Active" style="border-radius:20px;padding:3px 10px;font-size:.76rem;font-weight:600"><span class="material-icons" style="font-size:12px;vertical-align:middle">verified</span> 1-Year Active (${lic.daysLeft}d)</button>`;
+    } else if (lic.plan === 'lifetime') {
+      licBadge = `<button class="btn btn-xs" onclick="App.openLicenseModal()" title="Lifetime Unlimited License Active" style="border-radius:20px;padding:3px 10px;font-size:.76rem;font-weight:600;background:hsl(271,78%,50%);color:#fff"><span class="material-icons" style="font-size:12px;vertical-align:middle">diamond</span> Lifetime License</button>`;
+    }
+
     document.getElementById('topbar').innerHTML = `
       <button class="sidebar-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">
         <span class="material-icons">menu</span>
       </button>
-      <div style="display:flex;align-items:center;gap:10px">
+      <div style="display:flex;align-items:center;gap:8px">
         <div class="topbar-title" id="tb-title">Dashboard</div>
         ${modeBadge}
+        ${licBadge}
       </div>
       <div class="topbar-actions">
         ${role === 'staff' ? '' : `
@@ -505,6 +517,94 @@ const App = {
     }
   },
 
+  restoreSnapshot(id) {
+    const snaps = DB.getSnapshots();
+    const snap = snaps.find(s => s.id === id);
+    if (!snap) return;
+    if (confirm(`Restore snapshot from ${fmtDate(snap.date)}?\nCurrent data will be replaced.`)) {
+      DB.restoreBackup(snap.data);
+      this.toast('Snapshot restored! Reloading…', 'success');
+      setTimeout(() => location.reload(), 800);
+    }
+  },
+
+  /* ─── Client License Modal ─── */
+  openLicenseModal() {
+    const lic = DB.getLicenseStatus();
+    const biz = DB.getBiz();
+
+    this.modal('🔑 Subscription & License Activation',
+      `
+      <div style="text-align:center;padding:10px 0 16px">
+        <div style="width:54px;height:54px;border-radius:16px;background:${lic.isTrial ? 'var(--warning-light)' : 'var(--success-light)'};color:${lic.isTrial ? 'var(--warning)' : 'var(--success)'};display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px">
+          <span class="material-icons" style="font-size:28px">${lic.isTrial ? 'hourglass_top' : 'verified'}</span>
+        </div>
+        <h3>${lic.planName}</h3>
+        <p style="font-size:.85rem;color:var(--text-secondary)">
+          ${lic.isTrial ? (lic.isExpired ? '⚠️ Your 14-day trial has expired. Activate with your Gmail.' : `You have <strong>${lic.daysLeft} days remaining</strong> in your free trial.`) : `Active until <strong>${fmtDate(lic.expiryDate)}</strong> (${lic.daysLeft} days remaining).`}
+        </p>
+      </div>
+
+      <div style="background:var(--bg);padding:12px 14px;border-radius:var(--radius-sm);margin-bottom:16px;font-size:.84rem">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <span style="color:var(--text-secondary)">Machine / Install ID:</span>
+          <strong class="mono">${lic.machineId}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <span style="color:var(--text-secondary)">Registered Gmail:</span>
+          <strong>${lic.registeredEmail || '<span class="text-muted">Not registered</span>'}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between">
+          <span style="color:var(--text-secondary)">Business Name:</span>
+          <strong>${biz.name}</strong>
+        </div>
+      </div>
+
+      <div class="card" style="padding:14px;border-left:4px solid var(--primary);margin-bottom:14px">
+        <h4 style="margin-bottom:10px;font-size:.9rem"><span class="material-icons" style="font-size:16px;vertical-align:middle">vpn_key</span> Enter License Key</h4>
+        <div class="form-grid" style="margin-bottom:10px">
+          <div class="form-group form-full">
+            <label>Your Registered Gmail Address <span class="required">*</span></label>
+            <input id="lic-in-email" type="email" placeholder="e.g. yourshop@gmail.com" value="${lic.registeredEmail || biz.email || ''}">
+          </div>
+          <div class="form-group form-full">
+            <label>License Activation Key <span class="required">*</span></label>
+            <input id="lic-in-key" placeholder="e.g. SPS-1YR-XXXXXX-2027" style="font-family:monospace;letter-spacing:.08em;text-transform:uppercase" value="${lic.licenseKey || ''}">
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="App.activateLicense()"><span class="material-icons">check_circle</span> Activate License</button>
+      </div>
+
+      <div style="text-align:center;font-size:.82rem;color:var(--text-secondary)">
+        Need a license key? Contact developer <strong>Shraban Kumar Mahato</strong> at <a href="mailto:shraban@andropcsoft.com" style="color:var(--primary);font-weight:600">shraban@andropcsoft.com</a>
+      </div>
+      `,
+      `
+      <button class="btn btn-ghost" onclick="App.closeModal()">Close</button>
+      <a href="mailto:shraban@andropcsoft.com?subject=ShopPulse%20License%20Inquiry%20-%20${encodeURIComponent(biz.name)}" class="btn btn-secondary"><span class="material-icons">mail</span> Contact for Key</a>
+      `,
+      'modal-md'
+    );
+  },
+
+  activateLicense() {
+    const email = document.getElementById('lic-in-email')?.value.trim();
+    const key = document.getElementById('lic-in-key')?.value.trim();
+    if (!email || !key) {
+      this.toast('Please enter your Gmail and License Key', 'error');
+      return;
+    }
+    try {
+      const lic = DB.activateLicense(email, key);
+      this.closeModal();
+      this.buildTopbar();
+      this.toast(`🎉 License Activated Successfully! (${lic.plan.toUpperCase()})`, 'success');
+      this.route();
+    } catch (e) {
+      this.toast(e.message, 'error');
+    }
+  },
+
   /* ─── Developer Master Console ─── */
   openDevConsole() {
     const biz = DB.getBiz();
@@ -514,6 +614,7 @@ const App = {
     const customers = DB.getCustomers();
     const suppliers = DB.getSuppliers();
     const expenses = DB.getExpenses();
+    const lic = DB.getLicenseStatus();
 
     const storageUsageKB = (JSON.stringify(localStorage).length / 1024).toFixed(2);
 
@@ -526,6 +627,41 @@ const App = {
         <div>
           <div style="font-weight:700;color:hsl(271,78%,30%)">ShopPulse — Developer Master Control</div>
           <div style="font-size:.8rem;color:hsl(271,50%,40%)">Author: <strong>Shraban Kumar Mahato</strong> (shraban@andropcsoft.com) &nbsp;|&nbsp; <strong>AndroPCSoft</strong></div>
+        </div>
+      </div>
+
+      <!-- Gmail License Key Generator (For Shraban) -->
+      <div class="card" style="padding:14px;margin-bottom:16px;border-left:4px solid hsl(271,78%,50%)">
+        <h4 style="margin-bottom:8px;color:hsl(271,78%,35%)"><span class="material-icons" style="font-size:18px;vertical-align:middle">key</span> Generate Gmail License Key (Client Sales)</h4>
+        <p style="font-size:.8rem;color:var(--text-secondary);margin-bottom:12px">Generate offline cryptographic keys attached to paying customer Gmail addresses.</p>
+        <div class="form-grid-3" style="margin-bottom:10px">
+          <div class="form-group">
+            <label>Customer Gmail</label>
+            <input id="dev-lic-email" placeholder="client@gmail.com" value="${lic.registeredEmail || ''}">
+          </div>
+          <div class="form-group">
+            <label>Subscription Plan</label>
+            <select id="dev-lic-plan">
+              <option value="1YR">1-Year License (₹2,499)</option>
+              <option value="LIFE">Lifetime Unlimited (₹6,999)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Expiry Year</label>
+            <input id="dev-lic-year" type="number" value="${new Date().getFullYear() + 1}">
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-sm btn-primary" onclick="App._devGenerateKey()"><span class="material-icons">vpn_key</span> Generate License Key</button>
+          <button class="btn btn-sm btn-secondary" onclick="DB.extendTrial(14);App.buildTopbar();App.toast('Client trial extended by +14 days! ⏳');App.openDevConsole()"><span class="material-icons">more_time</span> +14 Days Trial</button>
+        </div>
+        <div id="dev-key-output" style="display:none;margin-top:12px;padding:10px;background:var(--bg);border-radius:var(--radius-sm)">
+          <div style="font-size:.8rem;color:var(--text-secondary);margin-bottom:4px">Generated Key for <strong id="dev-out-email"></strong>:</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="dev-out-key" readonly style="font-family:monospace;font-weight:700;letter-spacing:.08em;background:#fff">
+            <button class="btn btn-sm btn-secondary" onclick="navigator.clipboard.writeText(document.getElementById('dev-out-key').value);App.toast('License key copied! 📋')">Copy Key</button>
+            <button class="btn btn-sm btn-success" onclick="App._devCopyWhatsApp()"><span class="material-icons" style="font-size:14px">chat</span> Copy WhatsApp</button>
+          </div>
         </div>
       </div>
 
@@ -598,6 +734,37 @@ const App = {
       `,
       'modal-xl'
     );
+  },
+
+  _devGenerateKey() {
+    const email = document.getElementById('dev-lic-email')?.value.trim();
+    if (!email) {
+      this.toast('Please enter customer Gmail address', 'error');
+      return;
+    }
+    const plan = document.getElementById('dev-lic-plan')?.value || '1YR';
+    const year = parseInt(document.getElementById('dev-lic-year')?.value) || 2027;
+
+    try {
+      const key = DB.generateLicenseKey(email, plan, year);
+      const outBox = document.getElementById('dev-key-output');
+      if (outBox) {
+        outBox.style.display = 'block';
+        document.getElementById('dev-out-email').textContent = email;
+        document.getElementById('dev-out-key').value = key;
+      }
+      this.toast('License Key Generated! 🔑', 'success');
+    } catch (e) {
+      this.toast(e.message, 'error');
+    }
+  },
+
+  _devCopyWhatsApp() {
+    const email = document.getElementById('dev-out-email')?.textContent || '';
+    const key = document.getElementById('dev-out-key')?.value || '';
+    const msg = `🎉 *ShopPulse License Activation Details*\n\nDear Customer,\nThank you for choosing ShopPulse!\n\n📧 *Registered Gmail:* ${email}\n🔑 *License Key:* \`${key}\`\n\n*How to Activate:*\n1. Open ShopPulse\n2. Click 'Settings' > 'Subscription & License'\n3. Enter your Gmail & paste this License Key\n4. Click 'Activate'\n\nFor support, contact Shraban Kumar Mahato (shraban@andropcsoft.com).`;
+    navigator.clipboard.writeText(msg);
+    this.toast('WhatsApp activation message copied! 💬', 'success');
   },
 
   _inspectCollection(colName) {
@@ -753,14 +920,31 @@ ${JSON.stringify(data, null, 2)}
           </div>
         </div>
 
+        <div class="card" style="border-left:4px solid hsl(271,78%,50%)">
+          <div class="card-header">
+            <h3><span class="material-icons" style="vertical-align:middle;font-size:20px;color:hsl(271,78%,50%)">vpn_key</span> Subscription &amp; Gmail License</h3>
+            <span class="badge ${DB.getLicenseStatus().isTrial ? 'badge-warning' : 'badge-paid'}">${DB.getLicenseStatus().planName}</span>
+          </div>
+          <div class="card-body">
+            <div style="font-size:.85rem;color:var(--text-secondary);margin-bottom:12px">
+              Registered to: <strong>${DB.getLicenseStatus().registeredEmail || 'Not registered (Trial Active)'}</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--bg);border-radius:var(--radius-sm);margin-bottom:14px;font-size:.84rem">
+              <span>Status: <strong>${DB.getLicenseStatus().isExpired ? '<span class="text-danger">Expired</span>' : '<span class="text-success">Active</span>'}</strong> (${DB.getLicenseStatus().daysLeft} days remaining)</span>
+              <span class="mono" style="font-size:.78rem">ID: ${DB.getLicenseStatus().machineId}</span>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="App.openLicenseModal()"><span class="material-icons">key</span> Activate / Renew License</button>
+          </div>
+        </div>
+
         <div class="card">
           <div class="card-header"><h3>Invoice Customization</h3></div>
           <div class="card-body">
             <div class="form-grid">
-              <div class="form-group"><label>Sales Invoice Prefix</label><input id="s-invpfx" value="${b.invoicePrefix || 'INV'}" maxlength="6"></div>
-              <div class="form-group"><label>Purchase Bill Prefix</label><input id="s-billpfx" value="${b.billPrefix || 'PO'}" maxlength="6"></div>
+              <div class="form-group"><label>Sales Invoice Prefix</label><input id="s-invpfx" value="${b.invoicePrefix || 'SCS'}" maxlength="6"></div>
+              <div class="form-group"><label>Purchase Bill Prefix</label><input id="s-billpfx" value="${b.billPrefix || 'SCS-PO'}" maxlength="6"></div>
               <div class="form-group"><label>Default Payment Terms (days)</label><input id="s-terms" type="number" value="${b.defaultPaymentTerms || 30}" min="0"></div>
-              <div class="form-group form-full"><label>Terms & Conditions (printed on invoice)</label><textarea id="s-tnc">${b.termsAndConditions || ''}</textarea></div>
+              <div class="form-group form-full"><label>Terms &amp; Conditions (printed on invoice)</label><textarea id="s-tnc">${b.termsAndConditions || ''}</textarea></div>
             </div>
           </div>
         </div>

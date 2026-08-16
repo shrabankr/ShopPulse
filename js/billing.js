@@ -80,7 +80,7 @@ const Billing = {
             <td class="action-col" onclick="event.stopPropagation()">
               <button class="btn btn-xs btn-secondary" onclick="Billing.viewDoc('${d.id}','${type}')" title="View"><span class="material-icons" style="font-size:14px">visibility</span></button>
               ${d.status !== 'paid' ? `<button class="btn btn-xs btn-success" onclick="Billing.markPaid('${d.id}','${type}')" title="Mark Paid"><span class="material-icons" style="font-size:14px">check_circle</span></button>` : ''}
-              <button class="btn btn-xs btn-ghost" onclick="Billing.deleteDoc('${d.id}','${type}')" title="Delete"><span class="material-icons" style="font-size:14px;color:var(--danger)">delete</span></button>
+              ${DB.getRole() !== 'staff' ? `<button class="btn btn-xs btn-ghost" onclick="Billing.deleteDoc('${d.id}','${type}')" title="Delete"><span class="material-icons" style="font-size:14px;color:var(--danger)">delete</span></button>` : ''}
             </td>
           </tr>`;
       }).join('');
@@ -821,6 +821,11 @@ const Billing = {
      DELETE
   ═══════════════════════════════════════════ */
   deleteDoc(id, type) {
+    if (DB.getRole() === 'staff') {
+      App.toast('🔒 Staff cannot delete invoices/bills. Owner Mode required.', 'error');
+      App.toggleRoleModal();
+      return;
+    }
     App.modal('Confirm Delete',
       `<div class="confirm-body">
         <span class="material-icons">delete_forever</span>
