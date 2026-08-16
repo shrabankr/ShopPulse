@@ -374,6 +374,10 @@ const Billing = {
     const tbody = document.getElementById('items-tbody');
     if (!tbody) return;
     const biz = DB.getBiz();
+    const unit = item.unit || 'Nos';
+    const allowDecimal = isDecimalUnit(unit);
+    const formattedQty = allowDecimal ? (parseFloat(item.qty) || 1) : Math.max(1, Math.round(parseFloat(item.qty) || 1));
+
     const tr = document.createElement('tr');
     tr.dataset.idx = idx;
     tr.innerHTML = `
@@ -386,8 +390,8 @@ const Billing = {
         <input class="item-name" value="${item.name || ''}" placeholder="Product description…" style="margin-top:4px" oninput="Billing._recalc('${biz.stateCode}')">
       </td>
       <td><input class="item-hsn" value="${item.hsn || ''}" placeholder="HSN/SAC" oninput="Billing._recalc('${biz.stateCode}')"></td>
-      <td><input class="item-qty" type="number" value="${parseInt(item.qty, 10) || 1}" min="1" step="1" oninput="this.value = this.value.replace(/[^0-9]/g, ''); if (parseInt(this.value, 10) < 1) this.value = 1; Billing._recalc('${biz.stateCode}')"></td>
-      <td><select class="item-unit" onchange="Billing._recalc('${biz.stateCode}')">${UNITS.map(u => `<option value="${u}" ${u === (item.unit || 'Nos') ? 'selected' : ''}>${u}</option>`).join('')}</select></td>
+      <td><input class="item-qty" type="number" value="${formattedQty}" min="${allowDecimal ? '0.01' : '1'}" step="${allowDecimal ? '0.01' : '1'}" oninput="Billing._onQtyInput(this)"></td>
+      <td><select class="item-unit" onchange="Billing._onUnitChange(this)">${UNITS.map(u => `<option value="${u}" ${u === unit ? 'selected' : ''}>${u}</option>`).join('')}</select></td>
       <td><input class="item-rate" type="number" value="${item.rate || 0}" min="0" step="0.01" oninput="Billing._recalc('${biz.stateCode}')"></td>
       <td><input class="item-disc" type="number" value="${item.discount || 0}" min="0" max="100" step="0.01" oninput="Billing._recalc('${biz.stateCode}')"></td>
       <td><select class="item-gst" onchange="Billing._recalc('${biz.stateCode}')">${GST_RATES.map(r => `<option value="${r}" ${parseFloat(item.gstRate) === r ? 'selected' : ''}>${r}%</option>`).join('')}</select></td>
@@ -403,6 +407,40 @@ const Billing = {
     }
 
     tbody.appendChild(tr);
+  },
+
+  _onUnitChange(sel) {
+    const row = sel.closest('tr');
+    if (!row) return;
+    const unit = sel.value;
+    const qtyInput = row.querySelector('.item-qty');
+    const allowDecimal = isDecimalUnit(unit);
+
+    if (qtyInput) {
+      qtyInput.step = allowDecimal ? '0.01' : '1';
+      qtyInput.min = allowDecimal ? '0.01' : '1';
+      if (!allowDecimal) {
+        const curVal = parseFloat(qtyInput.value) || 1;
+        qtyInput.value = Math.max(1, Math.round(curVal));
+      }
+    }
+    this._recalc(DB.getBiz().stateCode);
+  },
+
+  _onQtyInput(input) {
+    const row = input.closest('tr');
+    const unit = row?.querySelector('.item-unit')?.value || 'Nos';
+    const allowDecimal = isDecimalUnit(unit);
+
+    if (!allowDecimal) {
+      // Discrete units (Nos, Pcs, Box, Set, Job...) — strictly whole numbers
+      input.value = input.value.replace(/[^0-9]/g, '');
+      if (input.value && parseInt(input.value, 10) < 1) input.value = 1;
+    } else {
+      // Continuous units (Mtr, Kg, Gm, Ltr, Roll...) — decimals allowed
+      input.value = input.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1');
+    }
+    this._recalc(DB.getBiz().stateCode);
   },
 
   _addRow(itemData = null) {
@@ -485,7 +523,10 @@ const Billing = {
     if (gstSel && p.gstRate !== undefined) gstSel.value = p.gstRate;
 
     const unitSel = row.querySelector('.item-unit');
-    if (unitSel && p.unit) unitSel.value = p.unit;
+    if (unitSel && p.unit) {
+      unitSel.value = p.unit;
+      this._onUnitChange(unitSel);
+    }
 
     this._recalc(DB.getBiz().stateCode);
   },
@@ -608,12 +649,17 @@ const Billing = {
     const tbody = document.getElementById('items-tbody');
     if (!tbody) return rows;
     Array.from(tbody.querySelectorAll('tr')).forEach(tr => {
+      const unit = tr.querySelector('.item-unit')?.value || 'Nos';
+      const rawQty = parseFloat(tr.querySelector('.item-qty')?.value) || 1;
+      const allowDecimal = isDecimalUnit(unit);
+      const qty = allowDecimal ? (parseFloat(rawQty.toFixed(3)) || 1) : Math.max(1, Math.round(rawQty));
+
       rows.push({
         productId: tr.querySelector('.item-product')?.value || '',
         name: tr.querySelector('.item-name')?.value || '',
         hsn: tr.querySelector('.item-hsn')?.value || '',
-        unit: tr.querySelector('.item-unit')?.value || 'Nos',
-        qty: Math.max(1, parseInt(tr.querySelector('.item-qty')?.value, 10) || 1),
+        unit: unit,
+        qty: qty,
         rate: parseFloat(tr.querySelector('.item-rate')?.value) || 0,
         discount: parseFloat(tr.querySelector('.item-disc')?.value) || 0,
         gstRate: parseFloat(tr.querySelector('.item-gst')?.value) || 0,
