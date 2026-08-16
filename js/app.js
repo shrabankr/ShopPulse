@@ -984,30 +984,21 @@ const App = {
         </div>
       </div>
 
-      <!-- Remote Google Sheets License & Killswitch Hub (Masked URL) -->
+      <!-- Remote Google Sheets Master License Hub -->
       <div class="card" style="padding:14px;margin-bottom:16px;border-left:4px solid #0f9d58">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
           <div>
-            <h4 style="margin-bottom:4px;color:#0f9d58"><span class="material-icons" style="font-size:18px;vertical-align:middle">table_chart</span> Google Sheets Remote Monitor &amp; Killswitch</h4>
-            <p style="font-size:.8rem;color:var(--text-secondary);margin-bottom:10px">Receive live shop heartbeats, active client lists, and control licenses remotely via your Google Sheet.</p>
-          </div>
-          <button class="btn btn-xs btn-secondary" onclick="App._devCopyGoogleScript()"><span class="material-icons" style="font-size:13px">content_copy</span> Copy Apps Script Code</button>
-        </div>
-        <div class="form-grid" style="margin-bottom:10px">
-          <div class="form-group form-full">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-              <label style="margin-bottom:0">Google Apps Script Webhook URL</label>
-              <a href="javascript:void(0)" onclick="App._toggleUrlVisibility()" id="dev-url-toggle-btn" style="font-size:.78rem;color:var(--primary);text-decoration:none"><span class="material-icons" style="font-size:14px;vertical-align:middle">visibility</span> Show / Hide URL</a>
+            <h4 style="margin-bottom:3px;color:#0f9d58;display:flex;align-items:center;gap:6px">
+              <span class="material-icons" style="font-size:18px">cloud_done</span> Google Sheets Master License Hub
+            </h4>
+            <div style="font-size:.82rem;color:var(--text-secondary)">
+              Connected to <strong>ShopPulse License Manager</strong> &nbsp;•&nbsp; 
+              Status: <span class="badge badge-paid" style="font-size:.7rem;padding:2px 8px">🟢 Connected &amp; Syncing</span>
             </div>
-            <input id="dev-remote-url" type="password" placeholder="https://script.google.com/macros/s/AKfycb.../exec" value="${DB.getRemoteConfig().webhookUrl || ''}">
           </div>
-        </div>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-          <button class="btn btn-sm btn-primary" onclick="App._devSaveRemoteUrl()"><span class="material-icons">save</span> Save Webhook URL</button>
-          <button class="btn btn-sm btn-secondary" onclick="App._devTestRemoteSync()"><span class="material-icons">sync</span> Test Live Heartbeat</button>
-          <span style="font-size:.78rem;color:var(--text-secondary)">
-            Last Sync: <strong>${DB.getRemoteConfig().lastSyncDate ? fmtDate(DB.getRemoteConfig().lastSyncDate) : 'Never synced'}</strong> &nbsp;|&nbsp; Status: <strong>${DB.getRemoteConfig().lastSyncStatus || 'Idle'}</strong>
-          </span>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn-sm btn-secondary" onclick="App._devTestRemoteSync()"><span class="material-icons">sync</span> Test Live Heartbeat</button>
+          </div>
         </div>
       </div>
 
