@@ -662,8 +662,6 @@ const Billing = {
     const reverseCharge = document.getElementById('if-rc')?.value === 'true';
     const status = isDraft ? 'draft' : 'sent';
 
-    const existingDoc = window._iDoc;
-
     if (isSales) {
       const data = {
         ...(existingDoc || {}),
