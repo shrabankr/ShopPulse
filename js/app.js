@@ -115,11 +115,11 @@ const App = {
 
     let modeBadge = '';
     if (role === 'staff') {
-      modeBadge = `<button class="btn btn-xs btn-secondary" onclick="App.toggleRoleModal()" title="Click to unlock Owner Mode" style="border-radius:20px;padding:3px 10px;font-size:.78rem"><span class="material-icons" style="font-size:13px;color:var(--text-secondary)">lock</span> Staff Mode</button>`;
+      modeBadge = `<button class="btn btn-xs btn-secondary" onclick="App.toggleRoleModal()" title="Click to unlock Owner Mode" style="border-radius:20px;padding:3px 10px;font-size:.78rem"><span class="material-icons" style="font-size:13px;color:var(--text-secondary)">lock</span> Staff Mode ▾</button>`;
     } else if (role === 'developer') {
-      modeBadge = `<button class="btn btn-xs" onclick="App.openDevConsole()" title="Developer Master Console" style="border-radius:20px;padding:3px 10px;font-size:.78rem;background:hsl(271,78%,50%);color:#fff"><span class="material-icons" style="font-size:13px">terminal</span> Dev Mode</button>`;
+      modeBadge = `<button class="btn btn-xs" onclick="App.toggleRoleModal()" title="Click to switch to Owner or Staff Mode" style="border-radius:20px;padding:3px 10px;font-size:.78rem;background:hsl(271,78%,50%);color:#fff"><span class="material-icons" style="font-size:13px">terminal</span> Dev Mode ▾</button>`;
     } else {
-      modeBadge = `<button class="btn btn-xs btn-secondary" onclick="App.toggleRoleModal()" title="Click to switch to Staff Mode" style="border-radius:20px;padding:3px 10px;font-size:.78rem;color:var(--primary);border-color:var(--primary-light)"><span class="material-icons" style="font-size:13px">admin_panel_settings</span> Owner Mode</button>`;
+      modeBadge = `<button class="btn btn-xs btn-secondary" onclick="App.toggleRoleModal()" title="Click to switch to Staff Mode" style="border-radius:20px;padding:3px 10px;font-size:.78rem;color:var(--primary);border-color:var(--primary-light)"><span class="material-icons" style="font-size:13px">admin_panel_settings</span> Owner Mode ▾</button>`;
     }
 
     let licBadge = '';
@@ -445,6 +445,44 @@ const App = {
         'modal-sm'
       );
       setTimeout(() => document.getElementById('owner-pin-input')?.focus(), 200);
+    } else if (currentRole === 'developer') {
+      this.modal('Switch App Role',
+        `
+        <div style="text-align:center;padding:10px 0 16px">
+          <div style="width:54px;height:54px;border-radius:50%;background:hsl(271,78%,90%);color:hsl(271,78%,50%);display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px">
+            <span class="material-icons" style="font-size:28px">admin_panel_settings</span>
+          </div>
+          <h3>Select Active Role</h3>
+          <p style="font-size:.85rem;color:var(--text-secondary)">Switch between Owner Mode (Normal Shop Operation) and Counter Staff Mode.</p>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px">
+          <button class="btn btn-primary" style="justify-content:flex-start;padding:12px 16px" onclick="App.setRoleAndClose('owner')">
+            <span class="material-icons" style="font-size:20px">admin_panel_settings</span>
+            <div style="text-align:left;margin-left:8px">
+              <div style="font-weight:700">👑 Switch to Owner Mode</div>
+              <div style="font-size:.75rem;opacity:.85">Full control, P&amp;L reports, inventory, settings</div>
+            </div>
+          </button>
+          <button class="btn btn-warning" style="justify-content:flex-start;padding:12px 16px" onclick="App.setRoleAndClose('staff')">
+            <span class="material-icons" style="font-size:20px">lock</span>
+            <div style="text-align:left;margin-left:8px">
+              <div style="font-weight:700">🔒 Switch to Staff Mode</div>
+              <div style="font-size:.75rem;opacity:.85">Restricted billing counter (hides purchase price &amp; P&amp;L)</div>
+            </div>
+          </button>
+          <button class="btn btn-secondary" style="justify-content:flex-start;padding:10px 16px" onclick="App.closeModal();App.openDevConsole()">
+            <span class="material-icons" style="font-size:20px">terminal</span>
+            <div style="text-align:left;margin-left:8px">
+              <div style="font-weight:600">Open Master Dev Console</div>
+            </div>
+          </button>
+        </div>
+        `,
+        `
+        <button class="btn btn-ghost" onclick="App.closeModal()">Close</button>
+        `,
+        'modal-sm'
+      );
     } else {
       this.modal('Switch to Staff Mode',
         `
@@ -463,6 +501,15 @@ const App = {
         'modal-sm'
       );
     }
+  },
+
+  setRoleAndClose(role) {
+    DB.setRole(role);
+    this.closeModal();
+    this.buildSidebar();
+    this.buildTopbar();
+    this.toast(`Switched to ${role === 'owner' ? 'Owner' : 'Staff'} Mode! 👑`, 'success');
+    this.route();
   },
 
   unlockOwner() {
@@ -841,13 +888,19 @@ const App = {
 
     this.modal('🛠️ Developer Master Console',
       `
-      <div style="margin-bottom:16px;padding:12px 16px;background:hsl(271,78%,96%);border:1px solid hsl(271,60%,85%);border-radius:var(--radius);display:flex;align-items:center;gap:14px">
-        <div style="width:44px;height:44px;border-radius:12px;background:hsl(271,78%,50%);color:#fff;display:flex;align-items:center;justify-content:center">
-          <span class="material-icons">developer_mode</span>
+      <div style="margin-bottom:16px;padding:12px 16px;background:hsl(271,78%,96%);border:1px solid hsl(271,60%,85%);border-radius:var(--radius);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="width:44px;height:44px;border-radius:12px;background:hsl(271,78%,50%);color:#fff;display:flex;align-items:center;justify-content:center">
+            <span class="material-icons">developer_mode</span>
+          </div>
+          <div>
+            <div style="font-weight:700;color:hsl(271,78%,30%)">ShopPulse — Developer Master Control</div>
+            <div style="font-size:.8rem;color:hsl(271,50%,40%)">Author: <strong>Shraban Kumar Mahato</strong> (shraban@andropcsoft.com)</div>
+          </div>
         </div>
-        <div>
-          <div style="font-weight:700;color:hsl(271,78%,30%)">ShopPulse — Developer Master Control</div>
-          <div style="font-size:.8rem;color:hsl(271,50%,40%)">Author: <strong>Shraban Kumar Mahato</strong> (shraban@andropcsoft.com) &nbsp;|&nbsp; <strong>AndroPCSoft</strong></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-sm btn-primary" onclick="App.setRoleAndClose('owner')"><span class="material-icons">admin_panel_settings</span> 👑 Switch to Owner Mode</button>
+          <button class="btn btn-sm btn-warning" onclick="App.setRoleAndClose('staff')"><span class="material-icons">lock</span> 🔒 Staff Mode</button>
         </div>
       </div>
 
