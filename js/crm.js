@@ -170,6 +170,21 @@ const CRM = {
 
   openForm(type, contactId = null) {
     const isCustomer = type === 'customers';
+    const limits = DB.getTrialLimits();
+
+    if (!contactId) {
+      if (isCustomer && !limits.canAddCustomer) {
+        App.toast(`⏳ Trial Limit Reached: Maximum ${limits.maxCustomers} customers allowed in 60-day trial mode. Activate license to add unlimited.`, 'warning');
+        App.openLicenseModal();
+        return;
+      }
+      if (!isCustomer && !limits.canAddSupplier) {
+        App.toast(`⏳ Trial Limit Reached: Maximum ${limits.maxSuppliers} suppliers allowed in 60-day trial mode. Activate license to add unlimited.`, 'warning');
+        App.openLicenseModal();
+        return;
+      }
+    }
+
     const c = contactId ? (isCustomer ? DB.getCustomerById(contactId) : DB.getSupplierById(contactId)) : null;
     const stateOpts = INDIAN_STATES.map(s => `<option value="${s.code}" ${c?.stateCode === s.code ? 'selected' : ''}>${s.name}</option>`).join('');
 
@@ -199,6 +214,21 @@ const CRM = {
 
   saveContact(type, existingId) {
     const isCustomer = type === 'customers';
+    const limits = DB.getTrialLimits();
+
+    if (!existingId) {
+      if (isCustomer && !limits.canAddCustomer) {
+        App.toast(`⏳ Trial limit reached: Maximum ${limits.maxCustomers} customers allowed. Please activate your license.`, 'error');
+        App.openLicenseModal();
+        return;
+      }
+      if (!isCustomer && !limits.canAddSupplier) {
+        App.toast(`⏳ Trial limit reached: Maximum ${limits.maxSuppliers} suppliers allowed. Please activate your license.`, 'error');
+        App.openLicenseModal();
+        return;
+      }
+    }
+
     const name = document.getElementById('c-name')?.value?.trim();
     const gstin = document.getElementById('c-gstin')?.value?.toUpperCase().trim();
 

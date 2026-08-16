@@ -392,14 +392,14 @@ const DB = {
     let lic = this._get(this.K.LICENSE);
     if (!lic) {
       const now = new Date();
-      const expiry = new Date(now.getTime() + 14 * 86400000);
+      const expiry = new Date(now.getTime() + 60 * 86400000);
       lic = {
         machineId: 'SP-' + Math.random().toString(36).substring(2, 6).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase(),
         registeredEmail: '',
         registeredShop: '',
         plan: 'trial', // 'trial' | 'annual' | 'lifetime'
         trialStartDate: now.toISOString().split('T')[0],
-        trialDays: 14,
+        trialDays: 60,
         expiryDate: expiry.toISOString().split('T')[0],
         licenseKey: '',
         status: 'active'
@@ -466,6 +466,7 @@ const DB = {
     lic.expiryDate = res.expiryDate;
     lic.licenseKey = key.toUpperCase().trim();
     lic.status = 'active';
+    delete lic.blockReason;
     this.setLicense(lic);
     return lic;
   },
@@ -475,8 +476,9 @@ const DB = {
     const curExp = new Date(lic.expiryDate || new Date());
     const newExp = new Date(curExp.getTime() + extraDays * 86400000);
     lic.expiryDate = newExp.toISOString().split('T')[0];
-    lic.trialDays = (lic.trialDays || 14) + extraDays;
+    lic.trialDays = (lic.trialDays || 60) + extraDays;
     lic.status = 'active';
+    delete lic.blockReason;
     this.setLicense(lic);
     return lic;
   },
@@ -489,7 +491,7 @@ const DB = {
     const isExpired = diffDays < 0;
     const isBlocked = lic.status === 'blocked';
 
-    let planName = '14-Day Free Trial';
+    let planName = '60-Day Free Trial';
     if (lic.plan === 'annual') planName = '1-Year Commercial License';
     if (lic.plan === 'lifetime') planName = 'Lifetime Unlimited License';
 
@@ -501,6 +503,60 @@ const DB = {
       planName,
       isTrial: lic.plan === 'trial',
       isLifetime: lic.plan === 'lifetime',
+    };
+  },
+
+  /* ─── Trial vs Commercial Feature Limits ─── */
+  getTrialLimits() {
+    const lic = this.getLicenseStatus();
+    const custCount = this.getCustomers().length;
+    const suppCount = this.getSuppliers().length;
+    const billCount = this.getSales().length;
+
+    if (!lic.isTrial) {
+      return {
+        isTrial: false,
+        maxCustomers: Infinity,
+        maxSuppliers: Infinity,
+        maxCleanBills: Infinity,
+        maxTotalBills: Infinity,
+        currentCustomers: custCount,
+        currentSuppliers: suppCount,
+        currentBills: billCount,
+        canAddCustomer: true,
+        canAddSupplier: true,
+        canCreateBill: true,
+        isWatermarkNeeded: false,
+        summaryText: 'Unlimited Commercial License (No Restrictions)'
+      };
+    }
+
+    const maxCustomers = 50;
+    const maxSuppliers = 10;
+    const maxCleanBills = 30;
+    const maxTotalBills = 80;
+
+    const canAddCustomer = custCount < maxCustomers;
+    const canAddSupplier = suppCount < maxSuppliers;
+    const isWatermarkNeeded = billCount >= maxCleanBills;
+    const canCreateBill = billCount < maxTotalBills && !lic.isExpired && !lic.isBlocked;
+
+    return {
+      isTrial: true,
+      maxCustomers,
+      currentCustomers: custCount,
+      canAddCustomer,
+      maxSuppliers,
+      currentSuppliers: suppCount,
+      canAddSupplier,
+      maxCleanBills,
+      maxTotalBills,
+      currentBills: billCount,
+      isWatermarkNeeded,
+      canCreateBill,
+      billsRemaining: Math.max(0, maxTotalBills - billCount),
+      cleanBillsRemaining: Math.max(0, maxCleanBills - billCount),
+      summaryText: `60-Day Trial: ${custCount}/${maxCustomers} Cust, ${suppCount}/${maxSuppliers} Supp, ${billCount}/${maxTotalBills} Bills (${isWatermarkNeeded ? 'Watermarked' : 'Clean Print'})`
     };
   },
 

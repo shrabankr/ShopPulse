@@ -140,6 +140,16 @@ const Billing = {
      NEW / EDIT INVOICE FORM
   ═══════════════════════════════════════════ */
   openNew(type = 'sales') {
+    const limits = DB.getTrialLimits();
+    if (limits.isTrial && !limits.canCreateBill) {
+      if (limits.isExpired) {
+        App.toast('⏳ Your 60-day free trial has expired. Please activate your license to continue billing.', 'warning');
+      } else {
+        App.toast(`⏳ Trial Limit Reached: Maximum ${limits.maxTotalBills} bills (30 clean + 50 trial). Please activate your license to create more invoices.`, 'warning');
+      }
+      App.openLicenseModal();
+      return;
+    }
     this._openForm(null, type);
   },
 
@@ -442,6 +452,19 @@ const Billing = {
 
   saveQuickParty() {
     const isSales = window._iType === 'sales';
+    const limits = DB.getTrialLimits();
+
+    if (isSales && !limits.canAddCustomer) {
+      App.toast(`⏳ Trial Limit Reached: Maximum ${limits.maxCustomers} customers allowed in 60-day trial mode. Activate license to add unlimited.`, 'warning');
+      App.openLicenseModal();
+      return;
+    }
+    if (!isSales && !limits.canAddSupplier) {
+      App.toast(`⏳ Trial Limit Reached: Maximum ${limits.maxSuppliers} suppliers allowed in 60-day trial mode. Activate license to add unlimited.`, 'warning');
+      App.openLicenseModal();
+      return;
+    }
+
     const name = document.getElementById('qp-name')?.value.trim();
     if (!name) {
       App.toast('Name is required', 'error');
@@ -599,6 +622,21 @@ const Billing = {
 
   _saveDoc(type, isDraft = false) {
     const isSales = type === 'sales';
+    const existingDoc = window._iDoc;
+
+    if (!existingDoc) {
+      const limits = DB.getTrialLimits();
+      if (limits.isTrial && !limits.canCreateBill) {
+        if (limits.isExpired) {
+          App.toast('⏳ Your 60-day free trial has expired. Please activate your license to continue.', 'error');
+        } else {
+          App.toast(`⏳ Trial Limit Reached: Maximum ${limits.maxTotalBills} bills (30 clean + 50 trial). Please activate your license.`, 'error');
+        }
+        App.openLicenseModal();
+        return;
+      }
+    }
+
     const biz = DB.getBiz();
     const partyEl = document.getElementById('if-party');
     const partyId = partyEl?.value;
@@ -886,15 +924,44 @@ const Billing = {
       ? `<tr><td>CGST</td><td>${fmtCurrency(doc.totalCgst)}</td></tr><tr><td>SGST</td><td>${fmtCurrency(doc.totalSgst)}</td></tr>`
       : `<tr><td>IGST</td><td>${fmtCurrency(doc.totalIgst)}</td></tr>`;
 
+    const limits = DB.getTrialLimits();
+    const showWatermark = limits.isTrial && limits.isWatermarkNeeded;
+
     const html = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
 <title>${no}</title>
 <style>
-body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #000; margin: 0; padding: 15mm; }
-.inv-header { border: 1.5px solid #222; }
+body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #000; margin: 0; padding: 15mm; position: relative; }
+.inv-header { border: 1.5px solid #222; position: relative; z-index: 1; background: #fff; }
 .inv-title-bar { background: #1a2332; color: #fff; text-align: center; padding: 8px 0 6px; font-size: 13pt; font-weight: 900; letter-spacing: .15em; }
+.watermark {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-30deg);
+  font-size: 38pt;
+  font-weight: 900;
+  color: rgba(220, 53, 69, 0.12);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  pointer-events: none;
+  z-index: 9999;
+  text-align: center;
+  border: 3.5px dashed rgba(220, 53, 69, 0.22);
+  padding: 24px 44px;
+  border-radius: 12px;
+}
+.trial-footer-banner {
+  text-align: center;
+  font-size: 7.5pt;
+  font-weight: 700;
+  color: #c0392b;
+  padding: 6px 0;
+  margin-top: 10px;
+  border-top: 1px dashed #e74c3c;
+}
 .inv-biz-row { display: flex; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid #ccc; }
 .inv-biz-name { font-size: 12pt; font-weight: 700; }
 .inv-biz-detail { font-size: 8.5pt; color: #333; line-height: 1.6; }
@@ -1056,6 +1123,15 @@ table.items .rate, table.items .amount { text-align: right; }
   </div>
   <div class="rc-note">${isSales ? 'This is a computer-generated invoice and does not require a physical signature.' : 'This is an official computer-generated Purchase Order.'} ${doc.reverseCharge ? '<strong>Tax is payable on reverse charge basis.</strong>' : 'Tax is not payable on reverse charge basis.'}</div>
 </div>
+${showWatermark ? `
+<div class="watermark">
+  SHOPPULSE TRIAL<br>
+  <span style="font-size:14pt;font-weight:700;letter-spacing:0.04em">Activate: shraban@andropcsoft.com</span>
+</div>
+<div class="trial-footer-banner">
+  ⚠️ Generated with ShopPulse 60-Day Trial Version (Bill #${limits.currentBills} of ${limits.maxTotalBills}). For permanent watermark-free printing, contact developer Shraban Kumar Mahato (shraban@andropcsoft.com).
+</div>
+` : ''}
 <script>window.onload=function(){window.print();}</script>
 </body></html>`;
 

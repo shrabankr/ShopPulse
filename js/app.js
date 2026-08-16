@@ -590,7 +590,7 @@ const App = {
         </div>
         <h3 style="font-size:1.15rem">Set Up Your Shop Profile</h3>
         <p style="font-size:.83rem;color:var(--text-secondary);max-width:440px;margin:2px auto 0">
-          Enter your basic business information to start your <strong>14-Day Free Trial</strong> and print professional GST invoices immediately.
+          Enter your basic business information to start your <strong>60-Day Free Trial</strong> and print professional GST invoices immediately.
         </p>
       </div>
 
@@ -628,7 +628,7 @@ const App = {
 
       <div style="background:hsl(215,90%,96%);padding:10px 14px;border-radius:var(--radius-sm);border:1px solid hsl(215,80%,85%);font-size:.8rem;color:hsl(215,80%,25%);display:flex;align-items:center;gap:10px">
         <span class="material-icons" style="font-size:20px;color:var(--primary)">verified</span>
-        <span>Includes <strong>14 days free trial</strong>, GST billing, CCTV/IT catalog, and automated backup security.</span>
+        <span>Includes <strong>60 days free trial</strong> (50 customers, 10 suppliers, 30 clean bills + 50 trial bills), and backup security.</span>
       </div>
       `,
       `
@@ -657,7 +657,7 @@ const App = {
     this.closeModal();
     this.buildSidebar();
     this.buildTopbar();
-    this.toast(`🎉 Welcome to ShopPulse, ${shopName}! Your 14-day trial has started. 🚀`, 'success');
+    this.toast(`🎉 Welcome to ShopPulse, ${shopName}! Your 60-day trial has started. 🚀`, 'success');
     this.route('#dashboard');
   },
 
@@ -671,6 +671,7 @@ const App = {
   openLicenseModal() {
     const lic = DB.getLicenseStatus();
     const biz = DB.getBiz();
+    const limits = DB.getTrialLimits();
 
     this.modal('🔑 Subscription & License Activation',
       `
@@ -680,9 +681,47 @@ const App = {
         </div>
         <h3>${lic.planName}</h3>
         <p style="font-size:.85rem;color:var(--text-secondary)">
-          ${lic.isTrial ? (lic.isExpired ? '⚠️ Your 14-day trial has expired. Activate with your Gmail.' : `You have <strong>${lic.daysLeft} days remaining</strong> in your free trial.`) : `Active until <strong>${fmtDate(lic.expiryDate)}</strong> (${lic.daysLeft} days remaining).`}
+          ${lic.isTrial ? (lic.isExpired ? '⚠️ Your 60-day trial has expired. Activate with your Gmail to continue.' : `You have <strong>${lic.daysLeft} days remaining</strong> in your 60-day free trial.`) : `Active until <strong>${fmtDate(lic.expiryDate)}</strong> (${lic.daysLeft} days remaining).`}
         </p>
       </div>
+
+      ${limits.isTrial ? `
+      <!-- Trial Limits & Usage Grid -->
+      <div class="card" style="padding:12px;margin-bottom:14px;background:hsl(215,90%,98%);border:1px solid hsl(215,80%,85%)">
+        <div style="font-size:.84rem;font-weight:700;margin-bottom:8px;color:hsl(215,80%,25%)">
+          <span class="material-icons" style="font-size:16px;vertical-align:middle">speed</span> 60-Day Trial Limits &amp; Current Usage:
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:.8rem">
+          <div style="background:#fff;padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--border)">
+            <div style="color:var(--text-secondary)">Customers</div>
+            <div style="font-weight:700;font-size:1rem;color:${limits.currentCustomers >= limits.maxCustomers ? 'var(--danger)' : 'var(--primary)'}">
+              ${limits.currentCustomers} / ${limits.maxCustomers}
+            </div>
+            <div style="font-size:.72rem;color:var(--text-secondary)">${Math.max(0, limits.maxCustomers - limits.currentCustomers)} remaining</div>
+          </div>
+          <div style="background:#fff;padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--border)">
+            <div style="color:var(--text-secondary)">Suppliers</div>
+            <div style="font-weight:700;font-size:1rem;color:${limits.currentSuppliers >= limits.maxSuppliers ? 'var(--danger)' : 'var(--primary)'}">
+              ${limits.currentSuppliers} / ${limits.maxSuppliers}
+            </div>
+            <div style="font-size:.72rem;color:var(--text-secondary)">${Math.max(0, limits.maxSuppliers - limits.currentSuppliers)} remaining</div>
+          </div>
+          <div style="background:#fff;padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--border)">
+            <div style="color:var(--text-secondary)">Total Invoices</div>
+            <div style="font-weight:700;font-size:1rem;color:${limits.currentBills >= limits.maxTotalBills ? 'var(--danger)' : (limits.isWatermarkNeeded ? 'var(--warning)' : 'var(--success)')}">
+              ${limits.currentBills} / ${limits.maxTotalBills}
+            </div>
+            <div style="font-size:.72rem;color:${limits.isWatermarkNeeded ? 'var(--warning)' : 'var(--text-secondary)'}">
+              ${limits.isWatermarkNeeded ? 'Watermarked (bills 31-80)' : `${limits.cleanBillsRemaining} clean left`}
+            </div>
+          </div>
+        </div>
+      </div>
+      ` : `
+      <div class="card" style="padding:12px;margin-bottom:14px;background:hsl(142,76%,96%);border:1px solid hsl(142,60%,85%);font-size:.85rem;color:hsl(142,70%,25%)">
+        <span class="material-icons" style="font-size:18px;vertical-align:middle">diamond</span> <strong>Commercial License Active:</strong> Unlimited invoices, unlimited customers &amp; suppliers, and zero watermark forever!
+      </div>
+      `}
 
       <div style="background:var(--bg);padding:12px 14px;border-radius:var(--radius-sm);margin-bottom:16px;font-size:.84rem">
         <div style="display:flex;justify-content:space-between;margin-bottom:4px">
@@ -700,7 +739,7 @@ const App = {
       </div>
 
       <div class="card" style="padding:14px;border-left:4px solid var(--primary);margin-bottom:14px">
-        <h4 style="margin-bottom:10px;font-size:.9rem"><span class="material-icons" style="font-size:16px;vertical-align:middle">vpn_key</span> Enter License Key</h4>
+        <h4 style="margin-bottom:10px;font-size:.9rem"><span class="material-icons" style="font-size:16px;vertical-align:middle">vpn_key</span> Enter License Key to Unlock Unlimited</h4>
         <div class="form-grid" style="margin-bottom:10px">
           <div class="form-group form-full">
             <label>Your Registered Gmail Address <span class="required">*</span></label>
@@ -722,7 +761,7 @@ const App = {
       <button class="btn btn-ghost" onclick="App.closeModal()">Close</button>
       <a href="mailto:shraban@andropcsoft.com?subject=ShopPulse%20License%20Inquiry%20-%20${encodeURIComponent(biz.name)}" class="btn btn-secondary"><span class="material-icons">mail</span> Contact for Key</a>
       `,
-      'modal-md'
+      'modal-lg'
     );
   },
 
