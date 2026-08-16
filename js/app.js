@@ -13,6 +13,11 @@ const App = {
     window.addEventListener('hashchange', () => this.route());
     this.route(location.hash || '#dashboard');
 
+    // Show First-Time Welcome Setup Wizard if not completed yet
+    if (!DB.isSetupDone()) {
+      setTimeout(() => this.openSetupWizard(), 350);
+    }
+
     // Developer shortcut: Ctrl + Shift + D
     window.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'd') {
@@ -572,6 +577,96 @@ const App = {
     }
   },
 
+  /* ─── Onboarding Welcome Setup Wizard ─── */
+  openSetupWizard() {
+    const biz = DB.getBiz();
+    const stateOpts = INDIAN_STATES.map(s => `<option value="${s.code}" ${s.code === (biz.stateCode || '27') ? 'selected' : ''}>${s.name}</option>`).join('');
+
+    this.modal('🚀 Welcome to ShopPulse — Fast 60-Second Setup',
+      `
+      <div style="text-align:center;padding:4px 0 14px">
+        <div style="width:48px;height:48px;border-radius:14px;background:hsl(215,90%,92%);color:var(--primary);display:inline-flex;align-items:center;justify-content:center;margin-bottom:8px">
+          <span class="material-icons" style="font-size:26px">storefront</span>
+        </div>
+        <h3 style="font-size:1.15rem">Set Up Your Shop Profile</h3>
+        <p style="font-size:.83rem;color:var(--text-secondary);max-width:440px;margin:2px auto 0">
+          Enter your basic business information to start your <strong>14-Day Free Trial</strong> and print professional GST invoices immediately.
+        </p>
+      </div>
+
+      <div class="form-grid" style="margin-bottom:14px">
+        <div class="form-group form-full">
+          <label>Shop / Business Name <span class="required">*</span></label>
+          <input id="w-name" placeholder="e.g. Apex Computers &amp; CCTV Solutions" value="${biz.name && biz.name !== 'My Business' ? biz.name : ''}">
+        </div>
+        <div class="form-group">
+          <label>Owner Gmail / Email <span class="required">*</span></label>
+          <input id="w-email" type="email" placeholder="e.g. apex.cctv@gmail.com" value="${biz.email || ''}">
+        </div>
+        <div class="form-group">
+          <label>Mobile / WhatsApp Number <span class="required">*</span></label>
+          <input id="w-phone" placeholder="e.g. 9823001234" value="${biz.phone || ''}">
+        </div>
+        <div class="form-group">
+          <label>City <span class="required">*</span></label>
+          <input id="w-city" placeholder="e.g. Pune" value="${biz.city || ''}">
+        </div>
+        <div class="form-group">
+          <label>State <span class="required">*</span></label>
+          <select id="w-state">${stateOpts}</select>
+        </div>
+        <div class="form-group">
+          <label>GSTIN (Optional)</label>
+          <input id="w-gstin" placeholder="27AAAAA0000A1Z5" maxlength="15" style="text-transform:uppercase;font-family:monospace" value="${biz.gstin || ''}">
+        </div>
+        <div class="form-group">
+          <label>Owner Security PIN (4-Digits)</label>
+          <input id="w-pin" type="password" placeholder="1234" maxlength="6" value="1234">
+          <div class="form-hint">Used to protect P&amp;L reports &amp; backups from staff</div>
+        </div>
+      </div>
+
+      <div style="background:hsl(215,90%,96%);padding:10px 14px;border-radius:var(--radius-sm);border:1px solid hsl(215,80%,85%);font-size:.8rem;color:hsl(215,80%,25%);display:flex;align-items:center;gap:10px">
+        <span class="material-icons" style="font-size:20px;color:var(--primary)">verified</span>
+        <span>Includes <strong>14 days free trial</strong>, GST billing, CCTV/IT catalog, and automated backup security.</span>
+      </div>
+      `,
+      `
+      <button class="btn btn-ghost" onclick="App.skipSetup()">⚡ Explore Demo Mode</button>
+      <button class="btn btn-primary" onclick="App.submitSetup()"><span class="material-icons">rocket_launch</span> Launch My Shop</button>
+      `,
+      'modal-lg'
+    );
+  },
+
+  submitSetup() {
+    const shopName = document.getElementById('w-name')?.value.trim();
+    const email = document.getElementById('w-email')?.value.trim();
+    const phone = document.getElementById('w-phone')?.value.trim();
+    const city = document.getElementById('w-city')?.value.trim();
+    const stateCode = document.getElementById('w-state')?.value;
+    const gstin = document.getElementById('w-gstin')?.value.trim();
+    const pin = document.getElementById('w-pin')?.value.trim() || '1234';
+
+    if (!shopName) { this.toast('Please enter your Shop / Business Name', 'error'); return; }
+    if (!email) { this.toast('Please enter your Gmail address', 'error'); return; }
+    if (!phone) { this.toast('Please enter your Mobile / WhatsApp number', 'error'); return; }
+    if (!city) { this.toast('Please enter your City', 'error'); return; }
+
+    DB.completeSetup({ shopName, email, phone, city, stateCode, gstin, pin });
+    this.closeModal();
+    this.buildSidebar();
+    this.buildTopbar();
+    this.toast(`🎉 Welcome to ShopPulse, ${shopName}! Your 14-day trial has started. 🚀`, 'success');
+    this.route('#dashboard');
+  },
+
+  skipSetup() {
+    DB.setSetupDone(true);
+    this.closeModal();
+    this.toast('Loaded demo mode. You can edit your shop details anytime in Settings ⚙️', 'info');
+  },
+
   /* ─── Client License Modal ─── */
   openLicenseModal() {
     const lic = DB.getLicenseStatus();
@@ -777,9 +872,10 @@ const App = {
         <div class="card" style="padding:14px">
           <h4 style="margin-bottom:8px"><span class="material-icons" style="font-size:16px;vertical-align:middle">restart_alt</span> Client Setup &amp; Factory Reset</h4>
           <p style="font-size:.8rem;color:var(--text-secondary);margin-bottom:12px">Quickly prepare a fresh database for a new client install or reload demo data.</p>
-          <div style="display:flex;gap:8px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-sm btn-danger" onclick="if(confirm('Wipe all data and prepare fresh blank shop?')){DB.factoryReset(false);location.reload();}"><span class="material-icons">cleaning_services</span> Fresh Client Wipe</button>
             <button class="btn btn-sm btn-secondary" onclick="if(confirm('Reload SysCare demo dataset?')){DB.factoryReset(true);location.reload();}"><span class="material-icons">dataset</span> Reload Demo Data</button>
+            <button class="btn btn-sm btn-ghost" onclick="App.closeModal();App.openSetupWizard()"><span class="material-icons">storefront</span> Test Setup Wizard</button>
           </div>
         </div>
       </div>

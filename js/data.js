@@ -183,6 +183,7 @@ const DB = {
     BACKUPS: 'sp_backups',
     LICENSE: 'sp_license',
     REMOTE: 'sp_remote',
+    SETUP_DONE: 'sp_setup_done',
     SEEDED: 'sp_seeded',
   },
 
@@ -578,6 +579,50 @@ const DB = {
       this.setRemoteConfig(cfg);
       return { success: false, error: err.message };
     }
+  },
+
+  /* ─── Onboarding & Welcome Setup Wizard ─── */
+  isSetupDone() {
+    return this._get(this.K.SETUP_DONE) === true;
+  },
+
+  setSetupDone(done = true) {
+    this._set(this.K.SETUP_DONE, !!done);
+  },
+
+  completeSetup(data) {
+    const biz = this.getBiz();
+    if (data.shopName) biz.name = data.shopName.trim();
+    if (data.email) biz.email = data.email.trim();
+    if (data.phone) biz.phone = data.phone.trim();
+    if (data.city) biz.city = data.city.trim();
+    if (data.stateCode) {
+      biz.stateCode = data.stateCode;
+      const s = INDIAN_STATES.find(st => st.code === data.stateCode);
+      if (s) biz.state = s.name;
+    }
+    if (data.gstin) biz.gstin = data.gstin.toUpperCase().trim();
+    this.setBiz(biz);
+
+    // Initialize License
+    const lic = this.getLicense();
+    if (data.email) lic.registeredEmail = data.email.trim();
+    if (data.shopName) lic.registeredShop = data.shopName.trim();
+    this.setLicense(lic);
+
+    // Set Owner PIN
+    if (data.pin) {
+      this.setOwnerPin(data.pin.trim());
+    }
+
+    this.setSetupDone(true);
+
+    // Auto-ping Google Sheets telemetry in background to register new shop lead
+    setTimeout(() => {
+      this.syncRemoteLicense().catch(() => {});
+    }, 1000);
+
+    return { biz, lic };
   },
 
   /* ─── Backup & Restore Engine ─── */
