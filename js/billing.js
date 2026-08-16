@@ -386,7 +386,7 @@ const Billing = {
         <input class="item-name" value="${item.name || ''}" placeholder="Product description…" style="margin-top:4px" oninput="Billing._recalc('${biz.stateCode}')">
       </td>
       <td><input class="item-hsn" value="${item.hsn || ''}" placeholder="HSN/SAC" oninput="Billing._recalc('${biz.stateCode}')"></td>
-      <td><input class="item-qty" type="number" value="${item.qty || 1}" min="0.01" step="0.01" oninput="Billing._recalc('${biz.stateCode}')"></td>
+      <td><input class="item-qty" type="number" value="${parseInt(item.qty, 10) || 1}" min="1" step="1" oninput="this.value = this.value.replace(/[^0-9]/g, ''); if (parseInt(this.value, 10) < 1) this.value = 1; Billing._recalc('${biz.stateCode}')"></td>
       <td><select class="item-unit" onchange="Billing._recalc('${biz.stateCode}')">${UNITS.map(u => `<option value="${u}" ${u === (item.unit || 'Nos') ? 'selected' : ''}>${u}</option>`).join('')}</select></td>
       <td><input class="item-rate" type="number" value="${item.rate || 0}" min="0" step="0.01" oninput="Billing._recalc('${biz.stateCode}')"></td>
       <td><input class="item-disc" type="number" value="${item.discount || 0}" min="0" max="100" step="0.01" oninput="Billing._recalc('${biz.stateCode}')"></td>
@@ -613,7 +613,7 @@ const Billing = {
         name: tr.querySelector('.item-name')?.value || '',
         hsn: tr.querySelector('.item-hsn')?.value || '',
         unit: tr.querySelector('.item-unit')?.value || 'Nos',
-        qty: parseFloat(tr.querySelector('.item-qty')?.value) || 0,
+        qty: Math.max(1, parseInt(tr.querySelector('.item-qty')?.value, 10) || 1),
         rate: parseFloat(tr.querySelector('.item-rate')?.value) || 0,
         discount: parseFloat(tr.querySelector('.item-disc')?.value) || 0,
         gstRate: parseFloat(tr.querySelector('.item-gst')?.value) || 0,
