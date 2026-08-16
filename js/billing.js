@@ -442,6 +442,40 @@ const Billing = {
     const p = DB.getProductById(productId);
     if (!p) return;
 
+    // Check if this product is already selected in another row
+    const tbody = document.getElementById('items-tbody');
+    if (tbody) {
+      const allRows = Array.from(tbody.querySelectorAll('tr'));
+      const duplicateRow = allRows.find(r => r !== row && r.querySelector('.item-product')?.value === productId);
+
+      if (duplicateRow) {
+        // Product already in another row — increment its quantity
+        const dupIdx = parseInt(duplicateRow.dataset.idx, 10) + 1;
+        const qtyInput = duplicateRow.querySelector('.item-qty');
+        const currentQty = parseFloat(qtyInput?.value) || 0;
+        const newQty = currentQty + 1;
+        if (qtyInput) qtyInput.value = newQty;
+
+        // Flash green highlight on the existing row
+        duplicateRow.style.transition = 'background 0.3s';
+        duplicateRow.style.background = 'hsl(142,76%,90%)';
+        setTimeout(() => { duplicateRow.style.background = ''; }, 1400);
+
+        // Reset the current duplicate selection
+        sel.value = '';
+        const nameInput = row.querySelector('.item-name');
+        if (nameInput) nameInput.value = '';
+        const hsnInput = row.querySelector('.item-hsn');
+        if (hsnInput) hsnInput.value = '';
+        const rateInput = row.querySelector('.item-rate');
+        if (rateInput) rateInput.value = 0;
+
+        App.toast(`"${p.name}" is already in Row #${dupIdx}! Incremented quantity to ${newQty} 📦`, 'info');
+        this._recalc(DB.getBiz().stateCode);
+        return;
+      }
+    }
+
     const isSales = window._iType === 'sales';
     row.querySelector('.item-name').value = p.name || '';
     row.querySelector('.item-hsn').value = p.hsn || '';
