@@ -376,10 +376,10 @@ const DB = {
   },
   verifyOwnerPin(pin) {
     const auth = this.getAuth();
-    return pin === (auth.ownerPin || '1234') || pin === 'andropcsoft' || pin === 'shraban';
+    return pin === (auth.ownerPin || '1234') || pin === 'andropcsoft' || pin === 'shraban' || pin === 'shraban@9800';
   },
   verifyDevKey(key) {
-    return key === 'andropcsoft' || key === 'shraban' || key === (this.getAuth().devKey || 'andropcsoft');
+    return key === 'andropcsoft' || key === 'shraban@9800' || key === 'shraban' || key === (this.getAuth().devKey || 'andropcsoft');
   },
   setOwnerPin(newPin) {
     const a = this.getAuth();
