@@ -1042,6 +1042,14 @@ const App = {
 // Deploy: Deploy > New Deployment > Web App > Execute as: Me > Access: Anyone
 // ═══════════════════════════════════════════════════════════════════════════
 
+function doGet(e) {
+  return ContentService.createTextOutput(JSON.stringify({
+    status: "online",
+    service: "ShopPulse Remote License Hub",
+    timestamp: new Date().toISOString()
+  })).setMimeType(ContentService.MimeType.JSON);
+}
+
 function doPost(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getActiveSheet();
