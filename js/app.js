@@ -128,9 +128,11 @@ const App = {
         <button class="btn btn-primary btn-sm" onclick="Billing.openNew('sales')">
           <span class="material-icons">add</span> New Invoice
         </button>
+        ${role === 'staff' ? '' : `
         <button class="icon-btn" onclick="App.downloadBackup()" title="1-Click Backup Database (.json)">
           <span class="material-icons">cloud_download</span>
         </button>
+        `}
         <button class="icon-btn" onclick="App.route('#settings')" title="Settings &amp; Backup Hub">
           <span class="material-icons">manage_accounts</span>
         </button>
@@ -443,11 +445,21 @@ const App = {
 
   /* ─── Backup & Restore Functions ─── */
   downloadBackup() {
+    if (DB.getRole() === 'staff') {
+      this.toast('🔒 Staff cannot download database backups. Owner Mode required.', 'error');
+      this.toggleRoleModal();
+      return;
+    }
     const filename = DB.downloadBackup();
     this.toast(`Backup downloaded: ${filename}`, 'success');
   },
 
   triggerRestore() {
+    if (DB.getRole() === 'staff') {
+      this.toast('🔒 Staff cannot restore databases. Owner Mode required.', 'error');
+      this.toggleRoleModal();
+      return;
+    }
     const input = document.getElementById('restore-file-input') || document.createElement('input');
     input.type = 'file';
     input.accept = '.json,application/json';
@@ -507,17 +519,11 @@ const App = {
   },
 
   restoreSnapshot(id) {
-    const snaps = DB.getSnapshots();
-    const snap = snaps.find(s => s.id === id);
-    if (!snap) return;
-    if (confirm(`Restore snapshot from ${fmtDate(snap.date)}?\nCurrent data will be replaced.`)) {
-      DB.restoreBackup(snap.data);
-      this.toast('Snapshot restored! Reloading…', 'success');
-      setTimeout(() => location.reload(), 800);
+    if (DB.getRole() === 'staff') {
+      this.toast('🔒 Staff cannot rollback database snapshots. Owner Mode required.', 'error');
+      this.toggleRoleModal();
+      return;
     }
-  },
-
-  restoreSnapshot(id) {
     const snaps = DB.getSnapshots();
     const snap = snaps.find(s => s.id === id);
     if (!snap) return;
@@ -865,6 +871,18 @@ ${JSON.stringify(data, null, 2)}
           </div>
         </div>
 
+        ${DB.getRole() === 'staff' ? `
+        <div class="card" style="border-left:4px solid var(--border)">
+          <div class="card-header">
+            <h3><span class="material-icons" style="vertical-align:middle;font-size:20px;color:var(--text-secondary)">lock</span> Data Backup &amp; Restore Hub</h3>
+            <span class="badge badge-warning">Owner Only</span>
+          </div>
+          <div class="card-body">
+            <p style="font-size:.85rem;color:var(--text-secondary);margin-bottom:12px">Database export, restore, and rollback features are protected. Switch to Owner Mode with your PIN to access.</p>
+            <button class="btn btn-secondary btn-sm" onclick="App.toggleRoleModal()"><span class="material-icons">lock_open</span> Unlock Owner Mode</button>
+          </div>
+        </div>
+        ` : `
         <div class="card" style="border-left:4px solid var(--primary)">
           <div class="card-header">
             <h3><span class="material-icons" style="vertical-align:middle;font-size:20px;color:var(--primary)">cloud_sync</span> Data Backup &amp; Restore Hub</h3>
@@ -897,6 +915,7 @@ ${JSON.stringify(data, null, 2)}
             ` : ''}
           </div>
         </div>
+        `}
 
         <div class="card">
           <div class="card-header"><h3><span class="material-icons" style="vertical-align:middle;font-size:20px">lock</span> Security &amp; Mode Settings</h3></div>
