@@ -200,16 +200,27 @@ const Billing = {
           </div>
         </div>
         <div class="invoice-parties-grid" id="party-preview">
+          ${isSales ? `
           <div class="invoice-party-box">
-            <h4>From (Seller)</h4>
+            <h4>From (Seller / Supplier)</h4>
             <div class="party-detail-name">${biz.name}</div>
             <div class="party-detail-line">${biz.address}${biz.city ? ', ' + biz.city : ''}${biz.pincode ? ' — ' + biz.pincode : ''}</div>
             <div class="party-detail-gstin">GSTIN: ${biz.gstin || 'Not Set'}</div>
           </div>
           <div class="invoice-party-box" id="buyer-preview">
-            <h4>${isSales ? 'To (Buyer)' : 'From (Supplier)'}</h4>
-            <div class="party-detail-line text-muted">Select a ${isSales ? 'customer' : 'supplier'} above…</div>
+            <h4>To (Buyer / Recipient)</h4>
+            <div class="party-detail-line text-muted">Select a customer above…</div>
+          </div>` : `
+          <div class="invoice-party-box" id="buyer-preview">
+            <h4>From (Seller / Supplier)</h4>
+            <div class="party-detail-line text-muted">Select a supplier above…</div>
           </div>
+          <div class="invoice-party-box">
+            <h4>To (Buyer / Recipient)</h4>
+            <div class="party-detail-name">${biz.name}</div>
+            <div class="party-detail-line">${biz.address}${biz.city ? ', ' + biz.city : ''}${biz.pincode ? ' — ' + biz.pincode : ''}</div>
+            <div class="party-detail-gstin">GSTIN: ${biz.gstin || 'Not Set'}</div>
+          </div>`}
         </div>
 
         <!-- Line Items -->
@@ -382,9 +393,10 @@ const Billing = {
     const preview = document.getElementById('buyer-preview');
     if (!preview) return;
 
+    const biz = DB.getBiz();
     if (party) {
       preview.innerHTML = `
-        <h4>${isSales ? 'To (Buyer)' : 'From (Supplier)'}</h4>
+        <h4>${isSales ? 'To (Buyer / Recipient)' : 'From (Seller / Supplier)'}</h4>
         <div class="party-detail-name">${party.name}</div>
         <div class="party-detail-line">${party.address || ''}${party.city ? ', ' + party.city : ''}${party.pincode ? ' — ' + party.pincode : ''}</div>
         ${party.gstin ? `<div class="party-detail-gstin">GSTIN: ${party.gstin}</div>` : '<div class="party-detail-line text-muted">Unregistered (B2C)</div>'}
@@ -392,12 +404,12 @@ const Billing = {
 
       // Auto-set place of supply
       const posEl = document.getElementById('if-pos');
-      if (posEl && party.stateCode) {
-        posEl.value = party.stateCode;
+      if (posEl) {
+        posEl.value = isSales ? (party.stateCode || biz.stateCode) : (biz.stateCode);
       }
-      this._recalc(DB.getBiz().stateCode);
+      this._recalc();
     } else {
-      preview.innerHTML = `<h4>${isSales ? 'To (Buyer)' : 'From (Supplier)'}</h4><div class="party-detail-line text-muted">Select a party above…</div>`;
+      preview.innerHTML = `<h4>${isSales ? 'To (Buyer / Recipient)' : 'From (Seller / Supplier)'}</h4><div class="party-detail-line text-muted">Select a ${isSales ? 'customer' : 'supplier'} above…</div>`;
     }
   },
 
@@ -420,11 +432,19 @@ const Billing = {
     return rows;
   },
 
-  _recalc(sellerStateCode) {
+  _recalc(overrideSellerCode) {
+    const isSales = window._iType === 'sales';
+    const biz = DB.getBiz();
+    const partyEl = document.getElementById('if-party');
+    const partyId = partyEl?.value;
+    const party = isSales ? DB.getCustomerById(partyId) : DB.getSupplierById(partyId);
+
     const posEl = document.getElementById('if-pos');
-    const buyerStateCode = posEl ? posEl.value : sellerStateCode;
+    const sellerCode = overrideSellerCode || (isSales ? biz.stateCode : (party?.stateCode || biz.stateCode));
+    const buyerCode = isSales ? (posEl ? posEl.value : (party?.stateCode || biz.stateCode)) : biz.stateCode;
+
     const rows = this._getRows();
-    const t = calcTotals(rows, sellerStateCode, buyerStateCode);
+    const t = calcTotals(rows, sellerCode, buyerCode);
 
     // Update row totals
     const tbody = document.getElementById('items-tbody');
@@ -479,8 +499,9 @@ const Billing = {
     }
 
     const posEl = document.getElementById('if-pos');
-    const buyerStateCode = posEl?.value || party.stateCode;
-    const t = calcTotals(items, biz.stateCode, buyerStateCode);
+    const sellerStateCode = isSales ? biz.stateCode : party.stateCode;
+    const buyerStateCode = isSales ? (posEl?.value || party.stateCode || biz.stateCode) : biz.stateCode;
+    const t = calcTotals(items, sellerStateCode, buyerStateCode);
     const date = document.getElementById('if-date')?.value || new Date().toISOString().split('T')[0];
     const dueDate = document.getElementById('if-due')?.value || date;
     const notes = document.getElementById('if-notes')?.value || '';
@@ -511,8 +532,11 @@ const Billing = {
         date, dueDate, status: existingDoc ? existingDoc.status : status,
         supplierId: party.id, supplierName: party.name,
         supplierGstin: party.gstin || '',
+        supplierAddress: `${party.address || ''}, ${party.city || ''} - ${party.pincode || ''}`,
+        supplierState: party.state,
         supplierStateCode: party.stateCode,
         buyerStateCode: biz.stateCode,
+        placeOfSupply: biz.stateCode,
         reverseCharge, notes, ...t,
       };
       if (isDraft) data.status = 'draft';
@@ -540,7 +564,7 @@ const Billing = {
     const partyAddr = isSales ? doc.customerAddress : (doc.supplierAddress || '');
     const partyState = isSales ? doc.customerState : doc.supplierState;
 
-    const posState = INDIAN_STATES.find(s => s.code === (isSales ? doc.placeOfSupply : doc.buyerStateCode));
+    const posState = INDIAN_STATES.find(s => s.code === (isSales ? doc.placeOfSupply : doc.buyerStateCode || biz.stateCode));
 
     let taxRows = '';
     if (doc.isIntra) {
@@ -557,7 +581,7 @@ const Billing = {
       <button class="btn btn-secondary" onclick="Billing.printDoc('${id}','${type}')"><span class="material-icons">print</span> Print</button>
     `;
 
-    App.modal(`${isSales ? 'Invoice' : 'Bill'}: ${no}`,
+    App.modal(`${isSales ? 'Sales Tax Invoice' : 'Purchase Order / Bill'}: ${no}`,
       `
       <div style="margin-bottom:14px;display:flex;align-items:center;gap:12px;justify-content:space-between">
         <div>
@@ -571,22 +595,35 @@ const Billing = {
       </div>
 
       <div class="invoice-parties-grid" style="margin-bottom:16px">
+        ${isSales ? `
         <div class="invoice-party-box">
-          <h4>Seller (From)</h4>
+          <h4>Seller / Supplier (From)</h4>
           <div class="party-detail-name">${biz.name}</div>
           <div class="party-detail-line">${biz.address}, ${biz.city}</div>
           <div class="party-detail-gstin">GSTIN: ${biz.gstin || '—'}</div>
         </div>
         <div class="invoice-party-box">
-          <h4>${isSales ? 'Buyer (To)' : 'Supplier (From)'}</h4>
+          <h4>Buyer / Recipient (To)</h4>
           <div class="party-detail-name">${partyName}</div>
           <div class="party-detail-line">${partyAddr}</div>
           ${partyGstin ? `<div class="party-detail-gstin">GSTIN: ${partyGstin}</div>` : '<div class="party-detail-line text-muted">Unregistered (B2C)</div>'}
+        </div>` : `
+        <div class="invoice-party-box">
+          <h4>Seller / Supplier (From)</h4>
+          <div class="party-detail-name">${partyName}</div>
+          <div class="party-detail-line">${partyAddr}</div>
+          ${partyGstin ? `<div class="party-detail-gstin">GSTIN: ${partyGstin}</div>` : '<div class="party-detail-line text-muted">Unregistered</div>'}
         </div>
+        <div class="invoice-party-box">
+          <h4>Buyer / Recipient (Bill To)</h4>
+          <div class="party-detail-name">${biz.name}</div>
+          <div class="party-detail-line">${biz.address}, ${biz.city}</div>
+          <div class="party-detail-gstin">GSTIN: ${biz.gstin || '—'}</div>
+        </div>`}
       </div>
 
       <div style="font-size:.78rem;color:var(--text-secondary);margin-bottom:12px">
-        Place of Supply: <strong>${posState?.name || '—'}</strong> &nbsp;|&nbsp;
+        ${isSales ? 'Place of Supply' : 'Place of Supply / Delivery'}: <strong>${posState?.name || biz.state || '—'}</strong> &nbsp;|&nbsp;
         Tax Type: <strong>${doc.isIntra ? 'CGST + SGST (Intra-state)' : 'IGST (Inter-state)'}</strong> &nbsp;|&nbsp;
         Reverse Charge: <strong>${doc.reverseCharge ? 'Yes' : 'No'}</strong>
       </div>
@@ -697,10 +734,10 @@ const Billing = {
     const doc = isSales ? DB.getSaleById(id) : DB.getPurchaseById(id);
     if (!doc) return;
     const biz = DB.getBiz();
-    const posState = INDIAN_STATES.find(s => s.code === (isSales ? doc.placeOfSupply : doc.buyerStateCode));
+    const posState = INDIAN_STATES.find(s => s.code === (isSales ? doc.placeOfSupply : (doc.buyerStateCode || biz.stateCode)));
     const no = isSales ? doc.invoiceNo : doc.billNo;
     const partyName = isSales ? doc.customerName : doc.supplierName;
-    const partyGstin = isSales ? doc.customerGstin : doc.supplierGstin;
+    const partyGstin = isSales ? (doc.customerGstin || '') : (doc.supplierGstin || '');
     const partyAddr = isSales ? doc.customerAddress : (doc.supplierAddress || '');
     const partyState = isSales ? doc.customerState : doc.supplierState;
 
@@ -781,7 +818,7 @@ table.items .rate, table.items .amount { text-align: right; }
 </head>
 <body>
 <div class="inv-header">
-  <div class="inv-title-bar">TAX INVOICE</div>
+  <div class="inv-title-bar">${isSales ? 'TAX INVOICE' : 'PURCHASE ORDER'}</div>
   <div class="inv-biz-row">
     <div>
       <div class="inv-biz-name">${biz.name}</div>
@@ -790,14 +827,15 @@ table.items .rate, table.items .amount { text-align: right; }
     </div>
     <div>
       <table class="inv-meta-table">
-        <tr><td>Invoice No.</td><td>${no}</td></tr>
-        <tr><td>Invoice Date</td><td>${fmtDate(doc.date)}</td></tr>
+        <tr><td>${isSales ? 'Invoice No.' : 'PO / Bill No.'}</td><td>${no}</td></tr>
+        <tr><td>${isSales ? 'Invoice Date' : 'Order Date'}</td><td>${fmtDate(doc.date)}</td></tr>
         <tr><td>Due Date</td><td>${fmtDate(doc.dueDate)}</td></tr>
         <tr><td>Status</td><td>${doc.status.toUpperCase()}</td></tr>
       </table>
     </div>
   </div>
   <div class="inv-parties">
+    ${isSales ? `
     <div class="inv-party">
       <div class="inv-party-label">Seller / Supplier</div>
       <div class="inv-party-name">${biz.name}</div>
@@ -809,10 +847,22 @@ table.items .rate, table.items .amount { text-align: right; }
       <div class="inv-party-name">${partyName}</div>
       <div class="inv-party-addr">${partyAddr}<br>${partyState || ''}</div>
       <div class="inv-party-gstin">${partyGstin ? 'GSTIN: ' + partyGstin : 'Unregistered (Consumer)'}</div>
+    </div>` : `
+    <div class="inv-party">
+      <div class="inv-party-label">Seller / Supplier (Vendor)</div>
+      <div class="inv-party-name">${partyName}</div>
+      <div class="inv-party-addr">${partyAddr}<br>${partyState || ''}</div>
+      <div class="inv-party-gstin">${partyGstin ? 'GSTIN: ' + partyGstin : 'Unregistered'}</div>
     </div>
+    <div class="inv-party">
+      <div class="inv-party-label">Buyer / Recipient (Bill To &amp; Ship To)</div>
+      <div class="inv-party-name">${biz.name}</div>
+      <div class="inv-party-addr">${biz.address}, ${biz.city} — ${biz.pincode}<br>${biz.state}</div>
+      <div class="inv-party-gstin">GSTIN: ${biz.gstin || '—'}</div>
+    </div>`}
   </div>
   <div class="supply-bar">
-    Place of Supply: <strong>${posState?.name || '—'}</strong> &nbsp;&nbsp;|&nbsp;&nbsp;
+    ${isSales ? 'Place of Supply' : 'Place of Supply / Delivery'}: <strong>${posState?.name || biz.state || '—'}</strong> &nbsp;&nbsp;|&nbsp;&nbsp;
     Tax: <strong>${doc.isIntra ? 'CGST + SGST (Intra-state)' : 'IGST (Inter-state)'}</strong> &nbsp;&nbsp;|&nbsp;&nbsp;
     Reverse Charge: <strong>${doc.reverseCharge ? 'YES' : 'No'}</strong>
   </div>
@@ -842,7 +892,8 @@ table.items .rate, table.items .amount { text-align: right; }
   </table>
   <div class="inv-footer">
     <div class="inv-bank">
-      <h4>Bank Details</h4>
+      ${isSales ? `
+      <h4>Bank Details (for Payment)</h4>
       <table>
         <tr><td>Bank Name</td><td>${biz.bankName || '—'}</td></tr>
         <tr><td>Account No.</td><td>${biz.bankAccount || '—'}</td></tr>
@@ -851,6 +902,15 @@ table.items .rate, table.items .amount { text-align: right; }
       </table>
       ${doc.notes ? `<div style="margin-top:8px;font-size:8pt;color:#333"><strong>Notes:</strong> ${doc.notes}</div>` : ''}
       ${biz.termsAndConditions ? `<div style="margin-top:8px;font-size:7.5pt;color:#555"><strong>Terms:</strong><br>${biz.termsAndConditions.replace(/\n/g, '<br>')}</div>` : ''}
+      ` : `
+      <h4>Order &amp; Delivery Instructions</h4>
+      <div style="font-size:8pt;color:#333;line-height:1.5">
+        <div><strong>Deliver To:</strong> ${biz.name}, ${biz.address}, ${biz.city} — ${biz.pincode}</div>
+        <div><strong>Contact:</strong> ${biz.phone} | ${biz.email}</div>
+        ${doc.notes ? `<div style="margin-top:6px"><strong>Notes:</strong> ${doc.notes}</div>` : ''}
+        <div style="margin-top:6px;font-size:7.5pt;color:#666">Please attach original Tax Invoice and Warranty cards along with the shipment.</div>
+      </div>
+      `}
     </div>
     <div class="inv-totals">
       <table>
@@ -866,15 +926,15 @@ table.items .rate, table.items .amount { text-align: right; }
   </div>
   <div class="inv-sign">
     <div class="inv-sign-box">
-      <div>Received goods / services in good condition.</div>
-      <div class="inv-sign-name">Receiver's Signature &amp; Seal</div>
+      <div>${isSales ? 'Received goods / services in good condition.' : "Supplier's Acknowledgment &amp; Seal"}</div>
+      <div class="inv-sign-name">${isSales ? "Receiver's Signature &amp; Seal" : "Supplier / Dispatch Signatory"}</div>
     </div>
     <div class="inv-sign-box" style="text-align:right">
       <div>For <strong>${biz.name}</strong></div>
       <div class="inv-sign-name">${biz.signatory || 'Authorized Signatory'}</div>
     </div>
   </div>
-  <div class="rc-note">This is a computer-generated invoice and does not require a physical signature. ${doc.reverseCharge ? '<strong>Tax is payable on reverse charge basis.</strong>' : 'Tax is not payable on reverse charge basis.'}</div>
+  <div class="rc-note">${isSales ? 'This is a computer-generated invoice and does not require a physical signature.' : 'This is an official computer-generated Purchase Order.'} ${doc.reverseCharge ? '<strong>Tax is payable on reverse charge basis.</strong>' : 'Tax is not payable on reverse charge basis.'}</div>
 </div>
 <script>window.onload=function(){window.print();}</script>
 </body></html>`;

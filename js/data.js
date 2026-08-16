@@ -407,9 +407,14 @@ const DB = {
       const bill = {
         id: genId('BILL'), billNo: no, date, dueDate: daysLater(date, 30),
         supplierId: supplier.id, supplierName: supplier.name,
-        supplierGstin: supplier.gstin, supplierStateCode: supplier.stateCode,
-        buyerStateCode: bizStateCode, ...t,
-        status, paymentDate: payDate || null, notes: '', createdAt: new Date().toISOString(),
+        supplierGstin: supplier.gstin,
+        supplierAddress: `${supplier.address}, ${supplier.city} - ${supplier.pincode}`,
+        supplierState: supplier.state,
+        supplierStateCode: supplier.stateCode,
+        buyerStateCode: bizStateCode,
+        placeOfSupply: bizStateCode,
+        ...t,
+        status, paymentDate: payDate || null, notes: 'Purchased for inventory stock replenishment.', createdAt: new Date().toISOString(),
       };
       const list = this.getPurchases(); list.push(bill); this._set(this.K.PURCHASES, list);
     };
