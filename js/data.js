@@ -210,7 +210,7 @@ const DB = {
   setBiz(b) { this._set(this.K.BIZ, b); },
 
   /* Categories */
-  getCategories() { return this._get(this.K.CATEGORIES) || ['Electronics', 'Appliances', 'Services', 'Furniture', 'Stationery', 'Other']; },
+  getCategories() { return this._get(this.K.CATEGORIES) || ['Computers & Laptops', 'CCTV & Security', 'Networking & Cables', 'Computer Parts (RAM/SSD)', 'Printers & Peripherals', 'Services & AMC', 'Software & Licenses', 'Other']; },
   saveCategories(c) { this._set(this.K.CATEGORIES, c); },
 
   /* Customers */

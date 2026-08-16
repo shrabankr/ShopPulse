@@ -175,28 +175,71 @@ const Inventory = {
   openForm(productId = null) {
     const p = productId ? DB.getProductById(productId) : null;
     const cats = DB.getCategories();
-    const catOpts = cats.map(c => `<option ${c === (p?.category || 'Electronics') ? 'selected' : ''}>${c}</option>`).join('');
+    const catOpts = cats.map(c => `<option ${c === (p?.category || 'Computers & Laptops') ? 'selected' : ''}>${c}</option>`).join('');
     const gstOpts = GST_RATES.map(r => `<option value="${r}" ${parseFloat(p?.gstRate) === r ? 'selected' : ''}>${r}%</option>`).join('');
     const unitOpts = UNITS.map(u => `<option ${u === (p?.unit || 'Nos') ? 'selected' : ''}>${u}</option>`).join('');
 
-    App.modal(p ? 'Edit Product' : 'Add Product',
+    App.modal(p ? 'Edit Product / Service' : 'Add Product / Service',
       `<div class="form-grid">
-        <div class="form-group form-full"><label>Product Name <span class="required">*</span></label><input id="p-name" value="${p?.name || ''}" placeholder="Product / Service name"></div>
-        <div class="form-group"><label>SKU / Code</label><input id="p-sku" value="${p?.sku || ''}" placeholder="PROD-001"></div>
-        <div class="form-group"><label>HSN / SAC Code <span class="required">*</span></label><input id="p-hsn" value="${p?.hsn || ''}" placeholder="e.g. 8517"></div>
-        <div class="form-group"><label>Category</label><select id="p-cat">${catOpts}</select></div>
-        <div class="form-group"><label>Unit of Measurement</label><select id="p-unit">${unitOpts}</select></div>
-        <div class="form-group"><label>GST Rate <span class="required">*</span></label><select id="p-gst">${gstOpts}</select></div>
-        <div class="form-group"><label>Purchase Price (₹)</label><input id="p-pp" type="number" value="${p?.purchasePrice || ''}" min="0" step="0.01" placeholder="0.00"></div>
-        <div class="form-group"><label>Selling Price (₹) <span class="required">*</span></label><input id="p-sp" type="number" value="${p?.sellingPrice || ''}" min="0" step="0.01" placeholder="0.00"></div>
-        <div class="form-group"><label>Current Stock Quantity</label><input id="p-stock" type="number" value="${p?.stock ?? 0}" min="0" step="1"></div>
-        <div class="form-group"><label>Reorder Level (alert threshold)</label><input id="p-reorder" type="number" value="${p?.reorderLevel ?? 0}" min="0" step="1"></div>
-        <div class="form-group form-full"><label>Description / Notes</label><textarea id="p-desc">${p?.description || ''}</textarea></div>
+        <div class="form-group form-full">
+          <label>Product or Service Name <span class="required">*</span></label>
+          <input id="p-name" value="${p?.name || ''}" placeholder="e.g. Hikvision 4MP Camera or Annual Maintenance Contract (AMC)">
+        </div>
+        <div class="form-group">
+          <label>Category</label>
+          <select id="p-cat" onchange="Inventory._onCatChange(this)">${catOpts}</select>
+        </div>
+        <div class="form-group">
+          <label>HSN / SAC Code <span class="required">*</span></label>
+          <input id="p-hsn" value="${p?.hsn || ''}" placeholder="e.g. 8471 / 8525 / 998314">
+        </div>
+        <div class="form-group">
+          <label>SKU / Item Code</label>
+          <input id="p-sku" value="${p?.sku || ''}" placeholder="e.g. CAM-001 or AMC-01">
+        </div>
+        <div class="form-group">
+          <label>Unit of Measurement</label>
+          <select id="p-unit">${unitOpts}</select>
+        </div>
+        <div class="form-group">
+          <label>GST Rate <span class="required">*</span></label>
+          <select id="p-gst">${gstOpts}</select>
+        </div>
+        <div class="form-group">
+          <label>Selling Price (₹) <span class="required">*</span></label>
+          <input id="p-sp" type="number" value="${p?.sellingPrice || ''}" min="0" step="0.01" placeholder="0.00">
+        </div>
+        <div class="form-group">
+          <label>Purchase / Cost Price (₹)</label>
+          <input id="p-pp" type="number" value="${p?.purchasePrice || ''}" min="0" step="0.01" placeholder="0.00">
+        </div>
+        <div class="form-group" id="p-stock-group">
+          <label>Current Stock Quantity</label>
+          <input id="p-stock" type="number" value="${p?.stock ?? 0}" min="0" step="1">
+        </div>
+        <div class="form-group" id="p-reorder-group">
+          <label>Reorder Alert Level</label>
+          <input id="p-reorder" type="number" value="${p?.reorderLevel ?? 0}" min="0" step="1">
+        </div>
+        <div class="form-group form-full">
+          <label>Description / Specifications</label>
+          <textarea id="p-desc" placeholder="Technical specifications, warranty details, or service terms...">${p?.description || ''}</textarea>
+        </div>
       </div>`,
       `<button class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
-       <button class="btn btn-primary" onclick="Inventory.saveProduct('${productId || ''}')"><span class="material-icons">save</span> ${p ? 'Update' : 'Add'} Product</button>`,
+       <button class="btn btn-primary" onclick="Inventory.saveProduct('${productId || ''}')"><span class="material-icons">save</span> ${p ? 'Update' : 'Save'} Item</button>`,
       'modal-lg'
     );
+  },
+
+  _onCatChange(sel) {
+    const isService = sel.value.includes('Services') || sel.value.includes('Software');
+    const hsnInput = document.getElementById('p-hsn');
+    const unitSel = document.getElementById('p-unit');
+    if (isService) {
+      if (hsnInput && !hsnInput.value) hsnInput.value = '998314';
+      if (unitSel) unitSel.value = 'Job';
+    }
   },
 
   saveProduct(existingId) {
