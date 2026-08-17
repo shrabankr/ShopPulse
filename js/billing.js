@@ -1453,13 +1453,14 @@ const Billing = {
 
     const html = this.generateDocHtml(doc, type, window._viewDocFmt || DB.getBillFormat());
     const title = `${isSales ? (doc.invoiceNo || 'Invoice') : (doc.billNo || 'Bill')}_${(doc.customerName || doc.supplierName || 'Client').replace(/\s+/g, '_')}`;
+    const defaultDir = DB.getBiz().pdfSaveDir || '';
 
     if (window.desktopApp && window.desktopApp.savePdf) {
       App.toast('Preparing PDF export dialog...', 'info');
       try {
-        const res = await window.desktopApp.savePdf({ html, title });
+        const res = await window.desktopApp.savePdf({ html, title, defaultDir });
         if (res && res.success) {
-          App.toast(`🎉 PDF Saved Successfully!`, 'success');
+          App.toast(`🎉 PDF Saved to: ${res.filePath}`, 'success');
         }
       } catch (err) {
         console.error('PDF export error:', err);

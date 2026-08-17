@@ -239,13 +239,47 @@ ipcMain.handle('print-html', async (event, html) => {
   return { success: true };
 });
 
-ipcMain.handle('save-pdf', async (event, { html, title }) => {
+ipcMain.handle('select-directory', async (event, defaultPath) => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Select Destination Folder — ShopPulse',
+    defaultPath: defaultPath || undefined,
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+    return { canceled: true };
+  }
+  return { canceled: false, path: result.filePaths[0] };
+});
+
+ipcMain.handle('save-backup', async (event, { data, defaultDir, filename }) => {
   const fs = require('fs');
-  const sanitizedTitle = (title || 'ShopPulse_Invoice').replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+  const path = require('path');
+  const defaultFilename = filename || `ShopPulse_Backup_${new Date().toISOString().split('T')[0]}.json`;
+  const defaultPath = defaultDir ? path.join(defaultDir, defaultFilename) : defaultFilename;
+
   const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
-    title: 'Save Invoice as PDF',
-    defaultPath: `${sanitizedTitle}.pdf`,
-    filters: [{ name: 'PDF Documents', extensions: ['pdf'] }],
+    title: 'Save Database Backup — ShopPulse',
+    defaultPath: defaultPath,
+    filters: [{ name: 'JSON Backup (*.json)', extensions: ['json'] }, { name: 'All Files', extensions: ['*'] }],
+  });
+
+  if (canceled || !filePath) return { canceled: true };
+
+  fs.writeFileSync(filePath, typeof data === 'string' ? data : JSON.stringify(data, null, 2), 'utf8');
+  return { success: true, filePath };
+});
+
+ipcMain.handle('save-pdf', async (event, { html, title, defaultDir }) => {
+  const fs = require('fs');
+  const path = require('path');
+  const sanitizedTitle = (title || 'ShopPulse_Invoice').replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+  const defaultFilename = `${sanitizedTitle}.pdf`;
+  const defaultPath = defaultDir ? path.join(defaultDir, defaultFilename) : defaultFilename;
+
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+    title: 'Save Invoice as PDF — ShopPulse',
+    defaultPath: defaultPath,
+    filters: [{ name: 'PDF Documents (*.pdf)', extensions: ['pdf'] }],
   });
 
   if (canceled || !filePath) return { canceled: true };

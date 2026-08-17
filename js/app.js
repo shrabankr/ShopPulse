@@ -597,14 +597,42 @@ const App = {
   },
 
   /* ─── Backup & Restore Functions ─── */
-  downloadBackup() {
+  async downloadBackup() {
     if (DB.getRole() === 'staff') {
       this.toast('🔒 Staff cannot download database backups. Owner Mode required.', 'error');
       this.toggleRoleModal();
       return;
     }
-    const filename = DB.downloadBackup();
-    this.toast(`Backup downloaded: ${filename}`, 'success');
+
+    const backup = DB.createBackupObject();
+    const biz = DB.getBiz();
+    const dateStr = new Date().toISOString().split('T')[0];
+    const safeBiz = (biz.name || 'ShopPulse').replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `ShopPulse_Backup_${safeBiz}_${dateStr}.json`;
+
+    if (window.desktopApp && window.desktopApp.saveBackup) {
+      try {
+        const res = await window.desktopApp.saveBackup({
+          data: backup,
+          defaultDir: biz.backupDir || '',
+          filename: filename
+        });
+        if (res && res.success) {
+          const auth = DB.getAuth();
+          auth.lastBackupDate = new Date().toISOString();
+          DB.setAuth(auth);
+          DB.saveSnapshot(`Manual Backup Export (${filename})`);
+          this.toast(`✅ Backup saved safely to: ${res.filePath}`, 'success');
+        }
+      } catch (err) {
+        console.error('Desktop backup error:', err);
+        const fn = DB.downloadBackup();
+        this.toast(`Backup downloaded: ${fn}`, 'success');
+      }
+    } else {
+      const filename = DB.downloadBackup();
+      this.toast(`Backup downloaded: ${filename}`, 'success');
+    }
   },
 
   triggerRestore() {
@@ -1737,6 +1765,47 @@ ${JSON.stringify(data, null, 2)}
           </div>
         </div>
 
+        <div class="card" style="border-left:4px solid #8b5cf6">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+            <h3><span class="material-icons" style="vertical-align:middle;font-size:20px;color:#8b5cf6">folder_special</span> File Storage &amp; Save Locations</h3>
+            <span class="badge badge-info">Desktop Storage</span>
+          </div>
+          <div class="card-body">
+            <p style="font-size:.85rem;color:var(--text-secondary);margin-bottom:14px">
+              Configure custom destination folders on your computer for PDF invoice exports and database backups:
+            </p>
+            <div class="form-grid">
+              <div class="form-group form-full">
+                <label style="font-weight:700">📄 Default Bill / Invoice PDF Save Folder</label>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <input id="s-pdf-dir" value="${b.pdfSaveDir || ''}" placeholder="Default (Documents / Prompts on Save)" readonly style="background:#f8fafc;font-family:monospace;font-size:.85rem;cursor:default">
+                  <button class="btn btn-secondary btn-sm" type="button" onclick="App.browseFolder('pdf')" style="white-space:nowrap">
+                    <span class="material-icons" style="font-size:16px">folder_open</span> Browse Folder
+                  </button>
+                  ${b.pdfSaveDir ? `<button class="btn btn-ghost btn-sm text-danger" type="button" onclick="App.resetFolder('pdf')" title="Reset to default">✕</button>` : ''}
+                </div>
+                <div class="form-hint" style="font-size:.75rem;color:var(--text-secondary);margin-top:3px">
+                  When exporting or saving invoices as PDF, the save file dialog opens directly in this folder.
+                </div>
+              </div>
+
+              <div class="form-group form-full">
+                <label style="font-weight:700">💾 Database Backup Save Folder</label>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <input id="s-backup-dir" value="${b.backupDir || ''}" placeholder="Default (Downloads / Desktop)" readonly style="background:#f8fafc;font-family:monospace;font-size:.85rem;cursor:default">
+                  <button class="btn btn-secondary btn-sm" type="button" onclick="App.browseFolder('backup')" style="white-space:nowrap">
+                    <span class="material-icons" style="font-size:16px">folder_open</span> Browse Folder
+                  </button>
+                  ${b.backupDir ? `<button class="btn btn-ghost btn-sm text-danger" type="button" onclick="App.resetFolder('backup')" title="Reset to default">✕</button>` : ''}
+                </div>
+                <div class="form-hint" style="font-size:.75rem;color:var(--text-secondary);margin-top:3px">
+                  When exporting backups, ShopPulse automatically saves your JSON backup copy directly into this folder.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         ${DB.getRole() === 'staff' ? `
         <div class="card" style="border-left:4px solid var(--border)">
           <div class="card-header">
@@ -2177,6 +2246,65 @@ ${JSON.stringify(data, null, 2)}
     this.toast('🎉 Owner PIN updated successfully! 🔒', 'success');
   },
 
+  async browseFolder(type) {
+    if (DB.getRole() === 'staff') {
+      this.toast('🔒 Staff cannot change storage folder settings. Owner Mode required.', 'error');
+      this.toggleRoleModal();
+      return;
+    }
+
+    if (window.desktopApp && window.desktopApp.selectDirectory) {
+      const b = DB.getBiz();
+      const currentPath = type === 'pdf' ? (b.pdfSaveDir || '') : (b.backupDir || '');
+      try {
+        const res = await window.desktopApp.selectDirectory(currentPath);
+        if (res && !res.canceled && res.path) {
+          if (type === 'pdf') {
+            DB.setBiz({ ...b, pdfSaveDir: res.path });
+            const inp = document.getElementById('s-pdf-dir');
+            if (inp) inp.value = res.path;
+            this.toast(`📁 PDF Save Folder set to: ${res.path}`, 'success');
+          } else {
+            DB.setBiz({ ...b, backupDir: res.path });
+            const inp = document.getElementById('s-backup-dir');
+            if (inp) inp.value = res.path;
+            this.toast(`💾 Database Backup Folder set to: ${res.path}`, 'success');
+          }
+          this.renderSettings(document.getElementById('page-content'));
+        }
+      } catch (err) {
+        console.error('Folder selection error:', err);
+      }
+    } else {
+      const b = DB.getBiz();
+      const current = type === 'pdf' ? (b.pdfSaveDir || '') : (b.backupDir || '');
+      const folderPath = prompt(`Enter custom folder path for ${type === 'pdf' ? 'PDF bills/invoices' : 'database backups'}:`, current);
+      if (folderPath !== null) {
+        if (type === 'pdf') DB.setBiz({ ...b, pdfSaveDir: folderPath.trim() });
+        else DB.setBiz({ ...b, backupDir: folderPath.trim() });
+        this.toast('Save location updated!', 'success');
+        this.renderSettings(document.getElementById('page-content'));
+      }
+    }
+  },
+
+  resetFolder(type) {
+    if (DB.getRole() === 'staff') {
+      this.toast('🔒 Staff cannot change storage settings. Owner Mode required.', 'error');
+      this.toggleRoleModal();
+      return;
+    }
+    const b = DB.getBiz();
+    if (type === 'pdf') {
+      DB.setBiz({ ...b, pdfSaveDir: '' });
+      this.toast('PDF Save Folder reset to default.', 'info');
+    } else {
+      DB.setBiz({ ...b, backupDir: '' });
+      this.toast('Backup Folder reset to default.', 'info');
+    }
+    this.renderSettings(document.getElementById('page-content'));
+  },
+
   saveSettings() {
     const stateEl = document.getElementById('s-state');
     const selectedState = INDIAN_STATES.find(s => s.code === stateEl.value);
@@ -2204,6 +2332,8 @@ ${JSON.stringify(data, null, 2)}
       bankIFSC: document.getElementById('s-ifsc').value.trim(),
       bankBranch: document.getElementById('s-branch').value.trim(),
       upiId: document.getElementById('s-upi')?.value.trim() || '',
+      pdfSaveDir: document.getElementById('s-pdf-dir')?.value.trim() || DB.getBiz().pdfSaveDir || '',
+      backupDir: document.getElementById('s-backup-dir')?.value.trim() || DB.getBiz().backupDir || '',
       invoicePrefix: document.getElementById('s-invpfx').value.trim() || 'INV',
       billPrefix: document.getElementById('s-billpfx').value.trim() || 'PO',
       defaultPaymentTerms: parseInt(document.getElementById('s-terms').value) || 30,
