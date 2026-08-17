@@ -2296,13 +2296,9 @@ ${JSON.stringify(data, null, 2)}
             <strong style="color:var(--text-primary);font-size:.9rem">Q: How do I backup my shop data?</strong>
             <p>Go to <strong>Settings &amp; Backup Hub</strong> and click <strong>"Download Backup (.json)"</strong>. Keep this file in a USB drive or Google Drive weekly.</p>
           </div>
-          <div style="margin-bottom:14px">
-            <strong style="color:var(--text-primary);font-size:.9rem">Q: How do I hide profit margins from billing staff?</strong>
-            <p>Click the mode badge on the topbar and select <strong>"Lock to Staff Mode"</strong>. To switch back, enter your Owner PIN (Default: <code>1234</code>).</p>
-          </div>
           <div>
-            <strong style="color:var(--text-primary);font-size:.9rem">Q: How do I open the Developer Master Console?</strong>
-            <p>Press <strong><code>Ctrl + Shift + D</code></strong> anywhere on your keyboard or triple-click the ShopPulse logo on top-left.</p>
+            <strong style="color:var(--text-primary);font-size:.9rem">Q: How do I hide profit margins from billing staff?</strong>
+            <p>Click the mode badge on the topbar and select <strong>"Lock to Staff Mode"</strong>. To switch back, enter your Owner PIN.</p>
           </div>
         </div>
       </div>
