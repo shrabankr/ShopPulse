@@ -1278,6 +1278,22 @@ const Billing = {
     };
   },
 
+  /* ═══════════════════════════════════════════
+     PRINT DOCUMENT (Sales Invoice / Purchase Bill)
+  ═══════════════════════════════════════════ */
+  printDoc(id, type, formatOverride = null) {
+    const isSales = type === 'sales';
+    const doc = isSales ? DB.getSaleById(id) : DB.getPurchaseById(id);
+    if (!doc) {
+      App.toast('Document not found for printing', 'error');
+      return;
+    }
+
+    const format = formatOverride || window._viewDocFmt || DB.getBillFormat() || 'classic';
+    const html = this.generateDocHtml(doc, type, format, false);
+    this._executePrint(html);
+  },
+
   generateDocHtml(doc, type = 'sales', formatOverride = null, forcePreview = false) {
     if (!doc) return '';
     const isSales = type === 'sales';
