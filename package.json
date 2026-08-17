@@ -1,9 +1,9 @@
 {
   "name": "shoppulse",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "GST-compliant billing, inventory, and CRM desktop & web software for Indian IT & CCTV businesses",
   "author": {
-    "name": "Shraban Kumar",
+    "name": "Shraban Kumar Mahato",
     "url": "https://github.com/shrabankr"
   },
   "license": "MIT",

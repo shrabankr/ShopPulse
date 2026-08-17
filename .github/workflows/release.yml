@@ -46,18 +46,26 @@ jobs:
           files: |
             dist/ShopPulse.exe
             dist/ShopPulse-windows-x64.zip
-          name: ShopPulse v${{ github.ref_name }} — Official Desktop Release
+          name: ShopPulse Release ${{ github.ref_name }} (Beta)
           body: |
-            ## ⚡ ShopPulse Desktop ${{ github.ref_name }}
+            ## ⚡ ShopPulse Desktop ${{ github.ref_name }} (Beta)
             
             All-in-One GST-Compliant Billing, Inventory, and CRM for Indian IT & CCTV Businesses.
             
+            ### ✨ What's New in ${{ github.ref_name }}:
+            - 🛠️ **Developer License Switcher & Cloud Override**: Change plans, customize keys, and remote control client accounts.
+            - 🚚 **Separate Billing & Shipping Address**: 1-click radio toggle with full consignee delivery details printed on GST tax invoices.
+            - 🎨 **Live Bill Format Preview**: Interactive live preview modal with 5 distinct invoice formats (*Classic*, *Modern Minimalist*, *3-Inch POS Receipt*, *Executive Slate & Gold*, *Custom Template*).
+            - 🔒 **Owner Security PIN Management**: 3-step secure PIN update (*Current PIN*, *New PIN*, *Confirm PIN*) with master developer recovery.
+            - 📲 **WhatsApp Integration**: WhatsApp business numbers, 1-click customer WhatsApp chat, and WhatsApp bill sharing.
+            - 🖨️ **Seamless Desktop Printing**: Native Windows Print & Save as PDF without browser popup errors.
+            
             ### 📥 Download Options:
-            - **`ShopPulse.exe`** — Direct executable download.
-            - **`ShopPulse-windows-x64.zip`** (Recommended) — Full package with all runtime libraries.
+            - **`ShopPulse-windows-x64.zip`** (Recommended) — Full package with all runtime libraries. Extract and double-click `ShopPulse.exe`.
+            - **`ShopPulse.exe`** — Direct executable.
             
             ### 🚀 How to Run:
-            1. Extract `ShopPulse-windows-x64.zip` to any folder on your computer.
-            2. Double-click `ShopPulse.exe` to launch.
+            1. Download and extract `ShopPulse-windows-x64.zip`.
+            2. Double-click `ShopPulse.exe` to launch immediately (Offline-first, no setup needed).
           draft: false
           prerelease: false
