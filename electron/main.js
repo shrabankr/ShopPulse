@@ -166,6 +166,71 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
+// ── Native Desktop Print & PDF Export Handlers ──
+ipcMain.handle('print-html', async (event, html) => {
+  let printWin = new BrowserWindow({
+    show: false,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  });
+
+  const dataUri = 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
+  await printWin.loadURL(dataUri);
+
+  printWin.webContents.print({
+    silent: false,
+    printBackground: true,
+  }, () => {
+    if (printWin && !printWin.isDestroyed()) {
+      printWin.close();
+      printWin = null;
+    }
+  });
+
+  return { success: true };
+});
+
+ipcMain.handle('save-pdf', async (event, { html, title }) => {
+  const fs = require('fs');
+  const sanitizedTitle = (title || 'ShopPulse_Invoice').replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+    title: 'Save Invoice as PDF',
+    defaultPath: `${sanitizedTitle}.pdf`,
+    filters: [{ name: 'PDF Documents', extensions: ['pdf'] }],
+  });
+
+  if (canceled || !filePath) return { canceled: true };
+
+  let pdfWin = new BrowserWindow({
+    show: false,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  });
+
+  const dataUri = 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
+  await pdfWin.loadURL(dataUri);
+
+  const pdfBuffer = await pdfWin.webContents.printToPDF({
+    printBackground: true,
+    pageSize: 'A4',
+  });
+
+  fs.writeFileSync(filePath, pdfBuffer);
+  
+  if (pdfWin && !pdfWin.isDestroyed()) {
+    pdfWin.close();
+    pdfWin = null;
+  }
+
+  // Open saved PDF in default PDF reader automatically
+  shell.openPath(filePath);
+  return { success: true, filePath };
+});
+
 // ── Security: block new window creation ──
 app.on('web-contents-created', (_, contents) => {
   contents.on('will-navigate', (event, url) => {
@@ -175,3 +240,4 @@ app.on('web-contents-created', (_, contents) => {
     }
   });
 });
+

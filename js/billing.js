@@ -1205,7 +1205,7 @@ const Billing = {
   /* ═══════════════════════════════════════════
      EXPORT / SAVE AS PDF (LICENSED FEATURE 💎)
   ═══════════════════════════════════════════ */
-  exportPDF(id, type) {
+  async exportPDF(id, type) {
     const limits = DB.getTrialLimits();
     if (limits.isTrial) {
       App.toast('🔒 1-Click PDF Bill Export is exclusive to Licensed Commercial users. Activate your license to unlock PDF generation.', 'warning');
@@ -1213,8 +1213,28 @@ const Billing = {
       return;
     }
 
-    this.printDoc(id, type);
-    App.toast('Document ready! In the print dialog, select "Save as PDF" 📄', 'success');
+    const isSales = type === 'sales';
+    const doc = isSales ? DB.getSaleById(id) : DB.getPurchaseById(id);
+    if (!doc) return;
+
+    const html = this.generateDocHtml(doc, type, window._viewDocFmt || DB.getBillFormat());
+    const title = `${isSales ? (doc.invoiceNo || 'Invoice') : (doc.billNo || 'Bill')}_${(doc.customerName || doc.supplierName || 'Client').replace(/\s+/g, '_')}`;
+
+    if (window.desktopApp && window.desktopApp.savePdf) {
+      App.toast('Preparing PDF export dialog...', 'info');
+      try {
+        const res = await window.desktopApp.savePdf({ html, title });
+        if (res && res.success) {
+          App.toast(`🎉 PDF Saved Successfully!`, 'success');
+        }
+      } catch (err) {
+        console.error('PDF export error:', err);
+        this.printDoc(id, type);
+      }
+    } else {
+      this.printDoc(id, type);
+      App.toast('In the print dialog, choose "Save as PDF" 📄', 'info');
+    }
   },
 
   /* ═══════════════════════════════════════════
@@ -1627,42 +1647,37 @@ ${showWatermark ? `
     this._executePrint(html);
   },
 
-  _executePrint(html) {
+  async _executePrint(html) {
     App.closeModal();
+
+    // 1. If running in Electron Desktop App, use native desktop print bridge
+    if (window.desktopApp && typeof window.desktopApp.printHtml === 'function') {
+      try {
+        await window.desktopApp.printHtml(html);
+        return;
+      } catch (err) {
+        console.error('Desktop print bridge failed, falling back:', err);
+      }
+    }
+
+    // 2. Standard Web / Browser Fallback (Popup window with direct print call)
     try {
-      let iframe = document.getElementById('shoppulse-print-frame');
-      if (iframe && iframe.parentNode) iframe.parentNode.removeChild(iframe);
-
-      iframe = document.createElement('iframe');
-      iframe.id = 'shoppulse-print-frame';
-      iframe.style.position = 'fixed';
-      iframe.style.right = '0';
-      iframe.style.bottom = '0';
-      iframe.style.width = '0';
-      iframe.style.height = '0';
-      iframe.style.border = '0';
-      document.body.appendChild(iframe);
-
-      const frameDoc = iframe.contentWindow.document;
-      frameDoc.open();
-      frameDoc.write(html);
-      frameDoc.close();
-
-      setTimeout(() => {
-        try {
-          iframe.contentWindow.focus();
-          iframe.contentWindow.print();
-        } catch (e) {
-          const w = window.open('', '_blank');
-          if (w) { w.document.write(html); w.document.close(); }
-        }
-        setTimeout(() => {
-          if (iframe && iframe.parentNode) iframe.parentNode.removeChild(iframe);
-        }, 5000);
-      }, 350);
-    } catch (err) {
       const w = window.open('', '_blank');
-      if (w) { w.document.write(html); w.document.close(); }
+      if (w) {
+        w.document.open();
+        w.document.write(html);
+        w.document.close();
+        setTimeout(() => {
+          try {
+            w.focus();
+            w.print();
+          } catch (e) {}
+        }, 300);
+      } else {
+        App.toast('Please allow popups to print invoices', 'warning');
+      }
+    } catch (err) {
+      console.error('Print execution error:', err);
     }
   },
 

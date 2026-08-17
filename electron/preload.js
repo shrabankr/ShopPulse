@@ -1,10 +1,11 @@
 'use strict';
-// Preload runs in renderer context with access to Node APIs
-// Currently minimal — expand if you need Node.js features in the app
-const { contextBridge } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('desktopApp', {
-  version: '1.0.0',
-  platform: process.platform, // 'win32', 'darwin', 'linux'
+  version: '1.1.0',
+  platform: process.platform,
   isDesktop: true,
+  printHtml: (html) => ipcRenderer.invoke('print-html', html),
+  savePdf: (options) => ipcRenderer.invoke('save-pdf', options)
 });
+
