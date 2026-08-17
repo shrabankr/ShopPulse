@@ -78,7 +78,8 @@ const Billing = {
             </td>
             <td><span class="badge badge-${d.status}">${d.status.charAt(0).toUpperCase() + d.status.slice(1)}</span></td>
             <td class="action-col" onclick="event.stopPropagation()">
-              <button class="btn btn-xs btn-secondary" onclick="Billing.viewDoc('${d.id}','${type}')" title="View"><span class="material-icons" style="font-size:14px">visibility</span></button>
+              <button class="btn btn-xs btn-secondary" onclick="Billing.viewDoc('${d.id}','${type}')" title="View Details"><span class="material-icons" style="font-size:14px">visibility</span></button>
+              <button class="btn btn-xs btn-secondary" onclick="Billing.printDoc('${d.id}','${type}')" title="Print Invoice"><span class="material-icons" style="font-size:14px">print</span></button>
               <button class="btn btn-xs btn-secondary" onclick="Billing.shareWhatsApp('${d.id}','${type}')" title="Share WhatsApp"><span class="material-icons" style="font-size:14px;color:#25d366">chat</span></button>
               ${d.status !== 'paid' ? `<button class="btn btn-xs btn-success" onclick="Billing.markPaid('${d.id}','${type}')" title="Mark Paid"><span class="material-icons" style="font-size:14px">check_circle</span></button>` : ''}
               ${DB.getRole() !== 'staff' ? `<button class="btn btn-xs btn-ghost" onclick="Billing.deleteDoc('${d.id}','${type}')" title="Delete"><span class="material-icons" style="font-size:14px;color:var(--danger)">delete</span></button>` : ''}

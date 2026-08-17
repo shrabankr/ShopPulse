@@ -169,7 +169,11 @@ app.on('window-all-closed', () => {
 // ── Native Desktop Print & PDF Export Handlers ──
 ipcMain.handle('print-html', async (event, html) => {
   let printWin = new BrowserWindow({
-    show: false,
+    width: 860,
+    height: 900,
+    title: 'Print Preview & Dispatch — ShopPulse',
+    autoHideMenuBar: true,
+    show: true,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -179,14 +183,17 @@ ipcMain.handle('print-html', async (event, html) => {
   const dataUri = 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
   await printWin.loadURL(dataUri);
 
-  printWin.webContents.print({
-    silent: false,
-    printBackground: true,
-  }, () => {
-    if (printWin && !printWin.isDestroyed()) {
-      printWin.close();
-      printWin = null;
-    }
+  printWin.webContents.on('did-finish-load', () => {
+    setTimeout(() => {
+      printWin.webContents.print({
+        silent: false,
+        printBackground: true,
+      }, (success) => {
+        if (success && printWin && !printWin.isDestroyed()) {
+          printWin.close();
+        }
+      });
+    }, 250);
   });
 
   return { success: true };
@@ -204,6 +211,8 @@ ipcMain.handle('save-pdf', async (event, { html, title }) => {
   if (canceled || !filePath) return { canceled: true };
 
   let pdfWin = new BrowserWindow({
+    width: 860,
+    height: 900,
     show: false,
     webPreferences: {
       nodeIntegration: false,
@@ -214,9 +223,20 @@ ipcMain.handle('save-pdf', async (event, { html, title }) => {
   const dataUri = 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
   await pdfWin.loadURL(dataUri);
 
+  // Ensure DOM and fonts are completely loaded
+  await new Promise(resolve => {
+    if (pdfWin.webContents.isLoading()) {
+      pdfWin.webContents.once('did-finish-load', resolve);
+    } else {
+      resolve();
+    }
+  });
+  await new Promise(r => setTimeout(r, 200));
+
   const pdfBuffer = await pdfWin.webContents.printToPDF({
     printBackground: true,
     pageSize: 'A4',
+    margins: { top: 0.2, bottom: 0.2, left: 0.2, right: 0.2 },
   });
 
   fs.writeFileSync(filePath, pdfBuffer);
