@@ -108,6 +108,12 @@
   color: hsl(142,71%,30%);
   border: 1px solid var(--success-mid);
 }
+.badge-partial {
+  background: hsl(210, 100%, 94%);
+  color: hsl(215, 90%, 34%);
+  border: 1px solid hsl(215, 60%, 78%);
+  font-weight: 700;
+}
 .badge-unpaid, .badge-warning {
   background: var(--warning-light);
   color: hsl(38,92%,30%);

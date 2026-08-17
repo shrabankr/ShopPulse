@@ -364,6 +364,151 @@ const DB = {
     return no;
   },
 
+  /* Payments & Multi-Split Management */
+  getDocPayments(doc) {
+    if (!doc) return [];
+    if (Array.isArray(doc.payments) && doc.payments.length > 0) {
+      return doc.payments;
+    }
+    // Backward compatibility for existing records
+    if (doc.status === 'paid' && (doc.paidAmount || doc.total)) {
+      return [{
+        id: 'PAY-LEGACY-' + (doc.id || '1'),
+        date: doc.paymentDate || doc.date || new Date().toISOString().split('T')[0],
+        amount: parseFloat(doc.paidAmount || doc.total || 0),
+        method: doc.paymentMethod || 'Cash',
+        ref: doc.paymentRef || 'Settled',
+        notes: ''
+      }];
+    }
+    return [];
+  },
+
+  getDocPaidAmount(doc) {
+    if (!doc) return 0;
+    const payments = this.getDocPayments(doc);
+    return payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+  },
+
+  getDocDueAmount(doc) {
+    if (!doc) return 0;
+    const total = parseFloat(doc.total) || 0;
+    const paid = this.getDocPaidAmount(doc);
+    return Math.max(0, parseFloat((total - paid).toFixed(2)));
+  },
+
+  addDocPayment(id, type, payment) {
+    const isSales = type === 'sales';
+    const doc = isSales ? this.getSaleById(id) : this.getPurchaseById(id);
+    if (!doc) return null;
+
+    const payments = [...this.getDocPayments(doc)];
+    const newPayment = {
+      id: payment.id || genId('PAY'),
+      date: payment.date || new Date().toISOString().split('T')[0],
+      amount: parseFloat(payment.amount) || 0,
+      method: payment.method || 'Cash',
+      ref: payment.ref || '',
+      notes: payment.notes || '',
+      createdAt: new Date().toISOString()
+    };
+    payments.push(newPayment);
+
+    const paidAmount = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+    const total = parseFloat(doc.total) || 0;
+    
+    let status = 'unpaid';
+    if (paidAmount >= total - 0.01) {
+      status = 'paid';
+    } else if (paidAmount > 0) {
+      status = 'partial';
+    }
+
+    const updated = {
+      ...doc,
+      payments,
+      paidAmount,
+      status,
+      paymentDate: newPayment.date,
+      paymentMethod: newPayment.method,
+      paymentRef: newPayment.ref
+    };
+
+    if (isSales) this.saveSale(updated, false); else this.savePurchase(updated, false);
+    return updated;
+  },
+
+  updateDocPayment(id, type, paymentId, updatedPayment) {
+    const isSales = type === 'sales';
+    const doc = isSales ? this.getSaleById(id) : this.getPurchaseById(id);
+    if (!doc) return null;
+
+    let payments = [...this.getDocPayments(doc)];
+    const idx = payments.findIndex(p => p.id === paymentId);
+    if (idx > -1) {
+      payments[idx] = {
+        ...payments[idx],
+        ...updatedPayment,
+        amount: parseFloat(updatedPayment.amount) || payments[idx].amount
+      };
+    }
+
+    const paidAmount = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+    const total = parseFloat(doc.total) || 0;
+    
+    let status = 'unpaid';
+    if (paidAmount >= total - 0.01) {
+      status = 'paid';
+    } else if (paidAmount > 0) {
+      status = 'partial';
+    }
+
+    const lastPay = payments[payments.length - 1];
+    const updated = {
+      ...doc,
+      payments,
+      paidAmount,
+      status,
+      paymentDate: lastPay?.date || doc.paymentDate || '',
+      paymentMethod: lastPay?.method || doc.paymentMethod || '',
+      paymentRef: lastPay?.ref || doc.paymentRef || ''
+    };
+
+    if (isSales) this.saveSale(updated, false); else this.savePurchase(updated, false);
+    return updated;
+  },
+
+  deleteDocPayment(id, type, paymentId) {
+    const isSales = type === 'sales';
+    const doc = isSales ? this.getSaleById(id) : this.getPurchaseById(id);
+    if (!doc) return null;
+
+    let payments = this.getDocPayments(doc).filter(p => p.id !== paymentId);
+    const paidAmount = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+    const total = parseFloat(doc.total) || 0;
+    
+    let status = 'unpaid';
+    if (paidAmount >= total - 0.01) {
+      status = 'paid';
+    } else if (paidAmount > 0) {
+      status = 'partial';
+    }
+
+    const lastPay = payments[payments.length - 1];
+    const updated = {
+      ...doc,
+      payments,
+      paidAmount,
+      status,
+      paymentDate: lastPay?.date || '',
+      paymentMethod: lastPay?.method || '',
+      paymentRef: lastPay?.ref || ''
+    };
+
+    if (isSales) this.saveSale(updated, false); else this.savePurchase(updated, false);
+    return updated;
+  },
+
   /* Expenses */
   getExpenses() { return this._get(this.K.EXPENSES) || []; },
   getExpenseById(id) { return this.getExpenses().find(e => e.id === id); },

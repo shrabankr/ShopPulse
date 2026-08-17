@@ -63,6 +63,13 @@ const Billing = {
         const due = new Date(d.dueDate);
         const isOverdueStyle = d.status === 'overdue' || (d.status !== 'paid' && due < today);
 
+        const paidAmount = DB.getDocPaidAmount(d);
+        const dueAmount = DB.getDocDueAmount(d);
+        let statusBadge = `<span class="badge badge-${d.status}">${d.status.charAt(0).toUpperCase() + d.status.slice(1)}</span>`;
+        if (d.status === 'partial') {
+          statusBadge = `<span class="badge badge-partial" title="Paid: ${fmtCurrency(paidAmount)}">Partial (${fmtCurrency(paidAmount)})</span>`;
+        }
+
         return `
           <tr onclick="Billing.viewDoc('${d.id}','${type}')" style="cursor:pointer">
             <td><span class="mono">${no}</span></td>
@@ -74,14 +81,14 @@ const Billing = {
             <td style="white-space:nowrap;${isOverdueStyle ? 'color:var(--danger)' : ''}">${fmtDate(d.dueDate)}</td>
             <td class="text-right">
               <div class="amount-cell">${fmtCurrency(d.total)}</div>
-              <div class="tax-cell">${taxType}: ${fmtCurrency(d.totalTax || 0)}</div>
+              ${d.status === 'partial' ? `<div style="font-size:.72rem;color:var(--danger);font-weight:700">Due: ${fmtCurrency(dueAmount)}</div>` : `<div class="tax-cell">${taxType}: ${fmtCurrency(d.totalTax || 0)}</div>`}
             </td>
-            <td><span class="badge badge-${d.status}">${d.status.charAt(0).toUpperCase() + d.status.slice(1)}</span></td>
+            <td>${statusBadge}</td>
             <td class="action-col" onclick="event.stopPropagation()">
               <button class="btn btn-xs btn-secondary" onclick="Billing.viewDoc('${d.id}','${type}')" title="View Details"><span class="material-icons" style="font-size:14px">visibility</span></button>
               <button class="btn btn-xs btn-secondary" onclick="Billing.printDoc('${d.id}','${type}')" title="Print Invoice"><span class="material-icons" style="font-size:14px">print</span></button>
               <button class="btn btn-xs btn-secondary" onclick="Billing.shareWhatsApp('${d.id}','${type}')" title="Share WhatsApp"><span class="material-icons" style="font-size:14px;color:#25d366">chat</span></button>
-              ${d.status !== 'paid' ? `<button class="btn btn-xs btn-success" onclick="Billing.markPaid('${d.id}','${type}')" title="Mark Paid"><span class="material-icons" style="font-size:14px">check_circle</span></button>` : ''}
+              ${d.status !== 'paid' ? `<button class="btn btn-xs btn-success" onclick="Billing.markPaid('${d.id}','${type}')" title="Record / Manage Payment"><span class="material-icons" style="font-size:14px">add_card</span></button>` : ''}
               ${DB.getRole() !== 'staff' ? `<button class="btn btn-xs btn-ghost" onclick="Billing.deleteDoc('${d.id}','${type}')" title="Delete"><span class="material-icons" style="font-size:14px;color:var(--danger)">delete</span></button>` : ''}
             </td>
           </tr>`;
@@ -943,6 +950,15 @@ const Billing = {
     const activeFmt = biz.invoiceFormat || 'classic';
     window._viewDocFmt = activeFmt;
 
+    const paidAmount = DB.getDocPaidAmount(doc);
+    const dueAmount = DB.getDocDueAmount(doc);
+    const payments = DB.getDocPayments(doc);
+
+    let statusBadge = `<span class="badge badge-${doc.status}">${doc.status.charAt(0).toUpperCase() + doc.status.slice(1)}</span>`;
+    if (doc.status === 'partial') {
+      statusBadge = `<span class="badge badge-partial">Partial (Paid ${fmtCurrency(paidAmount)})</span>`;
+    }
+
     const actionButtons = `
       <button class="btn btn-ghost" onclick="App.closeModal()">Close</button>
       <button class="btn btn-secondary" onclick="Billing.shareWhatsApp('${id}','${type}')" title="${isLicensed ? 'Share via WhatsApp' : 'Commercial License Required 💎'}">
@@ -951,7 +967,7 @@ const Billing = {
       <button class="btn btn-secondary" onclick="Billing.exportPDF('${id}','${type}')" title="${isLicensed ? 'Save / Export as PDF' : 'Commercial License Required 💎'}">
         <span class="material-icons" style="color:#e74c3c">picture_as_pdf</span> PDF ${isLicensed ? '' : '<span style="font-size:10px">💎</span>'}
       </button>
-      ${doc.status !== 'paid' ? `<button class="btn btn-success" onclick="App.closeModal();Billing.markPaid('${id}','${type}')"><span class="material-icons">check_circle</span> Mark Paid</button>` : ''}
+      <button class="btn btn-success" onclick="App.closeModal();Billing.markPaid('${id}','${type}')"><span class="material-icons">payments</span> ${dueAmount > 0 ? 'Record Payment' : 'Payments &amp; History'}</button>
       ${isLicensed ? `
       <select id="vd-fmt" style="padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);font-size:.82rem;background:#fff;font-weight:600;color:var(--text-primary)" onchange="window._viewDocFmt = this.value">
         <option value="classic" ${activeFmt === 'classic' ? 'selected' : ''}>📄 Classic GST</option>
@@ -972,7 +988,7 @@ const Billing = {
           <div style="font-size:.8rem;color:var(--text-secondary)">${fmtDate(doc.date)} · Due ${fmtDate(doc.dueDate)}</div>
         </div>
         <div style="text-align:right">
-          <span class="badge badge-${doc.status}">${doc.status}</span>
+          ${statusBadge}
           <div style="font-size:1.4rem;font-weight:800;margin-top:4px;letter-spacing:-.03em">${fmtCurrency(doc.total)}</div>
         </div>
       </div>
@@ -1035,18 +1051,58 @@ const Billing = {
           </tfoot>
         </table>
       </div>
-      ${doc.notes ? `<div style="font-size:.82rem;color:var(--text-secondary);padding:8px 12px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border)"><strong>Notes:</strong> ${doc.notes}</div>` : ''}
+
+      <!-- Payment Breakdown & History Card -->
+      <div style="margin-bottom:14px;padding:12px 14px;background:#f8fafc;border:1px solid var(--border);border-radius:var(--radius-sm)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+          <strong style="font-size:.85rem;color:var(--text-primary);display:flex;align-items:center;gap:6px">
+            <span class="material-icons" style="font-size:16px;color:var(--primary)">account_balance_wallet</span> Payment Status &amp; Settlements
+          </strong>
+          <div style="display:flex;gap:10px;align-items:center;font-size:.82rem">
+            <span>Total: <strong>${fmtCurrency(doc.total)}</strong></span>
+            <span style="color:var(--success)">Paid: <strong>${fmtCurrency(paidAmount)}</strong></span>
+            ${dueAmount > 0 ? `<span style="color:var(--danger);font-weight:700">Remaining Due: ${fmtCurrency(dueAmount)}</span>` : '<span class="badge badge-paid">Fully Settled</span>'}
+            <button class="btn btn-xs btn-primary" onclick="App.closeModal();Billing.markPaid('${id}','${type}')" style="margin-left:6px">
+              <span class="material-icons" style="font-size:13px">add_card</span> ${dueAmount > 0 ? '+ Add Payment' : 'Manage / Change Method'}
+            </button>
+          </div>
+        </div>
+
+        ${payments.length > 0 ? `
+        <div style="overflow-x:auto">
+          <table class="table table-sm" style="font-size:.78rem;margin:0;background:#fff;border-radius:4px;border:1px solid var(--border)">
+            <thead><tr><th>Date</th><th>Mode / Method</th><th>Reference</th><th class="text-right">Amount</th><th style="width:80px;text-align:center">Action</th></tr></thead>
+            <tbody>
+              ${payments.map(p => `
+                <tr>
+                  <td>${fmtDate(p.date)}</td>
+                  <td><span class="badge badge-info" style="font-size:.72rem">${p.method}</span></td>
+                  <td><span class="mono" style="font-size:.75rem">${p.ref || '—'}</span></td>
+                  <td class="text-right font-bold">${fmtCurrency(p.amount)}</td>
+                  <td style="text-align:center;white-space:nowrap">
+                    <button class="btn btn-xs btn-ghost" onclick="App.closeModal();Billing.editPayment('${id}','${type}','${p.id}')" title="Change Payment Method / Date">✏️ Edit</button>
+                    <button class="btn btn-xs btn-ghost" onclick="App.closeModal();Billing.deletePayment('${id}','${type}','${p.id}')" title="Delete Payment Record" style="color:var(--danger)">🗑️</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+        ` : '<div style="font-size:.8rem;color:var(--text-secondary);font-style:italic">No payment transactions recorded yet.</div>'}
+      </div>
+
+      ${doc.notes ? `<div style="font-size:.82rem;color:var(--text-secondary);padding:8px 12px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border);margin-bottom:14px"><strong>Notes:</strong> ${doc.notes}</div>` : ''}
       
-      ${isSales && isLicensed && biz.upiId ? `
-      <div style="margin-top:14px;padding:12px 16px;background:linear-gradient(135deg, hsl(220,90%,97%) 0%, #fff 100%);border:1px solid hsl(220,80%,85%);border-radius:var(--radius-md);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      ${isSales && isLicensed && biz.upiId && dueAmount > 0 ? `
+      <div style="padding:12px 16px;background:linear-gradient(135deg, hsl(220,90%,97%) 0%, #fff 100%);border:1px solid hsl(220,80%,85%);border-radius:var(--radius-md);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
         <div style="display:flex;align-items:center;gap:12px">
-          <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&margin=0&data=${encodeURIComponent(`upi://pay?pa=${biz.upiId}&pn=${biz.name}&am=${parseFloat(doc.total).toFixed(2)}&tn=${encodeURIComponent('Invoice ' + no)}&cu=INR`)}" style="width:76px;height:76px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;padding:4px" alt="UPI QR">
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&margin=0&data=${encodeURIComponent(`upi://pay?pa=${biz.upiId}&pn=${biz.name}&am=${parseFloat(dueAmount).toFixed(2)}&tn=${encodeURIComponent('Invoice ' + no)}&cu=INR`)}" style="width:76px;height:76px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;padding:4px" alt="UPI QR">
           <div>
             <div style="font-weight:700;font-size:.88rem;color:#1e3a8a;display:flex;align-items:center;gap:6px">
-              <span class="material-icons" style="font-size:18px;color:#2563eb">qr_code_scanner</span> Scan &amp; Pay with UPI
+              <span class="material-icons" style="font-size:18px;color:#2563eb">qr_code_scanner</span> Scan &amp; Pay Due Amount via UPI
             </div>
             <div style="font-size:.8rem;color:var(--text-secondary);margin-top:2px">UPI ID: <strong style="color:var(--text-primary)">${biz.upiId}</strong></div>
-            <div style="font-size:.78rem;color:${doc.status === 'paid' ? '#059669' : '#d97706'};font-weight:600;margin-top:2px">Bill Amount: ${fmtCurrency(doc.total)} ${doc.status === 'paid' ? '(Paid)' : '(Payment Due)'}</div>
+            <div style="font-size:.78rem;color:#d97706;font-weight:600;margin-top:2px">Due Amount: ${fmtCurrency(dueAmount)}</div>
           </div>
         </div>
         <div style="font-size:.75rem;color:var(--text-secondary);text-align:right">
@@ -1054,54 +1110,231 @@ const Billing = {
         </div>
       </div>
       ` : ''}
-
-      ${doc.paymentDate ? `<div style="margin-top:10px;font-size:.82rem"><span class="badge badge-paid">Paid</span> on ${fmtDate(doc.paymentDate)} via ${doc.paymentMethod || '—'}</div>` : ''}
       `,
       actionButtons, 'modal-xl'
     );
   },
 
   /* ═══════════════════════════════════════════
-     MARK PAID
+     PAYMENT MANAGEMENT (Partial & Multi-Mode)
   ═══════════════════════════════════════════ */
   markPaid(id, type) {
     const isSales = type === 'sales';
     const doc = isSales ? DB.getSaleById(id) : DB.getPurchaseById(id);
     if (!doc) return;
 
-    App.modal('Record Payment',
-      `<div class="payment-summary-box">
-        <div class="amount-due">${fmtCurrency(doc.total)}</div>
-        <p>${isSales ? doc.invoiceNo : doc.billNo} — ${isSales ? doc.customerName : doc.supplierName}</p>
+    const total = parseFloat(doc.total) || 0;
+    const paidAmount = DB.getDocPaidAmount(doc);
+    const dueAmount = DB.getDocDueAmount(doc);
+    const payments = DB.getDocPayments(doc);
+    const today = new Date().toISOString().split('T')[0];
+
+    const paymentsTableHtml = payments.length > 0 ? `
+      <div style="margin-top:16px;margin-bottom:16px">
+        <strong style="font-size:.85rem;color:var(--text-primary);display:flex;align-items:center;gap:6px;margin-bottom:6px">
+          <span class="material-icons" style="font-size:16px;color:var(--primary)">history</span> Payment History (${payments.length} transaction${payments.length > 1 ? 's' : ''})
+        </strong>
+        <div style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm)">
+          <table class="table table-sm" style="font-size:.8rem;margin:0">
+            <thead style="background:var(--bg)">
+              <tr>
+                <th>Date</th>
+                <th>Mode</th>
+                <th>Reference</th>
+                <th class="text-right">Amount</th>
+                <th style="width:75px;text-align:center">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${payments.map(p => `
+                <tr>
+                  <td>${fmtDate(p.date)}</td>
+                  <td><span class="badge badge-info" style="font-size:.72rem">${p.method}</span></td>
+                  <td><span class="mono" style="font-size:.75rem">${p.ref || '—'}</span></td>
+                  <td class="text-right font-bold">${fmtCurrency(p.amount)}</td>
+                  <td style="white-space:nowrap;text-align:center">
+                    <button class="btn btn-xs btn-ghost" onclick="Billing.editPayment('${id}','${type}','${p.id}')" title="Edit / Change Method">✏️</button>
+                    <button class="btn btn-xs btn-ghost" onclick="Billing.deletePayment('${id}','${type}','${p.id}')" title="Delete Payment" style="color:var(--danger)">🗑️</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
       </div>
-      <div class="form-grid">
-        <div class="form-group"><label>Payment Date <span class="required">*</span></label><input id="pay-date" type="date" value="${new Date().toISOString().split('T')[0]}"></div>
-        <div class="form-group"><label>Payment Method</label><select id="pay-method">${PAYMENT_METHODS.map(m => `<option>${m}</option>`).join('')}</select></div>
-        <div class="form-group form-full"><label>Reference / Transaction ID</label><input id="pay-ref" placeholder="Optional UTR/cheque no…"></div>
-      </div>`,
-      `<button class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
-       <button class="btn btn-success" onclick="Billing._confirmPaid('${id}','${type}')"><span class="material-icons">check_circle</span> Confirm Payment</button>`,
+    ` : '';
+
+    App.modal(`Record Payment — ${isSales ? doc.invoiceNo : doc.billNo}`,
+      `
+      <!-- Payment Status Hero Card -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px;background:var(--bg);padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);text-align:center">
+        <div>
+          <div style="font-size:.72rem;color:var(--text-secondary);text-transform:uppercase;font-weight:700">Total Bill</div>
+          <div style="font-size:1.1rem;font-weight:800;color:var(--text-primary)">${fmtCurrency(total)}</div>
+        </div>
+        <div>
+          <div style="font-size:.72rem;color:var(--text-secondary);text-transform:uppercase;font-weight:700">Paid So Far</div>
+          <div style="font-size:1.1rem;font-weight:800;color:var(--success)">${fmtCurrency(paidAmount)}</div>
+        </div>
+        <div style="background:#fff;border-radius:6px;padding:4px;border:1px solid ${dueAmount > 0 ? 'var(--warning)' : 'var(--success)'}">
+          <div style="font-size:.72rem;color:${dueAmount > 0 ? 'var(--warning-dark, #b45309)' : 'var(--success)'};text-transform:uppercase;font-weight:700">Remaining Due</div>
+          <div style="font-size:1.15rem;font-weight:900;color:${dueAmount > 0 ? 'var(--danger)' : 'var(--success)'}">${fmtCurrency(dueAmount)}</div>
+        </div>
+      </div>
+
+      ${paymentsTableHtml}
+
+      <!-- Add New / Partial Payment Form -->
+      <div style="padding:12px;background:#f8fafc;border:1px solid var(--border);border-radius:var(--radius-sm)">
+        <strong style="font-size:.85rem;color:var(--primary);display:flex;align-items:center;gap:6px;margin-bottom:10px">
+          <span class="material-icons" style="font-size:16px">add_card</span> Add Payment Entry (Partial / Split Mode)
+        </strong>
+
+        <div class="form-grid" style="font-size:.85rem">
+          <div class="form-group form-full">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+              <label style="margin:0">Amount to Pay (₹) <span class="required">*</span></label>
+              ${dueAmount > 0 ? `
+              <div style="display:flex;gap:4px">
+                <button type="button" class="btn btn-xs btn-ghost" onclick="document.getElementById('pay-amount').value = ${Math.min(100, dueAmount)};">₹100</button>
+                <button type="button" class="btn btn-xs btn-ghost" onclick="document.getElementById('pay-amount').value = ${Math.min(500, dueAmount)};">₹500</button>
+                <button type="button" class="btn btn-xs btn-ghost" onclick="document.getElementById('pay-amount').value = ${Math.min(1000, dueAmount)};">₹1,000</button>
+                <button type="button" class="btn btn-xs btn-primary" onclick="document.getElementById('pay-amount').value = ${dueAmount};">Full (₹${dueAmount})</button>
+              </div>
+              ` : ''}
+            </div>
+            <input id="pay-amount" type="number" step="0.01" value="${dueAmount > 0 ? dueAmount : ''}" placeholder="e.g. 100 or 1000" style="font-size:1.1rem;font-weight:700">
+          </div>
+
+          <div class="form-group">
+            <label>Payment Method <span class="required">*</span></label>
+            <select id="pay-method">
+              ${PAYMENT_METHODS.map(m => `<option value="${m}">${m}</option>`).join('')}
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Payment Date <span class="required">*</span></label>
+            <input id="pay-date" type="date" value="${today}">
+          </div>
+
+          <div class="form-group form-full">
+            <label>Reference / Transaction ID / UTR / Cheque</label>
+            <input id="pay-ref" placeholder="e.g. UPI-Ref / Cash counter / Cheque #">
+          </div>
+
+          <div class="form-group form-full">
+            <label>Notes / Remarks</label>
+            <input id="pay-notes" placeholder="Optional remarks…">
+          </div>
+        </div>
+      </div>
+      `,
+      `
+      <button class="btn btn-ghost" onclick="App.closeModal()">Close</button>
+      <button class="btn btn-primary" onclick="Billing._savePaymentEntry('${id}','${type}')"><span class="material-icons">save</span> Save Payment</button>
+      `,
+      'modal-md'
+    );
+  },
+
+  _savePaymentEntry(id, type) {
+    const amt = parseFloat(document.getElementById('pay-amount')?.value) || 0;
+    if (amt <= 0) {
+      App.toast('Please enter a valid payment amount greater than 0', 'error');
+      document.getElementById('pay-amount')?.focus();
+      return;
+    }
+
+    const method = document.getElementById('pay-method')?.value || 'Cash';
+    const date = document.getElementById('pay-date')?.value || new Date().toISOString().split('T')[0];
+    const ref = document.getElementById('pay-ref')?.value.trim() || '';
+    const notes = document.getElementById('pay-notes')?.value.trim() || '';
+
+    const updated = DB.addDocPayment(id, type, { amount: amt, method, date, ref, notes });
+    if (!updated) return;
+
+    const remainingDue = DB.getDocDueAmount(updated);
+    if (remainingDue > 0) {
+      App.toast(`✅ Recorded ₹${amt.toLocaleString('en-IN')} via ${method}! Remaining Due: ₹${remainingDue.toLocaleString('en-IN')}`, 'info');
+      this.markPaid(id, type);
+    } else {
+      App.toast(`🎉 Full payment completed for ${type === 'sales' ? updated.invoiceNo : updated.billNo}!`, 'success');
+      App.closeModal();
+      App.refreshSidebar();
+      setTimeout(() => App.route(), 300);
+    }
+  },
+
+  editPayment(docId, type, paymentId) {
+    const isSales = type === 'sales';
+    const doc = isSales ? DB.getSaleById(docId) : DB.getPurchaseById(docId);
+    if (!doc) return;
+
+    const payments = DB.getDocPayments(doc);
+    const payment = payments.find(p => p.id === paymentId);
+    if (!payment) return;
+
+    App.modal('✏️ Edit Payment / Change Method',
+      `
+      <div class="form-grid" style="font-size:.85rem">
+        <div class="form-group form-full">
+          <label>Payment Method <span class="required">*</span></label>
+          <select id="edit-pay-method">
+            ${PAYMENT_METHODS.map(m => `<option value="${m}" ${m === payment.method ? 'selected' : ''}>${m}</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Amount (₹) <span class="required">*</span></label>
+          <input id="edit-pay-amount" type="number" step="0.01" value="${payment.amount}">
+        </div>
+
+        <div class="form-group">
+          <label>Payment Date <span class="required">*</span></label>
+          <input id="edit-pay-date" type="date" value="${payment.date}">
+        </div>
+
+        <div class="form-group form-full">
+          <label>Reference / Transaction ID / UTR</label>
+          <input id="edit-pay-ref" value="${payment.ref || ''}" placeholder="e.g. UPI-Ref / Cheque #">
+        </div>
+
+        <div class="form-group form-full">
+          <label>Notes</label>
+          <input id="edit-pay-notes" value="${payment.notes || ''}">
+        </div>
+      </div>
+      `,
+      `
+      <button class="btn btn-ghost" onclick="Billing.markPaid('${docId}','${type}')">Back</button>
+      <button class="btn btn-primary" onclick="Billing._saveEditedPayment('${docId}','${type}','${paymentId}')"><span class="material-icons">check</span> Update Payment</button>
+      `,
       'modal-sm'
     );
   },
 
-  _confirmPaid(id, type) {
-    const payDate = document.getElementById('pay-date')?.value;
-    const payMethod = document.getElementById('pay-method')?.value;
-    const payRef = document.getElementById('pay-ref')?.value;
-    if (!payDate) { App.toast('Please select a payment date', 'error'); return; }
+  _saveEditedPayment(docId, type, paymentId) {
+    const amt = parseFloat(document.getElementById('edit-pay-amount')?.value) || 0;
+    if (amt <= 0) {
+      App.toast('Amount must be greater than 0', 'error');
+      return;
+    }
+    const method = document.getElementById('edit-pay-method')?.value || 'Cash';
+    const date = document.getElementById('edit-pay-date')?.value || new Date().toISOString().split('T')[0];
+    const ref = document.getElementById('edit-pay-ref')?.value.trim() || '';
+    const notes = document.getElementById('edit-pay-notes')?.value.trim() || '';
 
-    const isSales = type === 'sales';
-    const doc = isSales ? DB.getSaleById(id) : DB.getPurchaseById(id);
-    if (!doc) return;
+    DB.updateDocPayment(docId, type, paymentId, { amount: amt, method, date, ref, notes });
+    App.toast(`Payment method updated to ${method}! 💳`, 'success');
+    this.markPaid(docId, type);
+  },
 
-    const updated = { ...doc, status: 'paid', paymentDate: payDate, paymentMethod: payMethod, paymentRef: payRef || '' };
-    if (isSales) DB.saveSale(updated, false); else DB.savePurchase(updated, false);
-
-    App.toast(`Payment recorded for ${isSales ? doc.invoiceNo : doc.billNo}!`);
-    App.closeModal();
-    App.refreshSidebar();
-    setTimeout(() => App.route(), 300);
+  deletePayment(docId, type, paymentId) {
+    if (!confirm('Remove this payment record?\n\nThe due balance will be restored.')) return;
+    DB.deleteDocPayment(docId, type, paymentId);
+    App.toast('Payment entry removed. Due amount updated.', 'warning');
+    this.markPaid(docId, type);
   },
 
   /* ═══════════════════════════════════════════
@@ -1729,25 +1962,33 @@ ${showWatermark ? `
       </div>
       <div class="table-wrap">
         <table class="table">
-          <thead><tr><th>Invoice No</th><th>Customer</th><th>Invoice Date</th><th>Due Date</th><th>Days Overdue</th><th class="text-right">Amount</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Invoice No</th><th>Customer</th><th>Invoice Date</th><th>Due Date</th><th>Days Overdue</th><th class="text-right">Balance Due</th><th>Status</th><th></th></tr></thead>
           <tbody>
             ${sales.length === 0 ? `<tr><td colspan="8"><div class="table-empty"><span class="material-icons">check_circle</span><p>All invoices are paid! 🎉</p></div></td></tr>` :
         sales.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).map(s => {
           const daysOver = -daysBetween(today, new Date(s.dueDate));
           const isOver = daysOver > 0;
+          const dueAmt = DB.getDocDueAmount(s);
+          const paidAmt = DB.getDocPaidAmount(s);
+          let badge = `<span class="badge badge-${s.status}">${s.status}</span>`;
+          if (s.status === 'partial') badge = `<span class="badge badge-partial">Partial (${fmtCurrency(paidAmt)})</span>`;
+
           return `<tr onclick="Billing.viewDoc('${s.id}','sales')" style="cursor:pointer">
                 <td><span class="mono">${s.invoiceNo}</span></td>
                 <td><div style="font-weight:600">${s.customerName}</div><div style="font-size:.72rem;color:var(--text-secondary);font-family:monospace">${s.customerGstin || 'Unregistered'}</div></td>
                 <td>${fmtDate(s.date)}</td>
                 <td style="${isOver ? 'color:var(--danger);font-weight:600' : ''}">${fmtDate(s.dueDate)}</td>
                 <td>${isOver ? `<span class="badge badge-overdue">${daysOver} days</span>` : '<span class="badge badge-success">Not due</span>'}</td>
-                <td class="text-right amount-cell ${isOver ? 'due' : ''}">${fmtCurrency(s.total)}</td>
-                <td><span class="badge badge-${s.status}">${s.status}</span></td>
-                <td class="action-col" onclick="event.stopPropagation()"><button class="btn btn-xs btn-success" onclick="Billing.markPaid('${s.id}','sales')"><span class="material-icons" style="font-size:13px">check</span> Pay</button></td>
+                <td class="text-right amount-cell ${isOver ? 'due' : ''}">
+                  <div>${fmtCurrency(dueAmt)}</div>
+                  ${paidAmt > 0 ? `<div style="font-size:.7rem;color:var(--text-secondary)">Total: ${fmtCurrency(s.total)}</div>` : ''}
+                </td>
+                <td>${badge}</td>
+                <td class="action-col" onclick="event.stopPropagation()"><button class="btn btn-xs btn-success" onclick="Billing.markPaid('${s.id}','sales')"><span class="material-icons" style="font-size:13px">payments</span> Record Payment</button></td>
               </tr>`;
         }).join('')}
           </tbody>
-          ${sales.length > 0 ? `<tfoot><tr><td colspan="5" class="text-right">Total Outstanding</td><td colspan="2" class="text-right font-bold">${fmtCurrency(sales.reduce((s, i) => s + i.total, 0))}</td><td></td></tr></tfoot>` : ''}
+          ${sales.length > 0 ? `<tfoot><tr><td colspan="5" class="text-right">Total Outstanding Due</td><td colspan="2" class="text-right font-bold">${fmtCurrency(sales.reduce((s, i) => s + DB.getDocDueAmount(i), 0))}</td><td></td></tr></tfoot>` : ''}
         </table>
       </div>`;
   },
@@ -1777,31 +2018,39 @@ ${showWatermark ? `
     ].map(a => `
           <div class="aging-card ${a.cls}">
             <div class="aging-label">${a.label}</div>
-            <div class="aging-amount">${fmtCurrency(a.items.reduce((s, b) => s + b.total, 0))}</div>
+            <div class="aging-amount">${fmtCurrency(a.items.reduce((s, b) => s + DB.getDocDueAmount(b), 0))}</div>
             <div class="aging-count">${a.items.length} bill${a.items.length !== 1 ? 's' : ''}</div>
           </div>`).join('')}
       </div>
       <div class="table-wrap">
         <table class="table">
-          <thead><tr><th>Bill No</th><th>Supplier</th><th>Bill Date</th><th>Due Date</th><th>Days Overdue</th><th class="text-right">Amount</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Bill No</th><th>Supplier</th><th>Bill Date</th><th>Due Date</th><th>Days Overdue</th><th class="text-right">Balance Due</th><th>Status</th><th></th></tr></thead>
           <tbody>
             ${purchases.length === 0 ? `<tr><td colspan="8"><div class="table-empty"><span class="material-icons">check_circle</span><p>No pending bills! 🎉</p></div></td></tr>` :
         purchases.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).map(p => {
           const daysOver = -daysBetween(today, new Date(p.dueDate));
           const isOver = daysOver > 0;
+          const dueAmt = DB.getDocDueAmount(p);
+          const paidAmt = DB.getDocPaidAmount(p);
+          let badge = `<span class="badge badge-${p.status}">${p.status}</span>`;
+          if (p.status === 'partial') badge = `<span class="badge badge-partial">Partial (${fmtCurrency(paidAmt)})</span>`;
+
           return `<tr onclick="Billing.viewDoc('${p.id}','purchases')" style="cursor:pointer">
                 <td><span class="mono">${p.billNo}</span></td>
                 <td><div style="font-weight:600">${p.supplierName}</div><div style="font-size:.72rem;color:var(--text-secondary);font-family:monospace">${p.supplierGstin || '—'}</div></td>
                 <td>${fmtDate(p.date)}</td>
                 <td style="${isOver ? 'color:var(--danger);font-weight:600' : ''}">${fmtDate(p.dueDate)}</td>
                 <td>${isOver ? `<span class="badge badge-overdue">${daysOver} days</span>` : '<span class="badge badge-success">Not due</span>'}</td>
-                <td class="text-right amount-cell ${isOver ? 'due' : ''}">${fmtCurrency(p.total)}</td>
-                <td><span class="badge badge-${p.status}">${p.status}</span></td>
-                <td class="action-col" onclick="event.stopPropagation()"><button class="btn btn-xs btn-success" onclick="Billing.markPaid('${p.id}','purchases')"><span class="material-icons" style="font-size:13px">check</span> Pay</button></td>
+                <td class="text-right amount-cell ${isOver ? 'due' : ''}">
+                  <div>${fmtCurrency(dueAmt)}</div>
+                  ${paidAmt > 0 ? `<div style="font-size:.7rem;color:var(--text-secondary)">Total: ${fmtCurrency(p.total)}</div>` : ''}
+                </td>
+                <td>${badge}</td>
+                <td class="action-col" onclick="event.stopPropagation()"><button class="btn btn-xs btn-success" onclick="Billing.markPaid('${p.id}','purchases')"><span class="material-icons" style="font-size:13px">payments</span> Record Payment</button></td>
               </tr>`;
         }).join('')}
           </tbody>
-          ${purchases.length > 0 ? `<tfoot><tr><td colspan="5" class="text-right">Total Payable</td><td colspan="2" class="text-right font-bold">${fmtCurrency(purchases.reduce((s, b) => s + b.total, 0))}</td><td></td></tr></tfoot>` : ''}
+          ${purchases.length > 0 ? `<tfoot><tr><td colspan="5" class="text-right">Total Payable Due</td><td colspan="2" class="text-right font-bold">${fmtCurrency(purchases.reduce((s, b) => s + DB.getDocDueAmount(b), 0))}</td><td></td></tr></tfoot>` : ''}
         </table>
       </div>`;
   }
