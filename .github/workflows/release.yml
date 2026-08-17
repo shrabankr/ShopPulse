@@ -26,13 +26,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Package Desktop App
-        run: npm run pack
+      - name: Build Windows Standalone Installer & Portable Executable
+        run: npx electron-builder --win --x64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Copy loose EXE for direct download
-        shell: pwsh
-        run: |
-          Copy-Item "dist/ShopPulse-win32-x64/ShopPulse.exe" -Destination "dist/ShopPulse.exe" -Force
+      - name: Package Desktop Directory Archive
+        run: npm run pack
 
       - name: Create Portable ZIP archive
         shell: pwsh
@@ -44,8 +44,8 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            dist/ShopPulse.exe
-            dist/ShopPulse-windows-x64.zip
+            dist/*.exe
+            dist/*.zip
           name: ShopPulse Release ${{ github.ref_name }} (Beta)
           body: |
             ## ⚡ ShopPulse Desktop ${{ github.ref_name }} (Beta)
@@ -53,18 +53,19 @@ jobs:
             All-in-One GST-Compliant Billing, Inventory, and CRM for Indian IT & CCTV Businesses.
             
             ### ✨ What's New in ${{ github.ref_name }}:
+            - 📁 **Configurable PDF & Backup Locations**: Set custom folders for PDF invoices and database backups with folder browsing.
+            - 🖨️ **Interactive Print Preview & PDF Dispatch Toolbar**: Choose between **Select Printer & Print** (choose any connected printer) and **Save as PDF** (native vector PDF export dialog).
             - 💳 **Partial & Split Multi-Mode Payments**: Record split payments (e.g. ₹100 via Cash + ₹1,000 via UPI) with live remaining balance tracking.
             - ✏️ **Edit Payment Method Post-Payment**: Correct payment mode (e.g. Cash to UPI), dates, amounts, and UTR/cheque reference numbers anytime from invoice history.
-            - 🖨️ **Interactive Print Preview & PDF Dispatch Toolbar**: Choose between **Select Printer & Print** (choose any connected printer) and **Save as PDF** (native vector PDF export dialog).
             - 🚚 **Separate Billing & Shipping Address**: 1-click radio toggle with full consignee delivery details printed on GST tax invoices.
             - 🎨 **Live Bill Format Preview**: Interactive live preview modal with 5 distinct invoice formats (*Classic*, *Modern Minimalist*, *3-Inch POS Receipt*, *Executive Slate & Gold*, *Custom Template*).
             - 🔒 **Owner Security PIN Management**: 3-step secure PIN update (*Current PIN*, *New PIN*, *Confirm PIN*) with master developer recovery.
             - 📲 **WhatsApp Integration**: WhatsApp business numbers, 1-click customer WhatsApp chat, and WhatsApp bill sharing.
             - 🛠️ **Developer Master Console**: Full diagnostics, DB inspection, and plan switcher.
-            - 🖨️ **Seamless Desktop Printing**: Native Windows Print & Save as PDF without browser popup errors.
             
             ### 📥 Download Options:
-            - **`ShopPulse-windows-x64.zip`** (Recommended) — Full package with all runtime libraries. Extract and double-click `ShopPulse.exe`.
+            - **`ShopPulse-Setup.exe`**: Full Windows Installer (installs to Desktop & Start Menu, bundles all DLLs).
+            - **`ShopPulse-windows-x64.zip`**: Portable ZIP archive — extract and run `ShopPulse.exe` anywhere without installing.
             - **`ShopPulse.exe`** — Direct executable.
             
             ### 🚀 How to Run:
