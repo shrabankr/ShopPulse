@@ -32,10 +32,24 @@ function createWindow() {
     mainWindow.focus();
   });
 
-  // Open external links in browser, not in Electron
+  // Open external links in browser, allow internal print/preview windows in Electron
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
-    return { action: 'deny' };
+    if (url && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('mailto:'))) {
+      shell.openExternal(url);
+      return { action: 'deny' };
+    }
+    return {
+      action: 'allow',
+      overrideBrowserWindowOptions: {
+        width: 960,
+        height: 800,
+        autoHideMenuBar: true,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true
+        }
+      }
+    };
   });
 
   mainWindow.on('closed', () => { mainWindow = null; });

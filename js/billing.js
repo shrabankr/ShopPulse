@@ -278,6 +278,55 @@ const Billing = {
           </div>`}
         </div>
 
+        <!-- Optional Separate Shipping / Delivery Address Section -->
+        <div style="margin-top:14px;margin-bottom:16px;padding:12px 14px;background:#f8fafc;border:1px solid var(--border);border-radius:var(--radius-sm)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:8px">
+            <strong style="font-size:.88rem;color:var(--text-primary);display:flex;align-items:center;gap:6px">
+              <span class="material-icons" style="font-size:18px;color:var(--primary)">local_shipping</span> Shipping &amp; Delivery Address (Consignee)
+            </strong>
+            <div style="display:flex;gap:16px;align-items:center;font-size:.84rem">
+              <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-weight:600">
+                <input type="radio" name="shipping-mode" id="ship-mode-same" value="same" ${!doc || !doc.hasShippingAddress ? 'checked' : ''} onchange="Billing._toggleShippingAddress(false)">
+                Same as Billing Address
+              </label>
+              <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-weight:600;color:var(--primary)">
+                <input type="radio" name="shipping-mode" id="ship-mode-diff" value="diff" ${doc && doc.hasShippingAddress ? 'checked' : ''} onchange="Billing._toggleShippingAddress(true)">
+                Different Shipping / Delivery Address
+              </label>
+            </div>
+          </div>
+
+          <!-- Collapsible Separate Shipping Fields -->
+          <div id="shipping-address-container" style="display:${doc && doc.hasShippingAddress ? 'block' : 'none'};padding-top:10px;border-top:1px dashed var(--border)">
+            <div class="form-grid" style="font-size:.84rem">
+              <div class="form-group form-full">
+                <label>Consignee / Recipient Name <span class="required">*</span></label>
+                <input id="ship-name" value="${doc?.shippingName || ''}" placeholder="e.g. Site Office / Branch Warehouse / Mr. Rahul">
+              </div>
+              <div class="form-group form-full">
+                <label>Shipping / Delivery Street Address <span class="required">*</span></label>
+                <textarea id="ship-addr" rows="2" placeholder="Building, Street, Plot No., Industrial Area">${doc?.shippingAddress || ''}</textarea>
+              </div>
+              <div class="form-group">
+                <label>Shipping City</label>
+                <input id="ship-city" value="${doc?.shippingCity || ''}" placeholder="e.g. Mumbai">
+              </div>
+              <div class="form-group">
+                <label>Shipping State</label>
+                <select id="ship-state">${stateOpts}</select>
+              </div>
+              <div class="form-group">
+                <label>Shipping Pincode</label>
+                <input id="ship-pin" value="${doc?.shippingPincode || ''}" placeholder="e.g. 400001" maxlength="6">
+              </div>
+              <div class="form-group">
+                <label>Consignee GSTIN (Optional)</label>
+                <input id="ship-gstin" value="${doc?.shippingGstin || ''}" placeholder="15-digit GSTIN (if registered)" maxlength="15" style="text-transform:uppercase;font-family:monospace">
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Line Items -->
         <div class="invoice-section-title" style="margin-top:20px"><span class="material-icons">list</span> Line Items</div>
         <div class="line-items-wrap">
@@ -644,6 +693,29 @@ const Billing = {
     }
   },
 
+  _toggleShippingAddress(isDifferent) {
+    const container = document.getElementById('shipping-address-container');
+    if (container) {
+      container.style.display = isDifferent ? 'block' : 'none';
+      if (isDifferent) {
+        // Pre-fill defaults from selected customer/supplier if shipping fields are empty
+        const partyEl = document.getElementById('if-party');
+        const isSales = window._iType === 'sales';
+        const party = partyEl?.value ? (isSales ? DB.getCustomerById(partyEl.value) : DB.getSupplierById(partyEl.value)) : null;
+        const nameInput = document.getElementById('ship-name');
+        if (nameInput && !nameInput.value && party) nameInput.value = party.name || '';
+        const addrInput = document.getElementById('ship-addr');
+        if (addrInput && !addrInput.value && party) addrInput.value = party.address || '';
+        const cityInput = document.getElementById('ship-city');
+        if (cityInput && !cityInput.value && party) cityInput.value = party.city || '';
+        const pinInput = document.getElementById('ship-pin');
+        if (pinInput && !pinInput.value && party) pinInput.value = party.pincode || '';
+        const stateSelect = document.getElementById('ship-state');
+        if (stateSelect && party?.stateCode) stateSelect.value = party.stateCode;
+      }
+    }
+  },
+
   _getRows() {
     const rows = [];
     const tbody = document.getElementById('items-tbody');
@@ -668,9 +740,9 @@ const Billing = {
     return rows;
   },
 
-  _recalc(overrideSellerCode) {
-    const isSales = window._iType === 'sales';
+  _recalc(overrideSellerCode = null) {
     const biz = DB.getBiz();
+    const isSales = window._iType === 'sales';
     const partyEl = document.getElementById('if-party');
     const partyId = partyEl?.value;
     const party = isSales ? DB.getCustomerById(partyId) : DB.getSupplierById(partyId);
@@ -759,6 +831,17 @@ const Billing = {
     const reverseCharge = document.getElementById('if-rc')?.value === 'true';
     const status = isDraft ? 'draft' : 'sent';
 
+    // Separate Shipping / Consignee Address details
+    const hasShippingAddress = document.getElementById('ship-mode-diff')?.checked || false;
+    const shippingName = hasShippingAddress ? (document.getElementById('ship-name')?.value.trim() || party.name) : '';
+    const shippingAddress = hasShippingAddress ? (document.getElementById('ship-addr')?.value.trim() || '') : '';
+    const shippingCity = hasShippingAddress ? (document.getElementById('ship-city')?.value.trim() || '') : '';
+    const shipStateEl = document.getElementById('ship-state');
+    const shippingStateCode = hasShippingAddress ? (shipStateEl?.value || '') : '';
+    const shippingState = hasShippingAddress ? (INDIAN_STATES.find(s => s.code === shippingStateCode)?.name || '') : '';
+    const shippingPincode = hasShippingAddress ? (document.getElementById('ship-pin')?.value.trim() || '') : '';
+    const shippingGstin = hasShippingAddress ? (document.getElementById('ship-gstin')?.value.toUpperCase().trim() || '') : '';
+
     if (isSales) {
       const data = {
         ...(existingDoc || {}),
@@ -768,8 +851,19 @@ const Billing = {
         customerGstin: party.gstin || '',
         customerAddress: `${party.address || ''}, ${party.city || ''} - ${party.pincode || ''}`,
         customerState: party.state, customerStateCode: party.stateCode,
+        customerPhone: party.phone || '',
+        customerWhatsapp: party.whatsapp || party.phone || '',
         placeOfSupply: buyerStateCode, sellerStateCode: biz.stateCode,
-        reverseCharge, notes, ...t,
+        reverseCharge, notes,
+        hasShippingAddress,
+        shippingName,
+        shippingAddress,
+        shippingCity,
+        shippingState,
+        shippingStateCode,
+        shippingPincode,
+        shippingGstin,
+        ...t,
       };
       if (isDraft) data.status = 'draft';
       DB.saveSale(data, !existingDoc);
@@ -784,9 +878,20 @@ const Billing = {
         supplierAddress: `${party.address || ''}, ${party.city || ''} - ${party.pincode || ''}`,
         supplierState: party.state,
         supplierStateCode: party.stateCode,
+        supplierPhone: party.phone || '',
+        supplierWhatsapp: party.whatsapp || party.phone || '',
         buyerStateCode: biz.stateCode,
         placeOfSupply: biz.stateCode,
-        reverseCharge, notes, ...t,
+        reverseCharge, notes,
+        hasShippingAddress,
+        shippingName,
+        shippingAddress,
+        shippingCity,
+        shippingState,
+        shippingStateCode,
+        shippingPincode,
+        shippingGstin,
+        ...t,
       };
       if (isDraft) data.status = 'draft';
       DB.savePurchase(data, !existingDoc);
@@ -796,6 +901,13 @@ const Billing = {
     App.closeModal();
     App.refreshSidebar();
     setTimeout(() => App.route(), 300);
+
+    // Sync updated invoice counts & revenue to Google Sheet
+    setTimeout(() => {
+      if (typeof DB !== 'undefined' && DB.syncRemoteLicense) {
+        DB.syncRemoteLicense().catch(() => {});
+      }
+    }, 1500);
   },
 
   /* ═══════════════════════════════════════════
@@ -1038,7 +1150,11 @@ const Billing = {
     const biz = DB.getBiz();
     const no = isSales ? doc.invoiceNo : doc.billNo;
     const partyName = isSales ? doc.customerName : doc.supplierName;
-    const partyPhone = isSales ? (doc.customerPhone || DB.getCustomerById(doc.customerId)?.phone || '') : (doc.supplierPhone || DB.getSupplierById(doc.supplierId)?.phone || '');
+    const customerObj = isSales ? DB.getCustomerById(doc.customerId) : null;
+    const supplierObj = !isSales ? DB.getSupplierById(doc.supplierId) : null;
+    const partyPhone = isSales 
+      ? (doc.customerWhatsapp || customerObj?.whatsapp || doc.customerPhone || customerObj?.phone || '') 
+      : (doc.supplierWhatsapp || supplierObj?.whatsapp || doc.supplierPhone || supplierObj?.phone || '');
 
     const itemsSummary = (doc.items || []).map((it, idx) => `• *${it.name}* (Qty: ${it.qty} ${it.unit || 'Nos'}) - ₹${(it.totalAmt || 0).toLocaleString('en-IN')}`).join('\n');
 
@@ -1102,15 +1218,48 @@ const Billing = {
   },
 
   /* ═══════════════════════════════════════════
-     PRINT (GST-COMPLIANT LAYOUT)
+     SAMPLE DOC PREVIEW
   ═══════════════════════════════════════════ */
-  /* ═══════════════════════════════════════════
-     PRINT (GST-COMPLIANT MULTI-FORMAT ENGINE)
-  ═══════════════════════════════════════════ */
-  printDoc(id, type, formatOverride = null) {
+  getSampleDoc() {
+    const sales = DB.getSales();
+    if (sales && sales.length > 0) return sales[0];
+    const biz = DB.getBiz();
+    return {
+      id: 'SAMPLE-PREVIEW-001',
+      invoiceNo: `${biz.invoicePrefix || 'APS'}/2026-27/0001`,
+      date: new Date().toISOString().split('T')[0],
+      dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+      customerId: 'CUST-001',
+      customerName: 'Zenith Infotech Pvt Ltd',
+      customerGstin: '27AABCZ9321K1Z4',
+      customerAddress: 'Plot 15, Rajiv Gandhi IT Park, Hinjewadi',
+      customerCity: 'Pune',
+      customerState: 'Maharashtra',
+      customerStateCode: '27',
+      customerPhone: '+91 98230 01122',
+      customerWhatsapp: '+91 98230 01122',
+      placeOfSupply: '27',
+      isIntra: true,
+      reverseCharge: false,
+      status: 'unpaid',
+      subtotal: 45000,
+      totalCgst: 4050,
+      totalSgst: 4050,
+      totalIgst: 0,
+      totalTax: 8100,
+      total: 53100,
+      items: [
+        { name: 'Hikvision 4MP IP Dome Camera (ColorVu)', hsn: '8525', qty: 4, unit: 'Nos', rate: 4500, discount: 0, taxableValue: 18000, cgstRate: 9, cgstAmt: 1620, sgstRate: 9, sgstAmt: 1620, igstRate: 0, igstAmt: 0, totalAmt: 21240 },
+        { name: 'Hikvision 16-Channel 4K NVR', hsn: '8521', qty: 1, unit: 'Nos', rate: 12000, discount: 0, taxableValue: 12000, cgstRate: 9, cgstAmt: 1080, sgstRate: 9, sgstAmt: 1080, igstRate: 0, igstAmt: 0, totalAmt: 14160 },
+        { name: 'Western Digital 4TB Purple Surveillance HDD', hsn: '8471', qty: 1, unit: 'Nos', rate: 8500, discount: 0, taxableValue: 8500, cgstRate: 9, cgstAmt: 765, sgstRate: 9, sgstAmt: 765, igstRate: 0, igstAmt: 0, totalAmt: 10030 },
+        { name: 'CCTV Installation & Network Setup', hsn: '998714', qty: 1, unit: 'Job', rate: 6500, discount: 0, taxableValue: 6500, cgstRate: 9, cgstAmt: 585, sgstRate: 9, sgstAmt: 585, igstRate: 0, igstAmt: 0, totalAmt: 7670 }
+      ]
+    };
+  },
+
+  generateDocHtml(doc, type = 'sales', formatOverride = null, forcePreview = false) {
+    if (!doc) return '';
     const isSales = type === 'sales';
-    const doc = isSales ? DB.getSaleById(id) : DB.getPurchaseById(id);
-    if (!doc) return;
     const biz = DB.getBiz();
     const posState = INDIAN_STATES.find(s => s.code === (isSales ? doc.placeOfSupply : (doc.buyerStateCode || biz.stateCode)));
     const no = isSales ? doc.invoiceNo : doc.billNo;
@@ -1120,13 +1269,13 @@ const Billing = {
     const partyState = isSales ? doc.customerState : doc.supplierState;
 
     const limits = DB.getTrialLimits();
-    const showWatermark = limits.isTrial && limits.isWatermarkNeeded;
-    const format = limits.isTrial ? 'classic' : (formatOverride || DB.getBillFormat() || 'classic');
+    const showWatermark = !forcePreview && limits.isTrial && limits.isWatermarkNeeded;
+    const format = (limits.isTrial && !forcePreview) ? 'classic' : (formatOverride || DB.getBillFormat() || 'classic');
     const customTpl = DB.getCustomTemplate();
 
     // ─── 1. COMPACT 3-INCH THERMAL POS FORMAT (80MM ROLL) ───
     if (format === 'compact_pos') {
-      const posHtml = `<!DOCTYPE html>
+      return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
@@ -1159,6 +1308,7 @@ body { font-family: 'Courier New', Courier, monospace, sans-serif; font-size: 8.
   <div><strong>Date:</strong> ${fmtDate(doc.date)}</div>
   <div><strong>Customer:</strong> ${partyName}</div>
   ${partyGstin ? `<div><strong>GSTIN:</strong> ${partyGstin}</div>` : ''}
+  ${doc.hasShippingAddress && doc.shippingAddress ? `<div><strong>Ship To:</strong> ${doc.shippingName || partyName}, ${doc.shippingAddress}</div>` : ''}
 </div>
 <div class="pos-divider"></div>
 <table class="pos-table">
@@ -1191,12 +1341,7 @@ ${!limits.isTrial && isSales && biz.upiId ? `
 ` : ''}
 <div class="pos-divider"></div>
 <div class="pos-center pos-sub">Thank you for your business!<br>${biz.website || 'Visit Again!'}</div>
-<script>window.onload=function(){window.print();}</script>
 </body></html>`;
-      const w = window.open('', '_blank');
-      if (w) { w.document.write(posHtml); w.document.close(); }
-      App.closeModal();
-      return;
     }
 
     // ─── 2. STANDARD A4 MULTI-FORMAT THEMES (Classic, Modern, Executive, Custom) ───
@@ -1224,16 +1369,15 @@ ${!limits.isTrial && isSales && biz.upiId ? `
       headerBorder = '2px solid #0f172a;';
       headerBgStyle = 'background: #0f172a; color: #f8fafc; border-bottom: 3px solid #d97706;';
       itemTableBorder = 'border: .5pt solid #cbd5e1;';
-      zebraRows = false;
+      zebraRows = true;
     } else if (format === 'custom') {
-      primaryColor = customTpl.primaryColor || '#1e293b';
-      accentColor = customTpl.accentColor || '#0284c7';
-      fontFamily = customTpl.fontFamily || 'Arial, sans-serif';
-      logoPos = customTpl.logoPos || 'left';
-      headerBorder = customTpl.showBorder ? `1.5px solid ${primaryColor};` : '1px solid #e2e8f0;';
-      headerBgStyle = customTpl.headerStyle === 'solid' ? `background: ${primaryColor}; color: #fff;` : (customTpl.headerStyle === 'border' ? `border-left: 6px solid ${primaryColor}; background: #f8fafc; color: ${primaryColor};` : `background: #f1f5f9; color: ${primaryColor};`);
-      itemTableBorder = customTpl.showBorder ? 'border: .5pt solid #cbd5e1;' : 'border-bottom: 1px solid #e2e8f0;';
-      zebraRows = !customTpl.showBorder;
+      primaryColor = customTpl.primaryColor || '#1a2332';
+      accentColor = customTpl.accentColor || '#2563eb';
+      fontFamily = customTpl.fontFamily || 'Arial, Helvetica, sans-serif';
+      headerBorder = `1.5px solid ${primaryColor}`;
+      headerBgStyle = `background: ${primaryColor}; color: #fff;`;
+      zebraRows = customTpl.zebraRows || false;
+      logoPos = customTpl.logoPosition || 'left';
     }
 
     let taxCols = doc.isIntra
@@ -1261,28 +1405,31 @@ ${!limits.isTrial && isSales && biz.upiId ? `
       ? `<tr><td>CGST</td><td>${fmtCurrency(doc.totalCgst)}</td></tr><tr><td>SGST</td><td>${fmtCurrency(doc.totalSgst)}</td></tr>`
       : `<tr><td>IGST</td><td>${fmtCurrency(doc.totalIgst)}</td></tr>`;
 
-    const html = `<!DOCTYPE html>
+    return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
-<title>${no}</title>
+<title>${no} - ${biz.name}</title>
 <style>
-body { font-family: ${fontFamily}; font-size: 10pt; color: #000; margin: 0; padding: 12mm; position: relative; }
-.inv-header { ${headerBorder} position: relative; z-index: 1; background: #fff; }
-.inv-title-bar { ${headerBgStyle} text-align: center; padding: 8px 0 6px; font-size: 13pt; font-weight: 900; letter-spacing: .15em; }
+@page { size: A4; margin: 10mm 12mm; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: ${fontFamily}; font-size: 9pt; color: #111; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.inv-wrap { max-width: 210mm; margin: 0 auto; ${headerBorder} position: relative; }
+.inv-title-bar { ${headerBgStyle} text-align: center; font-size: 13pt; font-weight: 800; letter-spacing: .08em; padding: 6px 0; text-transform: uppercase; }
 .watermark {
-  position: fixed;
-  top: 50%;
+  position: absolute;
+  top: 45%;
   left: 50%;
-  transform: translate(-50%, -50%) rotate(-30deg);
+  transform: translate(-50%, -50%) rotate(-35deg);
   font-size: 38pt;
   font-weight: 900;
-  color: rgba(220, 53, 69, 0.12);
-  text-transform: uppercase;
+  color: rgba(220, 53, 69, 0.14);
   letter-spacing: 0.12em;
+  text-transform: uppercase;
   pointer-events: none;
-  z-index: 9999;
+  z-index: 100;
   text-align: center;
+  line-height: 1.2;
   border: 3.5px dashed rgba(220, 53, 69, 0.22);
   padding: 24px 44px;
   border-radius: 12px;
@@ -1298,8 +1445,6 @@ body { font-family: ${fontFamily}; font-size: 10pt; color: #000; margin: 0; padd
 }
 .inv-biz-row { display: flex; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid #ccc; align-items: center; }
 .inv-biz-name { font-size: 12pt; font-weight: 700; color: ${primaryColor}; }
-.inv-biz-detail { font-size: 8.5pt; color: #333; line-height: 1.6; }
-.inv-biz-gstin { font-size: 9pt; font-weight: 700; color: ${primaryColor}; margin-top: 4px; }
 .inv-meta-table td { padding: 2px 4px; font-size: 8.5pt; }
 .inv-meta-table td:first-child { color: #555; text-align: right; padding-right: 8px; }
 .inv-meta-table td:last-child { font-weight: 700; }
@@ -1311,22 +1456,16 @@ body { font-family: ${fontFamily}; font-size: 10pt; color: #000; margin: 0; padd
 .inv-party-addr { font-size: 8.5pt; color: #333; line-height: 1.5; }
 .inv-party-gstin { font-size: 8.5pt; font-weight: 700; color: ${primaryColor}; margin-top: 4px; }
 .supply-bar { padding: 5px 14px; background: #f5f5f5; border-bottom: 1px solid #ccc; font-size: 8.5pt; color: #333; }
-.supply-bar strong { color: #000; }
 table.items { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
-table.items th { background: #e8eaf0; padding: 6px 5px; text-align: center; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .03em; border: .5pt solid #aaa; }
+table.items th { background: #e8eaf0; padding: 6px 5px; text-align: center; font-size: 7.5pt; text-transform: uppercase; border: .5pt solid #aaa; }
 table.items td { ${itemTableBorder} padding: 5px 5px; vertical-align: middle; }
 table.items .sr, table.items .qty, table.items .hsn { text-align: center; }
 table.items .rate, table.items .amount { text-align: right; }
 .inv-footer { display: grid; grid-template-columns: 1fr auto; border-top: 1px solid #ccc; }
 .inv-bank { padding: 10px 14px; border-right: 1px solid #ccc; }
-.inv-bank h4 { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: ${primaryColor}; margin-bottom: 6px; }
-.inv-bank table td { padding: 2px 6px 2px 0; font-size: 8pt; }
-.inv-bank table td:first-child { color: #555; min-width: 80px; font-size: 7.5pt; }
-.inv-bank table td:last-child { font-weight: 600; }
 .inv-totals { min-width: 220px; }
 .inv-totals table { width: 100%; border-collapse: collapse; }
 .inv-totals table td { padding: 4px 10px; border-bottom: .5pt solid #eee; font-size: 8.5pt; }
-.inv-totals table td:last-child { text-align: right; font-weight: 600; }
 .grand-total td { background: ${primaryColor} !important; color: #fff !important; font-weight: 800 !important; font-size: 10pt !important; padding: 7px 10px !important; }
 .inv-words { border-top: 1px solid #ccc; padding: 6px 14px; font-size: 8pt; font-style: italic; }
 .inv-sign { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid #ccc; }
@@ -1334,32 +1473,29 @@ table.items .rate, table.items .amount { text-align: right; }
 .inv-sign-box:first-child { border-right: 1px solid #ccc; }
 .inv-sign-name { font-weight: 700; font-size: 9pt; color: #000; margin-top: 24px; }
 .rc-note { font-size: 7.5pt; color: #777; padding: 4px 14px; border-top: .5pt solid #ccc; }
-@media print { @page { margin: 8mm; } body { padding: 0; } }
+@media print { .inv-wrap { border: none; } }
 </style>
 </head>
 <body>
-<div class="inv-header">
+<div class="inv-wrap">
   <div class="inv-title-bar">${isSales ? 'TAX INVOICE' : 'PURCHASE ORDER'}</div>
   <div class="inv-biz-row">
     <div style="display:flex;align-items:center;gap:12px;${logoPos === 'right' ? 'flex-direction:row-reverse' : ''}">
       ${!limits.isTrial && biz.logo && logoPos !== 'none' ? `<img src="${biz.logo}" style="max-height:52px;max-width:90px;object-fit:contain">` : ''}
       <div>
         <div class="inv-biz-name">${biz.name}</div>
-        ${!limits.isTrial && biz.tagline ? `<div style="font-size:8pt;color:#555;font-style:italic;margin-bottom:2px">${biz.tagline}</div>` : ''}
-        <div class="inv-biz-detail">${biz.address}, ${biz.city} — ${biz.pincode}<br>Phone: ${biz.phone} | Email: ${biz.email}</div>
-        <div class="inv-biz-gstin">GSTIN: ${biz.gstin || 'Not Registered'} &nbsp;|&nbsp; PAN: ${biz.pan || '—'}</div>
+        <div style="font-size:8.5pt">${biz.address}, ${biz.city} — ${biz.pincode}</div>
+        <div style="font-size:8.5pt">GSTIN: ${biz.gstin || '—'}</div>
       </div>
     </div>
     <div>
       <table class="inv-meta-table">
         <tr><td>${isSales ? 'Invoice No.' : 'PO / Bill No.'}</td><td>${no}</td></tr>
-        <tr><td>${isSales ? 'Invoice Date' : 'Order Date'}</td><td>${fmtDate(doc.date)}</td></tr>
-        <tr><td>Due Date</td><td>${fmtDate(doc.dueDate)}</td></tr>
-        <tr><td>Status</td><td>${doc.status.toUpperCase()}</td></tr>
+        <tr><td>Date</td><td>${fmtDate(doc.date)}</td></tr>
       </table>
     </div>
   </div>
-  <div class="inv-parties">
+  <div class="inv-parties" style="${doc.hasShippingAddress && doc.shippingAddress ? 'grid-template-columns: 1fr 1fr 1fr;' : ''}">
     ${isSales ? `
     <div class="inv-party">
       <div class="inv-party-label">Seller / Supplier</div>
@@ -1368,60 +1504,63 @@ table.items .rate, table.items .amount { text-align: right; }
       <div class="inv-party-gstin">GSTIN: ${biz.gstin || '—'}</div>
     </div>
     <div class="inv-party">
-      <div class="inv-party-label">Buyer / Recipient</div>
+      <div class="inv-party-label">Billed To (Buyer)</div>
       <div class="inv-party-name">${partyName}</div>
       <div class="inv-party-addr">${partyAddr}<br>${partyState || ''}</div>
       <div class="inv-party-gstin">${partyGstin ? 'GSTIN: ' + partyGstin : 'Unregistered (Consumer)'}</div>
-    </div>` : `
+    </div>
+    ${doc.hasShippingAddress && doc.shippingAddress ? `
+    <div class="inv-party" style="border-left:1px solid #ccc;background:#fcfcfc">
+      <div class="inv-party-label" style="color:${primaryColor}">Shipped To (Consignee)</div>
+      <div class="inv-party-name">${doc.shippingName || partyName}</div>
+      <div class="inv-party-addr">${doc.shippingAddress}${doc.shippingCity ? ', ' + doc.shippingCity : ''}${doc.shippingPincode ? ' — ' + doc.shippingPincode : ''}<br>${doc.shippingState || ''}</div>
+      <div class="inv-party-gstin">${doc.shippingGstin ? 'GSTIN: ' + doc.shippingGstin : (partyGstin ? 'GSTIN: ' + partyGstin : 'Unregistered')}</div>
+    </div>` : ''}
+    ` : `
     <div class="inv-party">
-      <div class="inv-party-label">Seller / Supplier (Vendor)</div>
+      <div class="inv-party-label">Supplier / Vendor</div>
       <div class="inv-party-name">${partyName}</div>
       <div class="inv-party-addr">${partyAddr}<br>${partyState || ''}</div>
-      <div class="inv-party-gstin">${partyGstin ? 'GSTIN: ' + partyGstin : 'Unregistered'}</div>
+      <div class="inv-party-gstin">${partyGstin ? 'GSTIN: ' + partyGstin : 'Unregistered (Vendor)'}</div>
     </div>
     <div class="inv-party">
-      <div class="inv-party-label">Buyer / Recipient (Bill To &amp; Ship To)</div>
+      <div class="inv-party-label">Billed To (Buyer)</div>
       <div class="inv-party-name">${biz.name}</div>
       <div class="inv-party-addr">${biz.address}, ${biz.city} — ${biz.pincode}<br>${biz.state}</div>
       <div class="inv-party-gstin">GSTIN: ${biz.gstin || '—'}</div>
-    </div>`}
-  </div>
-  <div class="supply-bar">
-    ${isSales ? 'Place of Supply' : 'Place of Supply / Delivery'}: <strong>${posState?.name || biz.state || '—'}</strong> &nbsp;&nbsp;|&nbsp;&nbsp;
-    Tax: <strong>${doc.isIntra ? 'CGST + SGST (Intra-state)' : 'IGST (Inter-state)'}</strong> &nbsp;&nbsp;|&nbsp;&nbsp;
-    Reverse Charge: <strong>${doc.reverseCharge ? 'YES' : 'No'}</strong>
+    </div>
+    ${doc.hasShippingAddress && doc.shippingAddress ? `
+    <div class="inv-party" style="border-left:1px solid #ccc;background:#fcfcfc">
+      <div class="inv-party-label" style="color:${primaryColor}">Delivered To (Site / Branch)</div>
+      <div class="inv-party-name">${doc.shippingName || biz.name}</div>
+      <div class="inv-party-addr">${doc.shippingAddress}${doc.shippingCity ? ', ' + doc.shippingCity : ''}${doc.shippingPincode ? ' — ' + doc.shippingPincode : ''}<br>${doc.shippingState || ''}</div>
+      <div class="inv-party-gstin">GSTIN: ${doc.shippingGstin || biz.gstin || '—'}</div>
+    </div>` : ''}
+    `}
   </div>
   <table class="items">
     <thead>
       <tr>
         <th style="width:22px">Sr.</th>
-        <th>Description of Goods/Services</th>
-        <th style="width:70px">HSN/SAC</th>
+        <th>Description</th>
+        <th style="width:70px">HSN</th>
         <th style="width:40px">Qty</th>
         <th style="width:40px">Unit</th>
-        <th style="width:75px">Unit Price (₹)</th>
-        <th style="width:80px">Taxable Value (₹)</th>
+        <th style="width:75px">Rate</th>
+        <th style="width:80px">Taxable</th>
         ${taxCols}
-        <th style="width:85px">Total (₹)</th>
+        <th style="width:85px">Total</th>
       </tr>
     </thead>
     <tbody>${itemRows}</tbody>
-    <tfoot>
-      <tr style="background:#f5f5f5;font-weight:700">
-        <td colspan="6" style="text-align:right">Total</td>
-        <td class="amount">${fmtCurrency(doc.subtotal)}</td>
-        ${doc.isIntra ? `<td></td><td class="amount">${fmtCurrency(doc.totalCgst)}</td><td></td><td class="amount">${fmtCurrency(doc.totalSgst)}</td>` : `<td></td><td class="amount">${fmtCurrency(doc.totalIgst)}</td>`}
-        <td class="amount">${fmtCurrency(doc.total)}</td>
-      </tr>
-    </tfoot>
   </table>
   <div class="inv-footer">
     <div class="inv-bank">
       ${isSales ? `
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
         <div>
-          <h4>Bank Details (for Payment)</h4>
-          <table>
+          <h4 style="font-size:7.5pt;font-weight:700;text-transform:uppercase;color:${primaryColor};margin-bottom:4px">Bank Details for Payment</h4>
+          <table style="font-size:8pt">
             <tr><td>Bank Name</td><td>${biz.bankName || '—'}</td></tr>
             <tr><td>Account No.</td><td>${biz.bankAccount || '—'}</td></tr>
             <tr><td>IFSC Code</td><td>${biz.bankIFSC || '—'}</td></tr>
@@ -1441,7 +1580,7 @@ table.items .rate, table.items .amount { text-align: right; }
       ${customTpl.customNotes ? `<div style="margin-top:6px;font-size:8pt;color:${primaryColor};font-style:italic"><strong>Message:</strong> ${customTpl.customNotes}</div>` : ''}
       ${biz.termsAndConditions ? `<div style="margin-top:8px;font-size:7.5pt;color:#555"><strong>Terms:</strong><br>${biz.termsAndConditions.replace(/\n/g, '<br>')}</div>` : ''}
       ` : `
-      <h4>Order &amp; Delivery Instructions</h4>
+      <h4 style="font-size:7.5pt;font-weight:700;text-transform:uppercase;color:${primaryColor};margin-bottom:4px">Order &amp; Delivery Instructions</h4>
       <div style="font-size:8pt;color:#333;line-height:1.5">
         <div><strong>Deliver To:</strong> ${biz.name}, ${biz.address}, ${biz.city} — ${biz.pincode}</div>
         <div><strong>Contact:</strong> ${biz.phone} | ${biz.email}</div>
@@ -1483,12 +1622,48 @@ ${showWatermark ? `
   ⚠️ Generated with ShopPulse 60-Day Trial Version (Bill #${limits.currentBills} of ${limits.maxTotalBills}). For permanent watermark-free printing, contact developer Shraban Kumar Mahato (shraban@andropcsoft.com).
 </div>
 ` : ''}
-<script>window.onload=function(){window.print();}</script>
 </body></html>`;
 
-    const w = window.open('', '_blank');
-    if (w) { w.document.write(html); w.document.close(); }
+    this._executePrint(html);
+  },
+
+  _executePrint(html) {
     App.closeModal();
+    try {
+      let iframe = document.getElementById('shoppulse-print-frame');
+      if (iframe && iframe.parentNode) iframe.parentNode.removeChild(iframe);
+
+      iframe = document.createElement('iframe');
+      iframe.id = 'shoppulse-print-frame';
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      document.body.appendChild(iframe);
+
+      const frameDoc = iframe.contentWindow.document;
+      frameDoc.open();
+      frameDoc.write(html);
+      frameDoc.close();
+
+      setTimeout(() => {
+        try {
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+        } catch (e) {
+          const w = window.open('', '_blank');
+          if (w) { w.document.write(html); w.document.close(); }
+        }
+        setTimeout(() => {
+          if (iframe && iframe.parentNode) iframe.parentNode.removeChild(iframe);
+        }, 5000);
+      }, 350);
+    } catch (err) {
+      const w = window.open('', '_blank');
+      if (w) { w.document.write(html); w.document.close(); }
+    }
   },
 
   /* ═══════════════════════════════════════════

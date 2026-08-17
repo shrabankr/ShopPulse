@@ -357,8 +357,8 @@ const Expenses = {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = `SysCare_Expenses_${new Date().toISOString().split('T')[0]}.csv`;
+    const bizName = (DB.getBiz().name || 'ShopPulse').replace(/[^a-zA-Z0-9]/g, '_');
+    a.download = `${bizName}_Expenses_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     App.toast('Expenses exported to CSV');

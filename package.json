@@ -31,6 +31,7 @@
   ],
   "main": "electron/main.js",
   "scripts": {
+    "start": "electron .",
     "desktop": "electron .",
     "pack": "electron-packager . ShopPulse --platform=win32 --arch=x64 --out=dist --overwrite --ignore=\"^/(dist|\\.git)\"",
     "build": "electron-builder --win --x64"

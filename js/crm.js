@@ -80,8 +80,13 @@ const CRM = {
                       </div>
                     </td>
                     <td>${c.gstin ? `<span class="mono">${c.gstin}</span>` : '<span style="font-size:.78rem;color:var(--text-tertiary)">Unregistered</span>'}</td>
-                    <td style="font-size:.84rem">${c.state || '—'}</td>
-                    <td style="font-size:.84rem">${c.phone || '—'}</td>
+                    <td style="font-size:.84rem">
+                      ${c.phone || '—'}
+                      ${(c.whatsapp || c.phone) ? `
+                        <a href="https://wa.me/${(c.whatsapp || c.phone).replace(/[^0-9]/g, '')}" target="_blank" class="btn btn-xs btn-ghost" style="color:#25d366;padding:2px 4px;vertical-align:middle;margin-left:4px" title="Chat on WhatsApp">
+                          <span class="material-icons" style="font-size:14px">chat</span>
+                        </a>` : ''}
+                    </td>
                     <td style="font-size:.84rem">${c.email || '—'}</td>
                     <td class="text-right">
                       <span class="badge badge-primary">${txCount}</span>
@@ -202,6 +207,7 @@ const CRM = {
         <div class="form-group"><label>State <span class="required">*</span></label><select id="c-state">${stateOpts}</select></div>
         <div class="form-group"><label>Pincode</label><input id="c-pin" value="${c?.pincode || ''}" maxlength="6"></div>
         <div class="form-group"><label>Phone</label><input id="c-phone" value="${c?.phone || ''}"></div>
+        <div class="form-group"><label>WhatsApp Number</label><input id="c-whatsapp" value="${c?.whatsapp || c?.phone || ''}" placeholder="e.g. +91 98230 11223"></div>
         <div class="form-group"><label>Email</label><input id="c-email" type="email" value="${c?.email || ''}"></div>
         <div class="form-group"><label>Contact Person</label><input id="c-contact" value="${c?.contactPerson || ''}"></div>
         <div class="form-group form-full"><label>Notes</label><textarea id="c-notes" rows="2">${c?.notes || ''}</textarea></div>
@@ -246,6 +252,7 @@ const CRM = {
       state: state?.name || '', stateCode: stateEl?.value || '',
       pincode: document.getElementById('c-pin')?.value?.trim() || '',
       phone: document.getElementById('c-phone')?.value?.trim() || '',
+      whatsapp: document.getElementById('c-whatsapp')?.value?.trim() || '',
       email: document.getElementById('c-email')?.value?.trim() || '',
       contactPerson: document.getElementById('c-contact')?.value?.trim() || '',
       notes: document.getElementById('c-notes')?.value?.trim() || '',

@@ -874,13 +874,55 @@ const App = {
         </div>
       </div>
 
+      ${DB.getRole() === 'developer' ? `
+      <!-- Developer Master Override & Switcher -->
+      <div class="card" style="padding:14px;border:2px dashed hsl(271,78%,50%);background:hsl(271,100%,98%);margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <h4 style="margin:0;color:hsl(271,78%,35%);font-size:.92rem;display:flex;align-items:center;gap:6px">
+            <span class="material-icons" style="font-size:18px">admin_panel_settings</span> 🛠️ Developer Master Controls: Override License Key &amp; Plan
+          </h4>
+          <span class="badge" style="background:hsl(271,78%,50%);color:#fff">DEV MODE</span>
+        </div>
+        <p style="font-size:.78rem;color:hsl(271,50%,35%);margin-bottom:10px">As Developer, you can instantly change the license plan, key, or reset to trial for testing:</p>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+          <button class="btn btn-xs" style="background:hsl(271,78%,50%);color:#fff" onclick="App._devApplyCustomLicense('lifetime', 'shraban@andropcsoft.com', 'SPS-LIFE-NOVE6F-2099', '2099-12-31')"><span class="material-icons" style="font-size:12px">diamond</span> Set Lifetime</button>
+          <button class="btn btn-xs btn-success" onclick="App._devApplyCustomLicense('annual', 'shraban@andropcsoft.com', 'SPS-1YR-6UABD9-2027', '2027-12-31')"><span class="material-icons" style="font-size:12px">verified</span> Set 1-Year Commercial</button>
+          <button class="btn btn-xs btn-primary" onclick="App._devApplyCustomLicense('developer', 'shraban@andropcsoft.com', 'DEV-MASTER-ALL-ACCESS', '2099-12-31')"><span class="material-icons" style="font-size:12px">code</span> Set Dev Master</button>
+          <button class="btn btn-xs btn-warning" onclick="App._devApplyCustomLicense('trial', '', 'TRIAL-EVAL-60D')"><span class="material-icons" style="font-size:12px">hourglass_top</span> Reset to 60-Day Trial</button>
+        </div>
+        <div class="form-grid-3" style="gap:8px;font-size:.8rem">
+          <div class="form-group">
+            <label style="font-size:.75rem">Plan Type</label>
+            <select id="dev-ovr-plan" style="padding:4px 8px;font-size:.8rem">
+              <option value="annual" ${lic.plan === 'annual' ? 'selected' : ''}>1-Year Commercial</option>
+              <option value="lifetime" ${lic.plan === 'lifetime' ? 'selected' : ''}>Lifetime Unlimited</option>
+              <option value="developer" ${lic.plan === 'developer' ? 'selected' : ''}>Developer Master</option>
+              <option value="trial" ${lic.plan === 'trial' ? 'selected' : ''}>60-Day Trial</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label style="font-size:.75rem">Custom License Key</label>
+            <input id="dev-ovr-key" value="${lic.licenseKey || ''}" placeholder="e.g. SPS-1YR-..." style="font-family:monospace;padding:4px 8px;font-size:.8rem">
+          </div>
+          <div class="form-group">
+            <label style="font-size:.75rem">Expiry Date</label>
+            <input id="dev-ovr-exp" type="date" value="${lic.expiryDate || '2027-12-31'}" style="padding:4px 8px;font-size:.8rem">
+          </div>
+        </div>
+        <div style="margin-top:8px;text-align:right">
+          <button class="btn btn-sm" style="background:hsl(271,78%,45%);color:#fff" onclick="App._devApplyCustomManual()"><span class="material-icons" style="font-size:14px">save</span> Save &amp; Force Apply License</button>
+        </div>
+      </div>
+      ` : ''}
+
       <div style="text-align:center;font-size:.82rem;color:var(--text-secondary)">
         Need a license key? Contact developer <strong>Shraban Kumar Mahato</strong> at <a href="mailto:shraban@andropcsoft.com" style="color:var(--primary);font-weight:600">shraban@andropcsoft.com</a>
       </div>
       `,
       `
       <button class="btn btn-ghost" onclick="App.closeModal()">Close</button>
-      <a href="mailto:shraban@andropcsoft.com?subject=${encodeURIComponent(`ShopPulse Commercial License Request — ${biz.name || 'My Shop'}`)}&body=${encodeURIComponent(`Hi Shraban,\n\nI would like to purchase / activate a ShopPulse Commercial License for my shop.\n\nMy Shop Details:\n• Shop Name: ${biz.name}\n• Registered Gmail: ${lic.registeredEmail || biz.email || ''}\n• Phone / WhatsApp: ${biz.phone || ''}\n• City & State: ${biz.city || ''}, ${biz.state || ''}\n• Machine Install ID: ${lic.machineId}\n• Plan Requested: 1-Year Commercial License (₹1,999) / Lifetime License (₹4,999)\n\nPlease share your UPI QR Code / Payment details and activation key.\n\nThank you,\n${biz.name}`)}" class="btn btn-primary"><span class="material-icons">mail</span> 📧 Email for License Key</a>
+      <a href="https://wa.me/919800012345?text=${encodeURIComponent(`Hi Shraban,\n\nI would like to purchase a ShopPulse Commercial License for my shop: ${biz.name}\nMachine ID: ${lic.machineId}\nEmail: ${lic.registeredEmail || biz.email || ''}`)}" target="_blank" class="btn btn-success"><span class="material-icons">chat</span> 📲 WhatsApp Developer</a>
+      <a href="mailto:shraban@andropcsoft.com?subject=${encodeURIComponent(`ShopPulse Commercial License Request — ${biz.name || 'My Shop'}`)}&body=${encodeURIComponent(`Hi Shraban,\n\nI would like to purchase / activate a ShopPulse Commercial License for my shop.\n\nMy Shop Details:\n• Shop Name: ${biz.name}\n• Registered Gmail: ${lic.registeredEmail || biz.email || ''}\n• Phone / WhatsApp: ${biz.phone || ''}\n• City & State: ${biz.city || ''}, ${biz.state || ''}\n• Machine Install ID: ${lic.machineId}\n• Plan Requested: 1-Year Commercial License (₹1,999) / Lifetime License (₹4,999)\n\nPlease share your UPI QR Code / Payment details and activation key.\n\nThank you,\n${biz.name}`)}" class="btn btn-primary"><span class="material-icons">mail</span> 📧 Email for Key</a>
       `,
       'modal-lg'
     );
@@ -1035,6 +1077,7 @@ const App = {
             <button id="tab-btn-trials" class="btn btn-sm btn-primary" onclick="App._devSwitchTab('trials')">⏳ Trial Users &amp; Leads (<span id="dev-trial-count">...</span>)</button>
             <button id="tab-btn-licenses" class="btn btn-sm btn-ghost" onclick="App._devSwitchTab('licenses')">📋 Active Licenses (<span id="dev-lic-count">...</span>)</button>
             <button id="tab-btn-keygen" class="btn btn-sm btn-ghost" onclick="App._devSwitchTab('keygen')">🔑 Offline Key Generator</button>
+            <button id="tab-btn-switcher" class="btn btn-sm btn-ghost" onclick="App._devSwitchTab('switcher')">⚙️ Change License Key</button>
           </div>
           <span style="font-size:.78rem;color:var(--text-secondary)">Live Cloud Synchronization</span>
         </div>
@@ -1098,25 +1141,22 @@ const App = {
           <div class="form-grid-3" style="margin-bottom:10px">
             <div class="form-group">
               <label>Customer Gmail</label>
-              <input id="dev-lic-email" placeholder="client@gmail.com" value="${lic.registeredEmail || ''}">
+              <input id="dev-lic-email" placeholder="customer@gmail.com" value="">
             </div>
             <div class="form-group">
-              <label>Subscription Plan</label>
+              <label>Plan Type</label>
               <select id="dev-lic-plan">
-                <option value="1YR">1-Year License (₹1,999)</option>
-                <option value="LIFE">Lifetime Unlimited (₹4,999)</option>
+                <option value="1YR">1-Year Annual Commercial (1YR)</option>
+                <option value="LIFE">Lifetime Unlimited (LIFE)</option>
               </select>
             </div>
             <div class="form-group">
               <label>Expiry Year</label>
-              <input id="dev-lic-year" type="number" value="${new Date().getFullYear() + 1}">
+              <input id="dev-lic-year" type="number" value="2027">
             </div>
           </div>
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-            <button class="btn btn-sm btn-primary" style="background:hsl(271,78%,50%);border-color:hsl(271,78%,50%)" onclick="App._devGenerateKey()"><span class="material-icons">vpn_key</span> Generate License Key</button>
-            <button class="btn btn-sm btn-secondary" onclick="DB.extendTrial(14);App.buildTopbar();App.toast('Client trial extended by +14 days! ⏳');"><span class="material-icons">more_time</span> +14 Days Local</button>
-            <button class="btn btn-sm btn-secondary" onclick="DB.extendTrial(30);App.buildTopbar();App.toast('Client trial extended by +30 days! ⏳');"><span class="material-icons">more_time</span> +30 Days Local</button>
-          </div>
+          <button class="btn btn-sm btn-primary" onclick="App._devGenerateKey()"><span class="material-icons">vpn_key</span> Generate License Key</button>
+
           <div id="dev-key-output" style="display:none;margin-top:12px;padding:10px;background:var(--bg);border-radius:var(--radius-sm)">
             <div style="font-size:.8rem;color:var(--text-secondary);margin-bottom:4px">Generated Key for <strong id="dev-out-email"></strong>:</div>
             <div style="display:flex;gap:8px;align-items:center">
@@ -1124,6 +1164,50 @@ const App = {
               <button class="btn btn-sm btn-secondary" onclick="navigator.clipboard.writeText(document.getElementById('dev-out-key').value);App.toast('License key copied! 📋')">Copy Key</button>
               <button class="btn btn-sm btn-success" onclick="App._devCopyWhatsApp()"><span class="material-icons" style="font-size:14px">chat</span> Copy WhatsApp</button>
             </div>
+          </div>
+        </div>
+
+        <!-- 4. License Switcher Tab -->
+        <div id="dev-tab-switcher" style="padding:14px;display:none">
+          <h4 style="margin-bottom:6px;color:hsl(271,78%,35%)"><span class="material-icons" style="font-size:18px;vertical-align:middle">vpn_key</span> Developer Machine License Controller &amp; Key Switcher</h4>
+          <p style="font-size:.8rem;color:var(--text-secondary);margin-bottom:12px">Directly change or override the current machine's active license plan and cryptographic key:</p>
+          
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+            <button class="btn btn-sm" style="background:hsl(271,78%,50%);color:#fff" onclick="DB.setCustomLicense('lifetime', 'shraban@andropcsoft.com', 'SPS-LIFE-NOVE6F-2099', '2099-12-31');App.toast('Set to Lifetime License! 💎');App._showDevConsole();App.buildTopbar();"><span class="material-icons" style="font-size:14px">diamond</span> Set Lifetime</button>
+            <button class="btn btn-sm btn-success" onclick="DB.setCustomLicense('annual', 'shraban@andropcsoft.com', 'SPS-1YR-6UABD9-2027', '2027-12-31');App.toast('Set to 1-Year Annual! 📅');App._showDevConsole();App.buildTopbar();"><span class="material-icons" style="font-size:14px">verified</span> Set 1-Year Annual</button>
+            <button class="btn btn-sm btn-primary" onclick="DB.setCustomLicense('developer', 'shraban@andropcsoft.com', 'DEV-MASTER-ALL-ACCESS', '2099-12-31');App.toast('Set to Developer Master! 🚀');App._showDevConsole();App.buildTopbar();"><span class="material-icons" style="font-size:14px">code</span> Set Dev Master</button>
+            <button class="btn btn-sm btn-warning" onclick="DB.setCustomLicense('trial', '', 'TRIAL-EVAL-60D');App.toast('Reset to 60-Day Trial! ⏳');App._showDevConsole();App.buildTopbar();"><span class="material-icons" style="font-size:14px">hourglass_top</span> Reset to Trial</button>
+          </div>
+
+          <div class="form-grid-3" style="gap:8px;font-size:.84rem;background:var(--bg);padding:12px;border-radius:var(--radius-sm)">
+            <div class="form-group">
+              <label>Plan Type</label>
+              <select id="dev-sw-plan">
+                <option value="annual" ${lic.plan === 'annual' ? 'selected' : ''}>1-Year Commercial (Annual)</option>
+                <option value="lifetime" ${lic.plan === 'lifetime' ? 'selected' : ''}>Lifetime Unlimited</option>
+                <option value="developer" ${lic.plan === 'developer' ? 'selected' : ''}>Developer Master License</option>
+                <option value="trial" ${lic.plan === 'trial' ? 'selected' : ''}>60-Day Evaluation Trial</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Custom License Key</label>
+              <input id="dev-sw-key" value="${lic.licenseKey || ''}" placeholder="e.g. SPS-1YR-..." style="font-family:monospace">
+            </div>
+            <div class="form-group">
+              <label>Expiry Date</label>
+              <input id="dev-sw-exp" type="date" value="${lic.expiryDate || '2027-12-31'}">
+            </div>
+          </div>
+          <div style="margin-top:10px;text-align:right">
+            <button class="btn btn-sm btn-primary" onclick="
+              const p = document.getElementById('dev-sw-plan').value;
+              const k = document.getElementById('dev-sw-key').value;
+              const e = document.getElementById('dev-sw-exp').value;
+              DB.setCustomLicense(p, '', k, e);
+              App.toast('License updated & saved! 🚀');
+              App._showDevConsole();
+              App.buildTopbar();
+            "><span class="material-icons">save</span> Force Save License</button>
           </div>
         </div>
       </div>
@@ -1173,7 +1257,7 @@ const App = {
           <h4 style="margin-bottom:6px"><span class="material-icons" style="font-size:16px;vertical-align:middle">restart_alt</span> Client Setup &amp; Factory Reset</h4>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
             <button class="btn btn-sm btn-danger" onclick="if(confirm('Wipe all data and prepare fresh blank shop?')){DB.factoryReset(false);location.reload();}"><span class="material-icons">cleaning_services</span> Fresh Wipe</button>
-            <button class="btn btn-sm btn-secondary" onclick="if(confirm('Reload SysCare demo dataset?')){DB.factoryReset(true);location.reload();}"><span class="material-icons">dataset</span> Reload Demo</button>
+            <button class="btn btn-sm btn-secondary" onclick="if(confirm('Reload demo dataset?')){DB.factoryReset(true);location.reload();}"><span class="material-icons">dataset</span> Reload Demo</button>
           </div>
         </div>
       </div>
@@ -1190,7 +1274,7 @@ const App = {
   },
 
   _devSwitchTab(tab) {
-    const tabs = ['trials', 'licenses', 'keygen'];
+    const tabs = ['trials', 'licenses', 'keygen', 'switcher'];
     tabs.forEach(t => {
       const btn = document.getElementById(`tab-btn-${t}`);
       const content = document.getElementById(`dev-tab-${t}`);
@@ -1212,6 +1296,12 @@ const App = {
     if (trialTbody) trialTbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:16px;color:var(--text-secondary)"><span class="material-icons" style="animation:spin 1s linear infinite;vertical-align:middle">sync</span> Fetching live trial users from Google Sheets...</td></tr>`;
     if (licTbody) licTbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:16px;color:var(--text-secondary)"><span class="material-icons" style="animation:spin 1s linear infinite;vertical-align:middle">sync</span> Fetching live commercial licenses from Google Sheets...</td></tr>`;
 
+    const inputUrl = document.getElementById('dev-remote-url')?.value.trim();
+    if (inputUrl) {
+      const cfg = DB.getRemoteConfig();
+      cfg.webhookUrl = inputUrl;
+      DB.setRemoteConfig(cfg);
+    }
     const res = await DB.fetchRemoteUsers();
 
     if (!res.success || !res.data) {
@@ -1341,6 +1431,23 @@ const App = {
   },
 
 
+  _devApplyCustomLicense(plan, email, key, expiry) {
+    const lic = DB.setCustomLicense(plan, email, key, expiry);
+    this.toast(`🎉 License updated to ${lic.plan.toUpperCase()}! Key: ${lic.licenseKey}`, 'success');
+    this.buildTopbar();
+    this.openLicenseModal();
+  },
+
+  _devApplyCustomManual() {
+    const plan = document.getElementById('dev-ovr-plan')?.value || 'annual';
+    const key = document.getElementById('dev-ovr-key')?.value.trim() || '';
+    const exp = document.getElementById('dev-ovr-exp')?.value || '';
+    const lic = DB.setCustomLicense(plan, '', key, exp);
+    this.toast(`🎉 License updated to ${lic.plan.toUpperCase()}! Key: ${lic.licenseKey}`, 'success');
+    this.buildTopbar();
+    this.openLicenseModal();
+  },
+
   _devSaveRemoteUrl() {
     const url = document.getElementById('dev-remote-url')?.value.trim() || '';
     const cfg = DB.getRemoteConfig();
@@ -1350,16 +1457,21 @@ const App = {
   },
 
   async _devTestRemoteSync() {
+    const inputUrl = document.getElementById('dev-remote-url')?.value.trim();
+    if (inputUrl) {
+      const cfg = DB.getRemoteConfig();
+      cfg.webhookUrl = inputUrl;
+      DB.setRemoteConfig(cfg);
+    }
     this.toast('Sending telemetry ping to Google Sheet…', 'info');
     const res = await DB.syncRemoteLicense();
     if (res.skipped) {
       this.toast('Please enter and save your Google Apps Script Webhook URL first.', 'warning');
     } else if (res.success) {
-      this.toast('Ping received by Google Sheet! Response: ' + (res.data.command || 'OK'), 'success');
-      this.openDevConsole();
+      this.toast('Ping received by Google Sheet! Response: ' + ((res.data && res.data.command) || 'OK'), 'success');
+      this._devFetchUsers();
     } else {
       this.toast('Ping failed: ' + (res.error || 'Network error'), 'error');
-      this.openDevConsole();
     }
   },
 
@@ -1550,31 +1662,38 @@ ${JSON.stringify(data, null, 2)}
         <p>Manage your GST profile, check subscription status, and backup your database.</p>
       </div>
 
-      <!-- Subscription & License Status Card (Owner & User Friendly) -->
-      <div class="card" style="margin-bottom:20px;border-left:4px solid ${lic.isTrial ? '#f59e0b' : '#0f9d58'}">
+      <!-- Unified Subscription & License Status Card -->
+      <div class="card" style="margin-bottom:20px;border-left:4px solid ${lic.isTrial ? '#f59e0b' : (lic.isLifetime ? 'hsl(271,78%,50%)' : '#0f9d58')}">
         <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
           <div>
-            <h3 style="display:flex;align-items:center;gap:6px">
-              <span class="material-icons" style="font-size:22px;color:${lic.isTrial ? '#f59e0b' : '#0f9d58'}">${lic.isTrial ? 'hourglass_top' : 'verified'}</span>
+            <h3 style="display:flex;align-items:center;gap:8px">
+              <span class="material-icons" style="font-size:22px;color:${lic.isTrial ? '#f59e0b' : (lic.isLifetime ? 'hsl(271,78%,50%)' : '#0f9d58')}">${lic.isTrial ? 'hourglass_top' : (lic.isLifetime ? 'diamond' : 'verified')}</span>
               Subscription &amp; License Status
             </h3>
           </div>
-          <span class="badge ${lic.isTrial ? (lic.isExpired ? 'badge-danger' : 'badge-warning') : 'badge-paid'}" style="font-size:.8rem;padding:4px 10px">
-            ${lic.planName.toUpperCase()} ${lic.isTrial ? `(${lic.daysLeft} days left)` : '• ACTIVE'}
+          <span class="badge ${lic.isTrial ? (lic.isExpired ? 'badge-danger' : 'badge-warning') : 'badge-paid'}" style="font-size:.82rem;padding:4px 12px;font-weight:700">
+            ${lic.planName.toUpperCase()} • ${lic.isExpired ? 'EXPIRED' : 'ACTIVE'}
           </span>
         </div>
         <div class="card-body">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;margin-bottom:14px">
             <div>
-              <div style="font-size:.9rem;font-weight:600;margin-bottom:4px">${lic.isTrial ? '60-Day Free Evaluation Trial' : 'Commercial Business License Active'}</div>
+              <div style="font-size:.92rem;font-weight:700;margin-bottom:4px;color:var(--text-primary)">
+                ${lic.isTrial ? '60-Day Free Evaluation Trial' : (lic.isLifetime ? 'Lifetime Unlimited Commercial License' : '1-Year Commercial License Active')}
+              </div>
               <div style="font-size:.82rem;color:var(--text-secondary)">
-                ${lic.isTrial ? `Trial Usage: ${limits.customersCount}/50 Customers • ${limits.suppliersCount}/10 Suppliers • ${limits.salesCount}/80 Invoices (${limits.isWatermarkNeeded ? 'Watermarked' : 'Clean Print'})` : `Unlimited Customers, Unlimited Suppliers, Unlimited Clean Invoices &amp; Custom Branding`}
+                Registered to: <strong style="color:var(--text-primary)">${lic.registeredEmail || b.email || 'Not registered (Trial Active)'}</strong>
+                ${lic.licenseKey ? ` • Key: <span class="mono" style="font-size:.78rem;color:var(--primary)">${lic.licenseKey}</span>` : ''}
               </div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
               <button class="btn btn-sm btn-secondary" onclick="App.checkOnlineActivation()"><span class="material-icons">sync</span> 🔄 Check Online Status</button>
               <button class="btn btn-sm btn-primary" onclick="App.openLicenseModal()"><span class="material-icons">vpn_key</span> ${lic.isTrial ? 'Activate License' : 'View License Key'}</button>
             </div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--bg);border-radius:var(--radius-sm);font-size:.84rem;flex-wrap:wrap;gap:8px">
+            <span>Status: <strong>${lic.isExpired ? '<span class="text-danger">Expired</span>' : '<span class="text-success">Active</span>'}</strong> (${lic.daysLeft} days remaining)</span>
+            <span style="color:var(--text-secondary)">Machine ID: <strong class="mono" style="font-size:.78rem;color:var(--text-primary)">${lic.machineId}</strong></span>
           </div>
         </div>
       </div>
@@ -1591,7 +1710,8 @@ ${JSON.stringify(data, null, 2)}
               <div class="form-group"><label>City</label><input id="s-city" value="${b.city || ''}"></div>
               <div class="form-group"><label>State <span class="required">*</span></label><select id="s-state">${stateOpts}</select></div>
               <div class="form-group"><label>Pincode</label><input id="s-pin" value="${b.pincode || ''}" maxlength="6"></div>
-              <div class="form-group"><label>Phone</label><input id="s-phone" value="${b.phone || ''}"></div>
+              <div class="form-group"><label>Phone Number</label><input id="s-phone" value="${b.phone || ''}" placeholder="+91 98000 12345"></div>
+              <div class="form-group"><label>WhatsApp Number (for customer chat)</label><input id="s-whatsapp" value="${b.whatsapp || b.phone || ''}" placeholder="+91 98000 12345"></div>
               <div class="form-group"><label>Email</label><input id="s-email" type="email" value="${b.email || ''}"></div>
               <div class="form-group"><label>Website</label><input id="s-web" value="${b.website || ''}"></div>
               <div class="form-group"><label>Authorized Signatory</label><input id="s-sign" value="${b.signatory || ''}"></div>
@@ -1663,17 +1783,41 @@ ${JSON.stringify(data, null, 2)}
         </div>
         `}
 
-        <div class="card">
-          <div class="card-header"><h3><span class="material-icons" style="vertical-align:middle;font-size:20px">lock</span> Security &amp; Mode Settings</h3></div>
+        <div class="card" style="border-left:4px solid #3b82f6">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+            <h3><span class="material-icons" style="vertical-align:middle;font-size:20px;color:#3b82f6">lock</span> Owner Security PIN Management</h3>
+            <span class="badge badge-info">Security</span>
+          </div>
           <div class="card-body">
-            <div class="form-grid">
+            <p style="font-size:.82rem;color:var(--text-secondary);margin-bottom:14px">
+              Protect Owner features (Sales editing, Financial Reports, and Settings) from staff by configuring your 4-digit Owner PIN:
+            </p>
+            <div class="form-grid-3" style="gap:10px;margin-bottom:12px">
               <div class="form-group">
-                <label>Owner Access PIN (4-digits)</label>
-                <input type="password" id="s-owner-pin" value="${auth.ownerPin || '1234'}" maxlength="10" placeholder="1234">
+                <label>Current Owner PIN <span class="required">*</span></label>
+                <input type="password" id="s-cur-pin" placeholder="Enter current PIN (default: 1234)" maxlength="10" autocomplete="off">
               </div>
-              <div class="form-group" style="align-self:flex-end">
-                <button class="btn btn-secondary" onclick="App.saveOwnerPin()"><span class="material-icons">key</span> Update PIN</button>
+              <div class="form-group">
+                <label>New Owner PIN <span class="required">*</span></label>
+                <input type="password" id="s-new-pin" placeholder="Enter new 4-digit PIN" maxlength="10" autocomplete="off">
               </div>
+              <div class="form-group">
+                <label>Confirm New PIN <span class="required">*</span></label>
+                <input type="password" id="s-conf-pin" placeholder="Re-enter new PIN" maxlength="10" autocomplete="off">
+              </div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+              <button class="btn btn-sm btn-ghost" type="button" onclick="
+                const p1 = document.getElementById('s-cur-pin');
+                const p2 = document.getElementById('s-new-pin');
+                const p3 = document.getElementById('s-conf-pin');
+                const isPass = p1.type === 'password';
+                p1.type = isPass ? 'text' : 'password';
+                p2.type = isPass ? 'text' : 'password';
+                p3.type = isPass ? 'text' : 'password';
+                this.innerHTML = isPass ? '<span class=\"material-icons\" style=\"font-size:14px\">visibility_off</span> Hide PINs' : '<span class=\"material-icons\" style=\"font-size:14px\">visibility</span> Show PINs';
+              "><span class="material-icons" style="font-size:14px">visibility</span> Show PINs</button>
+              <button class="btn btn-primary" onclick="App.saveOwnerPin()"><span class="material-icons">lock_reset</span> Change Owner PIN</button>
             </div>
           </div>
         </div>
@@ -1717,23 +1861,6 @@ ${JSON.stringify(data, null, 2)}
           </div>
         </div>
 
-        <div class="card" style="border-left:4px solid hsl(271,78%,50%)">
-          <div class="card-header">
-            <h3><span class="material-icons" style="vertical-align:middle;font-size:20px;color:hsl(271,78%,50%)">vpn_key</span> Subscription &amp; Gmail License</h3>
-            <span class="badge ${DB.getLicenseStatus().isTrial ? 'badge-warning' : 'badge-paid'}">${DB.getLicenseStatus().planName}</span>
-          </div>
-          <div class="card-body">
-            <div style="font-size:.85rem;color:var(--text-secondary);margin-bottom:12px">
-              Registered to: <strong>${DB.getLicenseStatus().registeredEmail || 'Not registered (Trial Active)'}</strong>
-            </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--bg);border-radius:var(--radius-sm);margin-bottom:14px;font-size:.84rem">
-              <span>Status: <strong>${DB.getLicenseStatus().isExpired ? '<span class="text-danger">Expired</span>' : '<span class="text-success">Active</span>'}</strong> (${DB.getLicenseStatus().daysLeft} days remaining)</span>
-              <span class="mono" style="font-size:.78rem">ID: ${DB.getLicenseStatus().machineId}</span>
-            </div>
-            <button class="btn btn-primary btn-sm" onclick="App.openLicenseModal()"><span class="material-icons">key</span> Activate / Renew License</button>
-          </div>
-        </div>
-
         <div class="card" style="border-left:4px solid var(--primary)">
           <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
             <h3><span class="material-icons" style="vertical-align:middle;font-size:20px;color:var(--primary)">style</span> Bill &amp; Invoice Printing Formats</h3>
@@ -1760,13 +1887,15 @@ ${JSON.stringify(data, null, 2)}
               </div>
             </div>
 
-            ${!lic.isTrial && (DB.getRole() === 'owner' || DB.getRole() === 'developer') ? `
-            <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+            <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+              <button type="button" class="btn btn-sm btn-primary" onclick="App.previewBillFormat(document.getElementById('s-invfmt')?.value || 'classic')"><span class="material-icons">visibility</span> 👁️ Live Preview Format</button>
+              ${!lic.isTrial && (DB.getRole() === 'owner' || DB.getRole() === 'developer') ? `
               <button type="button" class="btn btn-sm btn-secondary" onclick="App.openCustomTemplateModal()"><span class="material-icons">palette</span> 🎨 Design Custom Template</button>
+              ` : ''}
+              ${lic.isTrial ? `
+              <button type="button" class="btn btn-warning btn-sm" onclick="App.openLicenseModal()"><span class="material-icons">vpn_key</span> Unlock All 5 Formats with License</button>
+              ` : ''}
             </div>
-            ` : (lic.isTrial ? `
-            <button type="button" class="btn btn-primary btn-sm" style="margin-top:8px" onclick="App.openLicenseModal()"><span class="material-icons">vpn_key</span> Unlock All Formats with License</button>
-            ` : '')}
           </div>
         </div>
 
@@ -1804,6 +1933,70 @@ ${JSON.stringify(data, null, 2)}
     biz.invoiceFormat = sel.value;
     DB.setBiz(biz);
     this.toast(`Bill format changed to ${sel.options[sel.selectedIndex].text.split('(')[0].trim()}! 🎨`, 'success');
+    this.previewBillFormat(sel.value);
+  },
+
+  previewBillFormat(format = 'classic') {
+    const limits = DB.getTrialLimits();
+    const formats = [
+      { id: 'classic', name: 'Classic Corporate', icon: 'description' },
+      { id: 'modern', name: 'Modern Minimalist', icon: 'diamond' },
+      { id: 'compact_pos', name: '3-Inch POS Receipt', icon: 'receipt' },
+      { id: 'executive', name: 'Executive Slate & Gold', icon: 'workspace_premium' },
+      { id: 'custom', name: 'Custom Template', icon: 'palette' },
+    ];
+
+    const sampleDoc = Billing.getSampleDoc();
+    const activeFmt = format || DB.getBillFormat() || 'classic';
+    const htmlContent = Billing.generateDocHtml(sampleDoc, 'sales', activeFmt, true);
+
+    const tabsHtml = formats.map(f => `
+      <button type="button" class="btn btn-sm ${f.id === activeFmt ? 'btn-primary' : 'btn-ghost'}" onclick="App.previewBillFormat('${f.id}')" style="font-size:.8rem;padding:4px 10px">
+        <span class="material-icons" style="font-size:14px;vertical-align:middle">${f.icon}</span> ${f.name}
+      </button>
+    `).join('');
+
+    this.modal(`🎨 Live Bill Format Preview — ${formats.find(f => f.id === activeFmt)?.name || activeFmt}`,
+      `
+      <div style="margin-bottom:12px;padding:8px 12px;background:var(--bg);border-radius:var(--radius-sm);display:flex;gap:6px;flex-wrap:wrap;align-items:center;justify-content:space-between">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${tabsHtml}
+        </div>
+        <span style="font-size:.78rem;color:var(--text-secondary)">⚡ Instant Live Render</span>
+      </div>
+
+      <div style="background:#475569;border-radius:8px;padding:14px;display:flex;justify-content:center;overflow:hidden;box-shadow:inset 0 2px 6px rgba(0,0,0,0.3)">
+        <iframe id="bill-preview-frame" style="width:100%;max-width:${activeFmt === 'compact_pos' ? '340px' : '780px'};height:520px;border:none;background:#fff;border-radius:6px;box-shadow:0 10px 25px rgba(0,0,0,0.35)"></iframe>
+      </div>
+      `,
+      `
+      <button class="btn btn-ghost" onclick="App.closeModal()">Close</button>
+      <button class="btn btn-secondary" onclick="Billing.printDoc('${sampleDoc.id}', 'sales', '${activeFmt}')"><span class="material-icons">print</span> Print Sample</button>
+      ${!limits.isTrial ? `
+      <button class="btn btn-primary" onclick="
+        const biz = DB.getBiz();
+        biz.invoiceFormat = '${activeFmt}';
+        DB.setBiz(biz);
+        App.toast('🎉 Set as Default Bill Format: ${formats.find(f => f.id === activeFmt)?.name}!', 'success');
+        const sel = document.getElementById('s-invfmt');
+        if (sel) sel.value = '${activeFmt}';
+        App.closeModal();
+      "><span class="material-icons">check_circle</span> Set as Default Format</button>
+      ` : `
+      <button class="btn btn-warning" onclick="App.openLicenseModal()"><span class="material-icons">vpn_key</span> Unlock Format</button>
+      `}
+      `,
+      'modal-xl'
+    );
+
+    setTimeout(() => {
+      const frame = document.getElementById('bill-preview-frame');
+      if (frame && frame.contentWindow) {
+        frame.contentWindow.document.open();
+        frame.contentWindow.document.write(htmlContent);
+        frame.contentWindow.document.close();
+      }
+    }, 50);
   },
 
   openCustomTemplateModal() {
@@ -1937,10 +2130,51 @@ ${JSON.stringify(data, null, 2)}
   },
 
   saveOwnerPin() {
-    const pin = document.getElementById('s-owner-pin')?.value.trim();
-    if (!pin) { this.toast('PIN cannot be empty', 'error'); return; }
-    DB.setOwnerPin(pin);
-    this.toast('Owner PIN updated successfully!');
+    const curPin = document.getElementById('s-cur-pin')?.value.trim();
+    const newPin = document.getElementById('s-new-pin')?.value.trim();
+    const confPin = document.getElementById('s-conf-pin')?.value.trim();
+
+    if (!curPin) {
+      this.toast('Please enter your Current Owner PIN', 'error');
+      document.getElementById('s-cur-pin')?.focus();
+      return;
+    }
+
+    if (!DB.verifyOwnerPin(curPin)) {
+      this.toast('⛔ Incorrect Current PIN! Please enter your existing PIN.', 'error');
+      document.getElementById('s-cur-pin')?.focus();
+      return;
+    }
+
+    if (!newPin) {
+      this.toast('Please enter your New Owner PIN (at least 4 digits)', 'error');
+      document.getElementById('s-new-pin')?.focus();
+      return;
+    }
+
+    if (newPin.length < 4) {
+      this.toast('New PIN must be at least 4 digits!', 'warning');
+      document.getElementById('s-new-pin')?.focus();
+      return;
+    }
+
+    if (newPin !== confPin) {
+      this.toast('⛔ Confirm PIN does not match New PIN! Please re-type.', 'error');
+      document.getElementById('s-conf-pin')?.focus();
+      return;
+    }
+
+    DB.setOwnerPin(newPin);
+    
+    // Clear input fields
+    const p1 = document.getElementById('s-cur-pin');
+    const p2 = document.getElementById('s-new-pin');
+    const p3 = document.getElementById('s-conf-pin');
+    if (p1) p1.value = '';
+    if (p2) p2.value = '';
+    if (p3) p3.value = '';
+
+    this.toast('🎉 Owner PIN updated successfully! 🔒', 'success');
   },
 
   saveSettings() {
@@ -1961,6 +2195,7 @@ ${JSON.stringify(data, null, 2)}
       stateCode: stateEl.value,
       pincode: document.getElementById('s-pin').value.trim(),
       phone: document.getElementById('s-phone').value.trim(),
+      whatsapp: document.getElementById('s-whatsapp')?.value.trim() || document.getElementById('s-phone')?.value.trim() || '',
       email: document.getElementById('s-email').value.trim(),
       website: document.getElementById('s-web').value.trim(),
       signatory: document.getElementById('s-sign').value.trim(),

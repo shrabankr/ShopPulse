@@ -199,13 +199,13 @@ const DB = {
   /* Business */
   getBiz() {
     return this._get(this.K.BIZ) || {
-      name: 'My Business', tagline: '', logo: '', gstin: '', pan: '',
-      address: '', city: '', state: 'Maharashtra', stateCode: '27',
-      pincode: '', phone: '', email: '', website: '',
-      bankName: '', bankAccount: '', bankIFSC: '', bankBranch: '', upiId: '',
-      invoicePrefix: 'INV', invoiceCounter: 1, invoiceFormat: 'classic',
+      name: 'AndroPCSoft Technologies', tagline: 'IT Solutions & CCTV Security Systems', logo: '', gstin: '27AABCA1234F1Z5', pan: 'AABCA1234F',
+      address: 'Shop 104, Tech Arcade, Station Road', city: 'Pune', state: 'Maharashtra', stateCode: '27',
+      pincode: '411001', phone: '+91 98000 12345', whatsapp: '+91 98000 12345', email: 'shraban@andropcsoft.com', website: 'www.andropcsoft.com',
+      bankName: 'HDFC Bank', bankAccount: '50200012345678', bankIFSC: 'HDFC0000123', bankBranch: 'Station Road, Pune', upiId: 'shraban@okaxis',
+      invoicePrefix: 'APS', invoiceCounter: 1, invoiceFormat: 'classic',
       billPrefix: 'PO', billCounter: 1,
-      defaultPaymentTerms: 30, signatory: '', termsAndConditions: 'Goods once sold will not be taken back.\nInterest @18% p.a. will be charged on delayed payments.',
+      defaultPaymentTerms: 30, signatory: 'Shraban Kumar Mahato', termsAndConditions: 'Goods once sold will not be taken back.\nWarranty as per manufacturer terms.\nInterest @18% p.a. will be charged on delayed payments.',
     };
   },
   setBiz(b) { this._set(this.K.BIZ, b); },
@@ -501,6 +501,12 @@ const DB = {
     lic.status = 'active';
     delete lic.blockReason;
     this.setLicense(lic);
+
+    // Immediately push updated commercial license status to Google Sheet
+    setTimeout(() => {
+      this.syncRemoteLicense().catch(() => {});
+    }, 500);
+
     return lic;
   },
 
@@ -516,10 +522,40 @@ const DB = {
     return lic;
   },
 
+  setCustomLicense(plan = 'annual', email = '', key = '', expiryDate = '') {
+    const lic = this.getLicense();
+    lic.plan = plan;
+    if (email) lic.registeredEmail = email.toLowerCase().trim();
+    if (key) lic.licenseKey = key.toUpperCase().trim();
+    if (expiryDate) {
+      lic.expiryDate = expiryDate;
+    } else {
+      if (plan === 'lifetime' || plan === 'developer') {
+        lic.expiryDate = '2099-12-31';
+      } else if (plan === 'annual') {
+        lic.expiryDate = '2027-12-31';
+      } else {
+        const d = new Date();
+        d.setDate(d.getDate() + 60);
+        lic.expiryDate = d.toISOString().split('T')[0];
+      }
+    }
+    lic.status = 'active';
+    delete lic.blockReason;
+    this.setLicense(lic);
+
+    // Sync updated license immediately to Google Sheet
+    setTimeout(() => {
+      this.syncRemoteLicense().catch(() => {});
+    }, 500);
+
+    return lic;
+  },
+
   getLicenseStatus() {
     const lic = this.getLicense();
     const now = new Date();
-    const exp = new Date(lic.expiryDate + 'T23:59:59');
+    const exp = new Date((lic.expiryDate || '2099-12-31') + 'T23:59:59');
     const diffDays = Math.ceil((exp - now) / 86400000);
     const isExpired = diffDays < 0;
     const isBlocked = lic.status === 'blocked';
@@ -527,6 +563,7 @@ const DB = {
     let planName = '60-Day Free Trial';
     if (lic.plan === 'annual') planName = '1-Year Commercial License';
     if (lic.plan === 'lifetime') planName = 'Lifetime Unlimited License';
+    if (lic.plan === 'developer') planName = 'Developer Master License (Unlimited)';
 
     return {
       ...lic,
@@ -535,7 +572,7 @@ const DB = {
       isBlocked,
       planName,
       isTrial: lic.plan === 'trial',
-      isLifetime: lic.plan === 'lifetime',
+      isLifetime: lic.plan === 'lifetime' || lic.plan === 'developer',
     };
   },
 
@@ -597,12 +634,18 @@ const DB = {
 
   /* ─── Remote Google Sheet Licensing & Telemetry Engine ─── */
   getRemoteConfig() {
-    return this._get(this.K.REMOTE) || {
-      webhookUrl: 'https://script.google.com/macros/s/AKfycbzPyugDKIdgwdbcqSkPWNYJcyQBhgzMz_mYz6YR9gw_wHzwMnTIbs_z6kzB2S2esOTt/exec',
-      lastSyncDate: null,
-      lastSyncStatus: null,
-      autoSync: true
-    };
+    let cfg = this._get(this.K.REMOTE);
+    const defaultUrl = 'https://script.google.com/macros/s/AKfycbylA3nb30UND6_QA5O_eAbXjBLjhUZeiylNn6qhOVurLYz_EQVzfa2VKgkEfHB60Mj_/exec';
+    if (!cfg || !cfg.webhookUrl || cfg.webhookUrl.includes('AKfycbzPyugDKIdgwdbcq')) {
+      cfg = {
+        webhookUrl: defaultUrl,
+        lastSyncDate: null,
+        lastSyncStatus: null,
+        autoSync: true
+      };
+      this.setRemoteConfig(cfg);
+    }
+    return cfg;
   },
 
   setRemoteConfig(cfg) { this._set(this.K.REMOTE, cfg); },
@@ -636,6 +679,7 @@ const DB = {
       bankName: biz.bankName || 'N/A',
       upiId: biz.upiId || 'N/A',
       plan: lic.plan,
+      licenseKey: lic.licenseKey || 'N/A',
       status: lic.status || 'active',
       expiryDate: lic.expiryDate || 'N/A',
       daysLeft: lic.daysLeft,
@@ -653,9 +697,9 @@ const DB = {
 
     try {
       const resp = await fetch(targetUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(payload)
+        method: 'GET',
+        redirect: 'follow',
+        headers: { 'Accept': 'application/json' }
       });
       const text = await resp.text();
       let data = {};
@@ -725,7 +769,11 @@ const DB = {
     if (!cfg.webhookUrl) return { success: false, error: 'No Google Sheet Webhook URL configured' };
     try {
       const url = cfg.webhookUrl + (cfg.webhookUrl.includes('?') ? '&' : '?') + 'action=get_users&t=' + Date.now();
-      const resp = await fetch(url, { method: 'GET' });
+      const resp = await fetch(url, { 
+        method: 'GET',
+        redirect: 'follow',
+        headers: { 'Accept': 'application/json' }
+      });
       const data = await resp.json();
       return { success: true, data };
     } catch (err) {
@@ -741,9 +789,9 @@ const DB = {
       const qs = Object.keys(payload).map(k => encodeURIComponent(k) + '=' + encodeURIComponent(payload[k])).join('&');
       const url = cfg.webhookUrl + (cfg.webhookUrl.includes('?') ? '&' : '?') + qs;
       const resp = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(payload)
+        method: 'GET',
+        redirect: 'follow',
+        headers: { 'Accept': 'application/json' }
       });
       const data = await resp.json();
       return { success: true, data };
@@ -924,27 +972,27 @@ const DB = {
     if (this._get(this.K.SEEDED)) return;
 
     this.setBiz({
-      name: 'SysCare Computer Services', gstin: '27AABCT5432R1ZP', pan: 'AABCT5432R',
-      address: '12, IT Park Road, Sector 5', city: 'Pune',
-      state: 'Maharashtra', stateCode: '27', pincode: '411057',
-      phone: '+91 98600 12345', email: 'accounts@syscare.in',
-      website: 'www.syscare.in',
-      bankName: 'ICICI Bank', bankAccount: '012305001234567',
-      bankIFSC: 'ICIC0000123', bankBranch: 'Hinjewadi, Pune',
-      upiId: 'syscare@okicici',
-      invoicePrefix: 'SCS', invoiceCounter: 9,
+      name: 'AndroPCSoft Technologies', tagline: 'IT Solutions & CCTV Security Systems', logo: '', gstin: '27AABCA1234F1Z5', pan: 'AABCA1234F',
+      address: 'Shop 104, Tech Arcade, Station Road', city: 'Pune',
+      state: 'Maharashtra', stateCode: '27', pincode: '411001',
+      phone: '+91 98000 12345', whatsapp: '+91 98000 12345', email: 'shraban@andropcsoft.com',
+      website: 'www.andropcsoft.com',
+      bankName: 'HDFC Bank', bankAccount: '50200012345678',
+      bankIFSC: 'HDFC0000123', bankBranch: 'Station Road, Pune',
+      upiId: 'shraban@okaxis',
+      invoicePrefix: 'APS', invoiceCounter: 9,
       billPrefix: 'PO', billCounter: 6,
-      defaultPaymentTerms: 30, signatory: 'Ankit Mehta',
-      termsAndConditions: 'All goods carry manufacturer warranty only. No returns after installation.\nAMC services are non-refundable once commenced.\nInterest @18% p.a. on delayed payments. Subject to Pune Jurisdiction.',
+      defaultPaymentTerms: 30, signatory: 'Shraban Kumar Mahato',
+      termsAndConditions: 'All goods carry manufacturer warranty only. No returns after installation.\nAMC services are non-refundable once commenced.\nInterest @18% p.a. on delayed payments. Subject to local jurisdiction.',
     });
 
     // ── Customers (Businesses & Organisations) ──
-    const c1 = this.saveCustomer({ name: 'Zenith Infotech Pvt Ltd', gstin: '27AABCZ9321K1Z4', phone: '9823001122', email: 'accounts@zenithinfotech.com', address: 'Plot 15, Rajiv Gandhi IT Park', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411057', contactPerson: 'Suresh Patil' });
-    const c2 = this.saveCustomer({ name: 'St. Xavier School & College', gstin: '27AABTS4218M1ZQ', phone: '9823003344', email: 'admin@stxaviers.edu.in', address: '5, MG Road, Camp', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411001', contactPerson: 'Fr. Thomas' });
-    const c3 = this.saveCustomer({ name: 'City Hospital & Research Centre', gstin: '27AABCC7123H1ZR', phone: '9823005566', email: 'accounts@cityhospital.in', address: '88 Nagar Road, Yerawada', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411006', contactPerson: 'Mrs. Shinde' });
-    const c4 = this.saveCustomer({ name: 'Nagpur Municipal Corporation', gstin: '27AAANS8891P1ZX', phone: '0712-2567890', email: 'it.dept@nagpurcorp.gov.in', address: 'Mahapal Complex, Kasturchand Park', city: 'Nagpur', state: 'Maharashtra', stateCode: '27', pincode: '440001', contactPerson: 'Mr. Borse (IT Officer)' });
-    const c5 = this.saveCustomer({ name: 'Alpha Manufacturing Ltd', gstin: '24AABCA4512R1ZT', phone: '9712001234', email: 'it@alphamfg.com', address: 'GIDC Industrial Estate, Phase II', city: 'Surat', state: 'Gujarat', stateCode: '24', pincode: '394221', contactPerson: 'Rajesh Shah' });
-    const c6 = this.saveCustomer({ name: 'Kohinoor Group of Hotels', gstin: '27AABCK3312L1ZV', phone: '9823007788', email: 'finance@kohinoorhotels.com', address: '42 FC Road', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411005', contactPerson: 'Deepa Kulkarni' });
+    const c1 = this.saveCustomer({ name: 'Zenith Infotech Pvt Ltd', gstin: '27AABCZ9321K1Z4', phone: '9823001122', whatsapp: '9823001122', email: 'accounts@zenithinfotech.com', address: 'Plot 15, Rajiv Gandhi IT Park', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411057', contactPerson: 'Suresh Patil' });
+    const c2 = this.saveCustomer({ name: 'St. Xavier School & College', gstin: '27AABTS4218M1ZQ', phone: '9823003344', whatsapp: '9823003344', email: 'admin@stxaviers.edu.in', address: '5, MG Road, Camp', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411001', contactPerson: 'Fr. Thomas' });
+    const c3 = this.saveCustomer({ name: 'City Hospital & Research Centre', gstin: '27AABCC7123H1ZR', phone: '9823005566', whatsapp: '9823005566', email: 'accounts@cityhospital.in', address: '88 Nagar Road, Yerawada', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411006', contactPerson: 'Mrs. Shinde' });
+    const c4 = this.saveCustomer({ name: 'Nagpur Municipal Corporation', gstin: '27AAANS8891P1ZX', phone: '0712-2567890', whatsapp: '9823007700', email: 'it.dept@nagpurcorp.gov.in', address: 'Mahapal Complex, Kasturchand Park', city: 'Nagpur', state: 'Maharashtra', stateCode: '27', pincode: '440001', contactPerson: 'Mr. Borse (IT Officer)' });
+    const c5 = this.saveCustomer({ name: 'Alpha Manufacturing Ltd', gstin: '24AABCA4512R1ZT', phone: '9712001234', whatsapp: '9712001234', email: 'it@alphamfg.com', address: 'GIDC Industrial Estate, Phase II', city: 'Surat', state: 'Gujarat', stateCode: '24', pincode: '394221', contactPerson: 'Rajesh Shah' });
+    const c6 = this.saveCustomer({ name: 'Kohinoor Group of Hotels', gstin: '27AABCK3312L1ZV', phone: '9823007788', whatsapp: '9823007788', email: 'finance@kohinoorhotels.com', address: '42 FC Road', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411005', contactPerson: 'Deepa Kulkarni' });
 
     // ── Suppliers (IT & CCTV Distributors) ──
     const s1 = this.saveSupplier({ name: 'Ingram Micro India Pvt Ltd', gstin: '27AAACI5892K1ZE', phone: '1800209800', email: 'orders@ingrammicro.in', address: 'Kalina, Santacruz East', city: 'Mumbai', state: 'Maharashtra', stateCode: '27', pincode: '400098' });
