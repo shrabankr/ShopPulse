@@ -702,6 +702,38 @@ const DB = {
     }
   },
 
+  async fetchRemoteUsers() {
+    const cfg = this.getRemoteConfig();
+    if (!cfg.webhookUrl) return { success: false, error: 'No Google Sheet Webhook URL configured' };
+    try {
+      const url = cfg.webhookUrl + (cfg.webhookUrl.includes('?') ? '&' : '?') + 'action=get_users&t=' + Date.now();
+      const resp = await fetch(url, { method: 'GET' });
+      const data = await resp.json();
+      return { success: true, data };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  async setRemoteCommand(machineId, command, extendDays = 0) {
+    const cfg = this.getRemoteConfig();
+    if (!cfg.webhookUrl) return { success: false, error: 'No Google Sheet Webhook URL configured' };
+    try {
+      const payload = { action: 'set_command', machineId, command, extendDays };
+      const qs = Object.keys(payload).map(k => encodeURIComponent(k) + '=' + encodeURIComponent(payload[k])).join('&');
+      const url = cfg.webhookUrl + (cfg.webhookUrl.includes('?') ? '&' : '?') + qs;
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json();
+      return { success: true, data };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+
   /* ─── Onboarding & Welcome Setup Wizard ─── */
   isSetupDone() {
     return this._get(this.K.SETUP_DONE) === true;

@@ -991,148 +991,309 @@ const App = {
 
     const storageUsageKB = (JSON.stringify(localStorage).length / 1024).toFixed(2);
 
-    this.modal('🛠️ Developer Master Console',
+    const cfg = DB.getRemoteConfig();
+
+    this.modal('🛠️ Developer Master Console & User Manager',
       `
-      <div style="margin-bottom:16px;padding:12px 16px;background:hsl(271,78%,96%);border:1px solid hsl(271,60%,85%);border-radius:var(--radius);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div style="margin-bottom:14px;padding:12px 16px;background:hsl(271,78%,96%);border:1px solid hsl(271,60%,85%);border-radius:var(--radius);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
         <div style="display:flex;align-items:center;gap:12px">
           <div style="width:44px;height:44px;border-radius:12px;background:hsl(271,78%,50%);color:#fff;display:flex;align-items:center;justify-content:center">
-            <span class="material-icons">developer_mode</span>
+            <span class="material-icons">admin_panel_settings</span>
           </div>
           <div>
-            <div style="font-weight:700;color:hsl(271,78%,30%)">ShopPulse — Developer Master Control</div>
-            <div style="font-size:.8rem;color:hsl(271,50%,40%)">Author: <strong>Shraban Kumar Mahato</strong> (shraban@andropcsoft.com)</div>
+            <div style="font-weight:700;color:hsl(271,78%,30%);font-size:1.05rem">ShopPulse — Developer Master Hub</div>
+            <div style="font-size:.8rem;color:hsl(271,50%,40%)">Author &amp; Creator: <strong>Shraban Kumar Mahato</strong> (shraban@andropcsoft.com)</div>
           </div>
         </div>
-        <div style="display:flex;gap:8px">
-          <button class="btn btn-sm btn-primary" onclick="App.setRoleAndClose('owner')"><span class="material-icons">admin_panel_settings</span> 👑 Switch to Owner Mode</button>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-sm btn-primary" onclick="App.setRoleAndClose('owner')"><span class="material-icons">manage_accounts</span> 👑 Switch to Owner</button>
           <button class="btn btn-sm btn-warning" onclick="App.setRoleAndClose('staff')"><span class="material-icons">lock</span> 🔒 Staff Mode</button>
         </div>
       </div>
 
-      <!-- Gmail License Key Generator (For Shraban) -->
-      <div class="card" style="padding:14px;margin-bottom:16px;border-left:4px solid hsl(271,78%,50%)">
-        <h4 style="margin-bottom:8px;color:hsl(271,78%,35%)"><span class="material-icons" style="font-size:18px;vertical-align:middle">key</span> Generate Gmail License Key (Client Sales)</h4>
-        <p style="font-size:.8rem;color:var(--text-secondary);margin-bottom:12px">Generate offline cryptographic keys attached to paying customer Gmail addresses.</p>
-        <div class="form-grid-3" style="margin-bottom:10px">
-          <div class="form-group">
-            <label>Customer Gmail</label>
-            <input id="dev-lic-email" placeholder="client@gmail.com" value="${lic.registeredEmail || ''}">
-          </div>
-          <div class="form-group">
-            <label>Subscription Plan</label>
-            <select id="dev-lic-plan">
-              <option value="1YR">1-Year License (₹1,999)</option>
-              <option value="LIFE">Lifetime Unlimited (₹4,999)</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Expiry Year</label>
-            <input id="dev-lic-year" type="number" value="${new Date().getFullYear() + 1}">
+      <!-- Google Sheets Webhook & Telemetry Sync Hub -->
+      <div class="card" style="padding:12px 14px;margin-bottom:14px;border-left:4px solid #0f9d58">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+          <h4 style="margin:0;color:#0f9d58;display:flex;align-items:center;gap:6px">
+            <span class="material-icons" style="font-size:18px">cloud_sync</span> Google Sheets License Hub &amp; Webhook
+          </h4>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-xs btn-primary" onclick="App._devTestRemoteSync()"><span class="material-icons" style="font-size:14px">upload</span> Send Immediate Heartbeat</button>
+            <button class="btn btn-xs btn-secondary" onclick="App._devFetchUsers()"><span class="material-icons" style="font-size:14px">refresh</span> Fetch Live Users</button>
           </div>
         </div>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-          <button class="btn btn-sm btn-primary" style="background:hsl(271,78%,50%);border-color:hsl(271,78%,50%)" onclick="App._devGenerateKey()"><span class="material-icons">vpn_key</span> Generate License Key</button>
-          <button class="btn btn-sm btn-secondary" onclick="DB.extendTrial(14);App.buildTopbar();App.toast('Client trial extended by +14 days! ⏳');App._showDevConsole()"><span class="material-icons">more_time</span> +14 Days Trial</button>
-          <button class="btn btn-sm btn-secondary" onclick="DB.extendTrial(30);App.buildTopbar();App.toast('Client trial extended by +30 days! ⏳');App._showDevConsole()"><span class="material-icons">more_time</span> +30 Days Trial</button>
-        </div>
-        <div id="dev-key-output" style="display:none;margin-top:12px;padding:10px;background:var(--bg);border-radius:var(--radius-sm)">
-          <div style="font-size:.8rem;color:var(--text-secondary);margin-bottom:4px">Generated Key for <strong id="dev-out-email"></strong>:</div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <input id="dev-out-key" readonly style="font-family:monospace;font-weight:700;letter-spacing:.08em;background:#fff">
-            <button class="btn btn-sm btn-secondary" onclick="navigator.clipboard.writeText(document.getElementById('dev-out-key').value);App.toast('License key copied! 📋')">Copy Key</button>
-            <button class="btn btn-sm btn-success" onclick="App._devCopyWhatsApp()"><span class="material-icons" style="font-size:14px">chat</span> Copy WhatsApp</button>
-          </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="dev-remote-url" value="${cfg.webhookUrl || ''}" placeholder="Paste Google Apps Script Web App URL (/exec)" style="font-family:monospace;font-size:.8rem;flex:1;background:#fff">
+          <button class="btn btn-sm btn-secondary" onclick="App._devSaveRemoteUrl()"><span class="material-icons">save</span> Save URL</button>
         </div>
       </div>
 
-      <!-- Remote Google Sheets Master License Hub -->
-      <div class="card" style="padding:14px;margin-bottom:16px;border-left:4px solid #0f9d58">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-          <div>
-            <h4 style="margin-bottom:3px;color:#0f9d58;display:flex;align-items:center;gap:6px">
-              <span class="material-icons" style="font-size:18px">cloud_done</span> Google Sheets Master License Hub
-            </h4>
-            <div style="font-size:.82rem;color:var(--text-secondary)">
-              Connected to <strong>ShopPulse License Manager</strong> &nbsp;•&nbsp; 
-              Status: <span class="badge badge-paid" style="font-size:.7rem;padding:2px 8px">🟢 Connected &amp; Syncing</span>
+      <!-- Active Users & Licenses Management Hub -->
+      <div class="card" style="padding:0;margin-bottom:16px;overflow:hidden;border:1px solid var(--border)">
+        <div style="background:#f8fafc;padding:8px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <div style="display:flex;gap:6px">
+            <button id="tab-btn-trials" class="btn btn-sm btn-primary" onclick="App._devSwitchTab('trials')">⏳ Trial Users &amp; Leads (<span id="dev-trial-count">...</span>)</button>
+            <button id="tab-btn-licenses" class="btn btn-sm btn-ghost" onclick="App._devSwitchTab('licenses')">📋 Active Licenses (<span id="dev-lic-count">...</span>)</button>
+            <button id="tab-btn-keygen" class="btn btn-sm btn-ghost" onclick="App._devSwitchTab('keygen')">🔑 Offline Key Generator</button>
+          </div>
+          <span style="font-size:.78rem;color:var(--text-secondary)">Live Cloud Synchronization</span>
+        </div>
+
+        <!-- 1. Trial Users Tab -->
+        <div id="dev-tab-trials" style="padding:14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+            <div style="font-size:.85rem;color:var(--text-secondary)">All evaluation shops running on 60-day trial. You can remotely activate or extend their license in 1 click:</div>
+          </div>
+          <div class="table-wrap" style="max-height:280px;overflow-y:auto">
+            <table class="table" style="font-size:.82rem">
+              <thead>
+                <tr>
+                  <th>Machine ID</th>
+                  <th>Shop Name</th>
+                  <th>Contact Email</th>
+                  <th>Phone / City</th>
+                  <th>Days Left</th>
+                  <th>Invoices</th>
+                  <th>Status</th>
+                  <th style="text-align:right">Remote Actions</th>
+                </tr>
+              </thead>
+              <tbody id="dev-trials-tbody">
+                <tr><td colspan="8" style="text-align:center;padding:16px;color:var(--text-secondary)">Loading trial users from Google Sheets...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 2. Active Licenses Tab -->
+        <div id="dev-tab-licenses" style="padding:14px;display:none">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+            <div style="font-size:.85rem;color:var(--text-secondary)">All registered commercial clients and authorized lifetime shops:</div>
+          </div>
+          <div class="table-wrap" style="max-height:280px;overflow-y:auto">
+            <table class="table" style="font-size:.82rem">
+              <thead>
+                <tr>
+                  <th>Machine ID</th>
+                  <th>Shop Name</th>
+                  <th>Registered Gmail</th>
+                  <th>Phone / City</th>
+                  <th>Plan</th>
+                  <th>Expiry Date</th>
+                  <th>Status</th>
+                  <th style="text-align:right">Remote Actions</th>
+                </tr>
+              </thead>
+              <tbody id="dev-licenses-tbody">
+                <tr><td colspan="8" style="text-align:center;padding:16px;color:var(--text-secondary)">Loading active licenses from Google Sheets...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 3. Keygen Tab -->
+        <div id="dev-tab-keygen" style="padding:14px;display:none">
+          <h4 style="margin-bottom:6px;color:hsl(271,78%,35%)"><span class="material-icons" style="font-size:18px;vertical-align:middle">key</span> Generate Cryptographic License Key</h4>
+          <p style="font-size:.8rem;color:var(--text-secondary);margin-bottom:12px">Generate offline keys tied to customer Gmail addresses for immediate activation.</p>
+          <div class="form-grid-3" style="margin-bottom:10px">
+            <div class="form-group">
+              <label>Customer Gmail</label>
+              <input id="dev-lic-email" placeholder="client@gmail.com" value="${lic.registeredEmail || ''}">
+            </div>
+            <div class="form-group">
+              <label>Subscription Plan</label>
+              <select id="dev-lic-plan">
+                <option value="1YR">1-Year License (₹1,999)</option>
+                <option value="LIFE">Lifetime Unlimited (₹4,999)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Expiry Year</label>
+              <input id="dev-lic-year" type="number" value="${new Date().getFullYear() + 1}">
             </div>
           </div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <button class="btn btn-sm btn-secondary" onclick="App._devTestRemoteSync()"><span class="material-icons">sync</span> Test Live Heartbeat</button>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-sm btn-primary" style="background:hsl(271,78%,50%);border-color:hsl(271,78%,50%)" onclick="App._devGenerateKey()"><span class="material-icons">vpn_key</span> Generate License Key</button>
+            <button class="btn btn-sm btn-secondary" onclick="DB.extendTrial(14);App.buildTopbar();App.toast('Client trial extended by +14 days! ⏳');"><span class="material-icons">more_time</span> +14 Days Local</button>
+            <button class="btn btn-sm btn-secondary" onclick="DB.extendTrial(30);App.buildTopbar();App.toast('Client trial extended by +30 days! ⏳');"><span class="material-icons">more_time</span> +30 Days Local</button>
+          </div>
+          <div id="dev-key-output" style="display:none;margin-top:12px;padding:10px;background:var(--bg);border-radius:var(--radius-sm)">
+            <div style="font-size:.8rem;color:var(--text-secondary);margin-bottom:4px">Generated Key for <strong id="dev-out-email"></strong>:</div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input id="dev-out-key" readonly style="font-family:monospace;font-weight:700;letter-spacing:.08em;background:#fff">
+              <button class="btn btn-sm btn-secondary" onclick="navigator.clipboard.writeText(document.getElementById('dev-out-key').value);App.toast('License key copied! 📋')">Copy Key</button>
+              <button class="btn btn-sm btn-success" onclick="App._devCopyWhatsApp()"><span class="material-icons" style="font-size:14px">chat</span> Copy WhatsApp</button>
+            </div>
           </div>
         </div>
       </div>
 
-      <div class="kpi-grid" style="margin-bottom:18px">
+      <!-- Quick Database Stats & Utilities -->
+      <div class="kpi-grid" style="margin-bottom:14px">
         <div class="kpi-card kpi-primary">
           <div class="kpi-content">
             <div class="kpi-label">Local Storage Used</div>
             <div class="kpi-value">${storageUsageKB} KB</div>
-            <div class="kpi-sub">Client browser storage</div>
+            <div class="kpi-sub">Client browser cache</div>
           </div>
         </div>
         <div class="kpi-card kpi-success">
           <div class="kpi-content">
-            <div class="kpi-label">Sales &amp; Purchases</div>
+            <div class="kpi-label">Local Documents</div>
             <div class="kpi-value">${sales.length + purchases.length} Docs</div>
             <div class="kpi-sub">${sales.length} Invoices / ${purchases.length} POs</div>
           </div>
         </div>
         <div class="kpi-card kpi-warning">
           <div class="kpi-content">
-            <div class="kpi-label">Catalog &amp; Parties</div>
+            <div class="kpi-label">Local Catalog</div>
             <div class="kpi-value">${products.length + customers.length} Entities</div>
-            <div class="kpi-sub">${products.length} Products / ${customers.length} Cust</div>
+            <div class="kpi-sub">${products.length} Items / ${customers.length} Cust</div>
           </div>
         </div>
         <div class="kpi-card kpi-danger">
           <div class="kpi-content">
-            <div class="kpi-label">Expenses Logged</div>
+            <div class="kpi-label">Total Expenses</div>
             <div class="kpi-value">${expenses.length} Records</div>
             <div class="kpi-sub">${fmtCurrency(expenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0))}</div>
           </div>
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
-        <div class="card" style="padding:14px">
-          <h4 style="margin-bottom:8px"><span class="material-icons" style="font-size:16px;vertical-align:middle">cloud_sync</span> Database Backup &amp; Migration</h4>
-          <p style="font-size:.8rem;color:var(--text-secondary);margin-bottom:12px">Export complete JSON database dump for safe migration or customer support.</p>
-          <div style="display:flex;gap:8px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+        <div class="card" style="padding:12px 14px">
+          <h4 style="margin-bottom:6px"><span class="material-icons" style="font-size:16px;vertical-align:middle">cloud_sync</span> Database Backup &amp; Migration</h4>
+          <div style="display:flex;gap:8px;margin-top:8px">
             <button class="btn btn-sm btn-primary" onclick="App.downloadBackup()"><span class="material-icons">download</span> Full Backup (.json)</button>
             <button class="btn btn-sm btn-secondary" onclick="App.triggerRestore()"><span class="material-icons">upload</span> Restore File</button>
           </div>
         </div>
 
-        <div class="card" style="padding:14px">
-          <h4 style="margin-bottom:8px"><span class="material-icons" style="font-size:16px;vertical-align:middle">restart_alt</span> Client Setup &amp; Factory Reset</h4>
-          <p style="font-size:.8rem;color:var(--text-secondary);margin-bottom:12px">Quickly prepare a fresh database for a new client install or reload demo data.</p>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-sm btn-danger" onclick="if(confirm('Wipe all data and prepare fresh blank shop?')){DB.factoryReset(false);location.reload();}"><span class="material-icons">cleaning_services</span> Fresh Client Wipe</button>
-            <button class="btn btn-sm btn-secondary" onclick="if(confirm('Reload SysCare demo dataset?')){DB.factoryReset(true);location.reload();}"><span class="material-icons">dataset</span> Reload Demo Data</button>
-            <button class="btn btn-sm btn-ghost" onclick="App.closeModal();App.openSetupWizard()"><span class="material-icons">storefront</span> Test Setup Wizard</button>
+        <div class="card" style="padding:12px 14px">
+          <h4 style="margin-bottom:6px"><span class="material-icons" style="font-size:16px;vertical-align:middle">restart_alt</span> Client Setup &amp; Factory Reset</h4>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+            <button class="btn btn-sm btn-danger" onclick="if(confirm('Wipe all data and prepare fresh blank shop?')){DB.factoryReset(false);location.reload();}"><span class="material-icons">cleaning_services</span> Fresh Wipe</button>
+            <button class="btn btn-sm btn-secondary" onclick="if(confirm('Reload SysCare demo dataset?')){DB.factoryReset(true);location.reload();}"><span class="material-icons">dataset</span> Reload Demo</button>
           </div>
-        </div>
-      </div>
-
-      <div class="card" style="padding:14px">
-        <h4 style="margin-bottom:8px"><span class="material-icons" style="font-size:16px;vertical-align:middle">code</span> Raw Database Collections</h4>
-        <div style="display:flex;flex-wrap:wrap;gap:8px">
-          <button class="btn btn-xs btn-ghost" onclick="App._inspectCollection('sales')">Inspect Sales (${sales.length})</button>
-          <button class="btn btn-xs btn-ghost" onclick="App._inspectCollection('purchases')">Inspect Purchases (${purchases.length})</button>
-          <button class="btn btn-xs btn-ghost" onclick="App._inspectCollection('expenses')">Inspect Expenses (${expenses.length})</button>
-          <button class="btn btn-xs btn-ghost" onclick="App._inspectCollection('products')">Inspect Products (${products.length})</button>
-          <button class="btn btn-xs btn-ghost" onclick="App._inspectCollection('customers')">Inspect Customers (${customers.length})</button>
-          <button class="btn btn-xs btn-ghost" onclick="App._inspectCollection('suppliers')">Inspect Suppliers (${suppliers.length})</button>
         </div>
       </div>
       `,
       `
       <button class="btn btn-ghost" onclick="App.closeModal()">Close</button>
-      <button class="btn btn-secondary" onclick="DB.setRole('developer');App.closeModal();App.buildTopbar();App.toast('Developer Mode Enabled')">Set Dev Mode</button>
+      <button class="btn btn-secondary" onclick="DB.setRole('developer');App.closeModal();App.buildTopbar();App.toast('Developer Mode Active 🚀')">Set Dev Mode</button>
       `,
       'modal-xl'
     );
+
+    // Auto-fetch users upon opening console
+    setTimeout(() => { this._devFetchUsers(); }, 50);
+  },
+
+  _devSwitchTab(tab) {
+    const tabs = ['trials', 'licenses', 'keygen'];
+    tabs.forEach(t => {
+      const btn = document.getElementById(`tab-btn-${t}`);
+      const content = document.getElementById(`dev-tab-${t}`);
+      if (btn) {
+        btn.className = (t === tab) ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-ghost';
+      }
+      if (content) {
+        content.style.display = (t === tab) ? 'block' : 'none';
+      }
+    });
+  },
+
+  async _devFetchUsers() {
+    const trialTbody = document.getElementById('dev-trials-tbody');
+    const licTbody = document.getElementById('dev-licenses-tbody');
+    const trialCountSpan = document.getElementById('dev-trial-count');
+    const licCountSpan = document.getElementById('dev-lic-count');
+
+    if (trialTbody) trialTbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:16px;color:var(--text-secondary)"><span class="material-icons" style="animation:spin 1s linear infinite;vertical-align:middle">sync</span> Fetching live trial users from Google Sheets...</td></tr>`;
+    if (licTbody) licTbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:16px;color:var(--text-secondary)"><span class="material-icons" style="animation:spin 1s linear infinite;vertical-align:middle">sync</span> Fetching live commercial licenses from Google Sheets...</td></tr>`;
+
+    const res = await DB.fetchRemoteUsers();
+
+    if (!res.success || !res.data) {
+      const errMsg = res.error || 'Unable to connect to Google Sheets Webhook';
+      if (trialTbody) trialTbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:16px;color:#dc2626">⚠️ ${errMsg}. Please verify Webhook URL.</td></tr>`;
+      if (licTbody) licTbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:16px;color:#dc2626">⚠️ ${errMsg}. Please verify Webhook URL.</td></tr>`;
+      if (trialCountSpan) trialCountSpan.textContent = '0';
+      if (licCountSpan) licCountSpan.textContent = '0';
+      return;
+    }
+
+    const trials = res.data.trials || [];
+    const licenses = res.data.licenses || [];
+
+    if (trialCountSpan) trialCountSpan.textContent = trials.length;
+    if (licCountSpan) licCountSpan.textContent = licenses.length;
+
+    // Render Trial Users
+    if (trialTbody) {
+      if (trials.length === 0) {
+        trialTbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:16px;color:var(--text-secondary)">No trial users recorded in Google Sheets yet. Click "Send Immediate Heartbeat" to test.</td></tr>`;
+      } else {
+        trialTbody.innerHTML = trials.map(t => `
+          <tr>
+            <td><strong class="mono" style="font-size:.78rem">${t.machineId}</strong></td>
+            <td><strong>${t.shopName || '—'}</strong></td>
+            <td><a href="mailto:${t.email}" style="color:var(--primary)">${t.email}</a></td>
+            <td>${t.phone || '—'}<br><span style="font-size:.75rem;color:var(--text-secondary)">${t.city || '—'}</span></td>
+            <td><span class="badge ${parseInt(t.daysLeft) < 10 ? 'badge-danger' : 'badge-warning'}">${t.daysLeft}d left</span></td>
+            <td>${t.salesCount || 0} bills</td>
+            <td><span class="badge ${t.command === 'BLOCK' ? 'badge-danger' : 'badge-paid'}">${t.command || 'ALLOW'}</span></td>
+            <td style="text-align:right;white-space:nowrap">
+              <button class="btn btn-xs btn-primary" title="Remotely Activate 1-Year Commercial License" onclick="App._devSetRemoteCommand('${t.machineId}','ACTIVATE_1YR')"><span class="material-icons" style="font-size:12px">verified</span> 1-Yr</button>
+              <button class="btn btn-xs btn-secondary" title="Remotely Activate Lifetime Unlimited License" onclick="App._devSetRemoteCommand('${t.machineId}','ACTIVATE_LIFE')"><span class="material-icons" style="font-size:12px">diamond</span> Life</button>
+              <button class="btn btn-xs btn-ghost" title="Extend Trial by +30 Days" onclick="App._devSetRemoteCommand('${t.machineId}','EXTEND', 30)"><span class="material-icons" style="font-size:12px">more_time</span> +30d</button>
+              ${t.command === 'BLOCK' ? `
+                <button class="btn btn-xs btn-success" title="Unblock / Restore Access" onclick="App._devSetRemoteCommand('${t.machineId}','ALLOW')"><span class="material-icons" style="font-size:12px">lock_open</span></button>
+              ` : `
+                <button class="btn btn-xs btn-danger" title="Suspend / Block Shop Access" onclick="if(confirm('Remotely suspend access for ${t.shopName}?'))App._devSetRemoteCommand('${t.machineId}','BLOCK')"><span class="material-icons" style="font-size:12px">block</span></button>
+              `}
+            </td>
+          </tr>
+        `).join('');
+      }
+    }
+
+    // Render Licensed Users
+    if (licTbody) {
+      if (licenses.length === 0) {
+        licTbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:16px;color:var(--text-secondary)">No active commercial licenses logged yet.</td></tr>`;
+      } else {
+        licTbody.innerHTML = licenses.map(l => `
+          <tr>
+            <td><strong class="mono" style="font-size:.78rem">${l.machineId}</strong></td>
+            <td><strong>${l.shopName || '—'}</strong></td>
+            <td><a href="mailto:${l.email}" style="color:var(--primary)">${l.email}</a></td>
+            <td>${l.phone || '—'}<br><span style="font-size:.75rem;color:var(--text-secondary)">${l.city || '—'}</span></td>
+            <td><span class="badge badge-paid">${(l.plan || 'Commercial').toUpperCase()}</span></td>
+            <td>${fmtDate(l.expiryDate) || l.expiryDate}</td>
+            <td><span class="badge ${l.command === 'BLOCK' ? 'badge-danger' : 'badge-paid'}">${l.command === 'BLOCK' ? 'SUSPENDED' : 'ACTIVE'}</span></td>
+            <td style="text-align:right;white-space:nowrap">
+              ${l.command === 'BLOCK' ? `
+                <button class="btn btn-xs btn-success" title="Reactivate Access" onclick="App._devSetRemoteCommand('${l.machineId}','ALLOW')"><span class="material-icons" style="font-size:12px">lock_open</span> Unblock</button>
+              ` : `
+                <button class="btn btn-xs btn-danger" title="Suspend License" onclick="if(confirm('Suspend license for ${l.shopName}?'))App._devSetRemoteCommand('${l.machineId}','BLOCK')"><span class="material-icons" style="font-size:12px">block</span> Block</button>
+              `}
+            </td>
+          </tr>
+        `).join('');
+      }
+    }
+  },
+
+  async _devSetRemoteCommand(machineId, command, extendDays = 0) {
+    this.toast(`Applying command ${command} to Machine ID: ${machineId}…`, 'info');
+    const res = await DB.setRemoteCommand(machineId, command, extendDays);
+    if (res.success) {
+      this.toast(`🎉 Command "${command}" successfully applied!`, 'success');
+      this._devFetchUsers();
+    } else {
+      this.toast(`Failed to update command: ${res.error}`, 'error');
+    }
   },
 
   _devGenerateKey() {
