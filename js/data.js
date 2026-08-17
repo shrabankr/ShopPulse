@@ -613,19 +613,37 @@ const DB = {
 
     const lic = this.getLicenseStatus();
     const biz = this.getBiz();
+    const sales = this.getSales();
+    const purchases = this.getPurchases();
+    const products = this.getProducts();
+    const customers = this.getCustomers();
+    const suppliers = this.getSuppliers();
+    const totalSalesAmt = sales.reduce((s, x) => s + (parseFloat(x.total) || 0), 0);
+
     const payload = {
       action: 'heartbeat',
       machineId: lic.machineId,
-      email: lic.registeredEmail || biz.email || 'unregistered',
       shopName: biz.name || 'Unnamed Shop',
-      gstin: biz.gstin || 'N/A',
+      signatory: biz.signatory || 'Owner',
+      email: lic.registeredEmail || biz.email || 'unregistered',
       phone: biz.phone || 'N/A',
       city: biz.city || 'N/A',
+      state: biz.state || 'N/A',
+      pincode: biz.pincode || 'N/A',
+      address: biz.address || 'N/A',
+      gstin: biz.gstin || 'N/A',
+      pan: biz.pan || 'N/A',
+      bankName: biz.bankName || 'N/A',
+      upiId: biz.upiId || 'N/A',
       plan: lic.plan,
-      expiryDate: lic.expiryDate,
+      status: lic.status || 'active',
+      expiryDate: lic.expiryDate || 'N/A',
       daysLeft: lic.daysLeft,
-      salesCount: this.getSales().length,
-      productsCount: this.getProducts().length,
+      salesCount: sales.length,
+      purchasesCount: purchases.length,
+      productsCount: products.length,
+      partiesCount: customers.length + suppliers.length,
+      totalSalesRevenue: parseFloat(totalSalesAmt).toFixed(2),
       version: '1.0.0',
       timestamp: new Date().toISOString()
     };
