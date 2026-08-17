@@ -168,19 +168,63 @@ app.on('window-all-closed', () => {
 
 // ── Native Desktop Print & PDF Export Handlers ──
 ipcMain.handle('print-html', async (event, html) => {
+  const path = require('path');
   let printWin = new BrowserWindow({
-    width: 860,
-    height: 900,
+    width: 920,
+    height: 950,
     title: 'Print Preview & Dispatch — ShopPulse',
     autoHideMenuBar: true,
     show: true,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
 
-  const dataUri = 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
+  const toolbarHtml = `
+  <div class="print-toolbar" style="position:sticky;top:0;left:0;right:0;z-index:99999;background:#0f172a;color:#fff;padding:10px 18px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 4px 12px rgba(0,0,0,0.3);font-family:system-ui,-apple-system,sans-serif;margin-bottom:12px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="font-weight:800;font-size:.95rem;color:#38bdf8">⚡ ShopPulse Dispatch</span>
+      <span style="font-size:.8rem;color:#94a3b8">| Select action:</span>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <button onclick="window.print()" style="background:#2563eb;color:#fff;border:none;padding:7px 16px;border-radius:6px;font-weight:700;font-size:.85rem;cursor:pointer;display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 6px rgba(37,99,235,0.4)">
+        🖨️ Select Printer &amp; Print
+      </button>
+      <button id="btn-save-as-pdf" style="background:#059669;color:#fff;border:none;padding:7px 16px;border-radius:6px;font-weight:700;font-size:.85rem;cursor:pointer;display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 6px rgba(5,150,105,0.4)">
+        📄 Save as PDF
+      </button>
+      <button onclick="window.close()" style="background:#334155;color:#f8fafc;border:none;padding:7px 14px;border-radius:6px;font-weight:600;font-size:.85rem;cursor:pointer">
+        ✕ Close
+      </button>
+    </div>
+  </div>
+  <style>
+    @media print {
+      .print-toolbar { display: none !important; }
+      body { margin-top: 0 !important; }
+    }
+  </style>
+  <script>
+    document.getElementById('btn-save-as-pdf')?.addEventListener('click', async () => {
+      if (window.desktopApp && window.desktopApp.savePdf) {
+        await window.desktopApp.savePdf({ html: document.documentElement.outerHTML, title: document.title || 'Invoice' });
+      } else {
+        window.print();
+      }
+    });
+  </script>
+  `;
+
+  let processedHtml = html;
+  if (processedHtml.includes('<body')) {
+    processedHtml = processedHtml.replace(/<body[^>]*>/i, match => `${match}\n${toolbarHtml}\n`);
+  } else {
+    processedHtml = toolbarHtml + processedHtml;
+  }
+
+  const dataUri = 'data:text/html;charset=utf-8,' + encodeURIComponent(processedHtml);
   await printWin.loadURL(dataUri);
 
   printWin.webContents.on('did-finish-load', () => {
@@ -188,12 +232,8 @@ ipcMain.handle('print-html', async (event, html) => {
       printWin.webContents.print({
         silent: false,
         printBackground: true,
-      }, (success) => {
-        if (success && printWin && !printWin.isDestroyed()) {
-          printWin.close();
-        }
       });
-    }, 250);
+    }, 300);
   });
 
   return { success: true };
