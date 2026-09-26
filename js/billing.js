@@ -996,27 +996,35 @@ const Billing = {
       <div class="invoice-parties-grid" style="margin-bottom:16px">
         ${isSales ? `
         <div class="invoice-party-box">
-          <h4>Seller / Supplier (From)</h4>
-          <div class="party-detail-name">${biz.name}</div>
-          <div class="party-detail-line">${biz.address}, ${biz.city}</div>
-          <div class="party-detail-gstin">GSTIN: ${biz.gstin || '—'}</div>
-        </div>
-        <div class="invoice-party-box">
-          <h4>Buyer / Recipient (To)</h4>
+          <h4>Billed To (Buyer / Recipient)</h4>
           <div class="party-detail-name">${partyName}</div>
           <div class="party-detail-line">${partyAddr}</div>
+          <div class="party-detail-line">${partyState || ''}</div>
           ${partyGstin ? `<div class="party-detail-gstin">GSTIN: ${partyGstin}</div>` : '<div class="party-detail-line text-muted">Unregistered (B2C)</div>'}
+        </div>
+        <div class="invoice-party-box">
+          <h4>Shipped To (Consignee / Delivery)</h4>
+          ${doc.hasShippingAddress && doc.shippingAddress ? `
+            <div class="party-detail-name">${doc.shippingName || partyName}</div>
+            <div class="party-detail-line">${doc.shippingAddress}${doc.shippingCity ? ', ' + doc.shippingCity : ''}${doc.shippingPincode ? ' — ' + doc.shippingPincode : ''}</div>
+            <div class="party-detail-line">${doc.shippingState || ''}</div>
+            <div class="party-detail-gstin">${doc.shippingGstin ? 'GSTIN: ' + doc.shippingGstin : (partyGstin ? 'GSTIN: ' + partyGstin : 'Unregistered')}</div>
+          ` : `
+            <div class="party-detail-name">${partyName}</div>
+            <div class="party-detail-line">${partyAddr}</div>
+            <div class="party-detail-line text-muted"><em>(Same as Billing Address)</em></div>
+          `}
         </div>` : `
         <div class="invoice-party-box">
-          <h4>Seller / Supplier (From)</h4>
+          <h4>Supplier / Vendor (From)</h4>
           <div class="party-detail-name">${partyName}</div>
           <div class="party-detail-line">${partyAddr}</div>
           ${partyGstin ? `<div class="party-detail-gstin">GSTIN: ${partyGstin}</div>` : '<div class="party-detail-line text-muted">Unregistered</div>'}
         </div>
         <div class="invoice-party-box">
-          <h4>Buyer / Recipient (Bill To)</h4>
-          <div class="party-detail-name">${biz.name}</div>
-          <div class="party-detail-line">${biz.address}, ${biz.city}</div>
+          <h4>Delivered / Ship To (To)</h4>
+          <div class="party-detail-name">${doc.shippingName || biz.name}</div>
+          <div class="party-detail-line">${doc.hasShippingAddress && doc.shippingAddress ? `${doc.shippingAddress}${doc.shippingCity ? ', ' + doc.shippingCity : ''}` : `${biz.address}, ${biz.city}`}</div>
           <div class="party-detail-gstin">GSTIN: ${biz.gstin || '—'}</div>
         </div>`}
       </div>
@@ -1752,61 +1760,56 @@ table.items .rate, table.items .amount { text-align: right; }
   <div class="inv-title-bar">${isSales ? 'TAX INVOICE' : 'PURCHASE ORDER'}</div>
   <div class="inv-biz-row">
     <div style="display:flex;align-items:center;gap:12px;${logoPos === 'right' ? 'flex-direction:row-reverse' : ''}">
-      ${!limits.isTrial && biz.logo && logoPos !== 'none' ? `<img src="${biz.logo}" style="max-height:52px;max-width:90px;object-fit:contain">` : ''}
+      ${!limits.isTrial && biz.logo && logoPos !== 'none' ? `<img src="${biz.logo}" style="max-height:54px;max-width:92px;object-fit:contain">` : ''}
       <div>
         <div class="inv-biz-name">${biz.name}</div>
-        <div style="font-size:8.5pt">${biz.address}, ${biz.city} — ${biz.pincode}</div>
-        <div style="font-size:8.5pt">GSTIN: ${biz.gstin || '—'}</div>
+        ${biz.tagline ? `<div style="font-size:7.5pt;color:#666;font-style:italic;margin-top:1px">${biz.tagline}</div>` : ''}
+        <div style="font-size:8.5pt">${biz.address}, ${biz.city} — ${biz.pincode} (${biz.state || ''})</div>
+        <div style="font-size:8.5pt"><strong>GSTIN:</strong> ${biz.gstin || '—'}${biz.phone ? ` | <strong>Phone:</strong> ${biz.phone}` : ''}</div>
       </div>
     </div>
     <div>
       <table class="inv-meta-table">
         <tr><td>${isSales ? 'Invoice No.' : 'PO / Bill No.'}</td><td>${no}</td></tr>
         <tr><td>Date</td><td>${fmtDate(doc.date)}</td></tr>
+        ${doc.dueDate ? `<tr><td>Due Date</td><td>${fmtDate(doc.dueDate)}</td></tr>` : ''}
+        <tr><td>Place of Supply</td><td>${posState?.name || biz.state || '—'}</td></tr>
       </table>
     </div>
   </div>
-  <div class="inv-parties" style="${doc.hasShippingAddress && doc.shippingAddress ? 'grid-template-columns: 1fr 1fr 1fr;' : ''}">
+  <div class="inv-parties">
     ${isSales ? `
     <div class="inv-party">
-      <div class="inv-party-label">Seller / Supplier</div>
-      <div class="inv-party-name">${biz.name}</div>
-      <div class="inv-party-addr">${biz.address}, ${biz.city} — ${biz.pincode}<br>${biz.state}</div>
-      <div class="inv-party-gstin">GSTIN: ${biz.gstin || '—'}</div>
-    </div>
-    <div class="inv-party">
-      <div class="inv-party-label">Billed To (Buyer)</div>
+      <div class="inv-party-label">Billed To (Buyer / Recipient)</div>
       <div class="inv-party-name">${partyName}</div>
       <div class="inv-party-addr">${partyAddr}<br>${partyState || ''}</div>
-      <div class="inv-party-gstin">${partyGstin ? 'GSTIN: ' + partyGstin : 'Unregistered (Consumer)'}</div>
+      <div class="inv-party-gstin">${partyGstin ? 'GSTIN: ' + partyGstin : 'Unregistered (Consumer / B2C)'}</div>
     </div>
-    ${doc.hasShippingAddress && doc.shippingAddress ? `
-    <div class="inv-party" style="border-left:1px solid #ccc;background:#fcfcfc">
-      <div class="inv-party-label" style="color:${primaryColor}">Shipped To (Consignee)</div>
-      <div class="inv-party-name">${doc.shippingName || partyName}</div>
-      <div class="inv-party-addr">${doc.shippingAddress}${doc.shippingCity ? ', ' + doc.shippingCity : ''}${doc.shippingPincode ? ' — ' + doc.shippingPincode : ''}<br>${doc.shippingState || ''}</div>
-      <div class="inv-party-gstin">${doc.shippingGstin ? 'GSTIN: ' + doc.shippingGstin : (partyGstin ? 'GSTIN: ' + partyGstin : 'Unregistered')}</div>
-    </div>` : ''}
+    <div class="inv-party" style="border-left:1px solid #ccc;background:${doc.hasShippingAddress && doc.shippingAddress ? '#fcfcfc' : '#fff'}">
+      <div class="inv-party-label" style="color:${primaryColor}">Shipped To (Consignee / Delivery Address)</div>
+      ${doc.hasShippingAddress && doc.shippingAddress ? `
+        <div class="inv-party-name">${doc.shippingName || partyName}</div>
+        <div class="inv-party-addr">${doc.shippingAddress}${doc.shippingCity ? ', ' + doc.shippingCity : ''}${doc.shippingPincode ? ' — ' + doc.shippingPincode : ''}<br>${doc.shippingState || ''}</div>
+        <div class="inv-party-gstin">${doc.shippingGstin ? 'GSTIN: ' + doc.shippingGstin : (partyGstin ? 'GSTIN: ' + partyGstin : 'Unregistered')}</div>
+      ` : `
+        <div class="inv-party-name">${partyName}</div>
+        <div class="inv-party-addr">${partyAddr}<br>${partyState || ''}</div>
+        <div class="inv-party-gstin" style="font-size:8pt;color:#666;font-weight:normal"><em>(Same as Billing Address)</em></div>
+      `}
+    </div>
     ` : `
     <div class="inv-party">
-      <div class="inv-party-label">Supplier / Vendor</div>
+      <div class="inv-party-label">Supplier / Vendor (From)</div>
       <div class="inv-party-name">${partyName}</div>
       <div class="inv-party-addr">${partyAddr}<br>${partyState || ''}</div>
       <div class="inv-party-gstin">${partyGstin ? 'GSTIN: ' + partyGstin : 'Unregistered (Vendor)'}</div>
     </div>
-    <div class="inv-party">
-      <div class="inv-party-label">Billed To (Buyer)</div>
-      <div class="inv-party-name">${biz.name}</div>
-      <div class="inv-party-addr">${biz.address}, ${biz.city} — ${biz.pincode}<br>${biz.state}</div>
+    <div class="inv-party" style="border-left:1px solid #ccc">
+      <div class="inv-party-label" style="color:${primaryColor}">Delivered / Ship To (To)</div>
+      <div class="inv-party-name">${doc.shippingName || biz.name}</div>
+      <div class="inv-party-addr">${doc.hasShippingAddress && doc.shippingAddress ? `${doc.shippingAddress}${doc.shippingCity ? ', ' + doc.shippingCity : ''}${doc.shippingPincode ? ' — ' + doc.shippingPincode : ''}` : `${biz.address}, ${biz.city} — ${biz.pincode}`}<br>${doc.shippingState || biz.state}</div>
       <div class="inv-party-gstin">GSTIN: ${biz.gstin || '—'}</div>
     </div>
-    ${doc.hasShippingAddress && doc.shippingAddress ? `
-    <div class="inv-party" style="border-left:1px solid #ccc;background:#fcfcfc">
-      <div class="inv-party-label" style="color:${primaryColor}">Delivered To (Site / Branch)</div>
-      <div class="inv-party-name">${doc.shippingName || biz.name}</div>
-      <div class="inv-party-addr">${doc.shippingAddress}${doc.shippingCity ? ', ' + doc.shippingCity : ''}${doc.shippingPincode ? ' — ' + doc.shippingPincode : ''}<br>${doc.shippingState || ''}</div>
-      <div class="inv-party-gstin">GSTIN: ${doc.shippingGstin || biz.gstin || '—'}</div>
-    </div>` : ''}
     `}
   </div>
   <table class="items">
