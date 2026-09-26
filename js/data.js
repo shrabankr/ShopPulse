@@ -112,9 +112,9 @@ function validateGSTIN(gstin) {
 /* ─────────────────────────────────────────────
    GST Calculation Engine
 ───────────────────────────────────────────── */
-function calcTotals(items, sellerStateCode, buyerStateCode) {
+function calcTotals(items, sellerStateCode, buyerStateCode, shippingCharges = 0, shippingGstRate = 0) {
   const isIntra = sellerStateCode === buyerStateCode;
-  let subtotal = 0, totalCgst = 0, totalSgst = 0, totalIgst = 0;
+  let itemsSubtotal = 0, totalCgst = 0, totalSgst = 0, totalIgst = 0;
 
   const calcItems = items.map(item => {
     const qty = parseFloat(item.qty) || 0;
@@ -128,7 +128,7 @@ function calcTotals(items, sellerStateCode, buyerStateCode) {
     const igstAmt = !isIntra ? Math.round(taxable * gstRate / 100 * 100) / 100 : 0;
     const totalAmt = taxable + cgstAmt + sgstAmt + igstAmt;
 
-    subtotal += taxable;
+    itemsSubtotal += taxable;
     totalCgst += cgstAmt;
     totalSgst += sgstAmt;
     totalIgst += igstAmt;
@@ -146,14 +146,38 @@ function calcTotals(items, sellerStateCode, buyerStateCode) {
     };
   });
 
-  subtotal = Math.round(subtotal * 100) / 100;
-  totalCgst = Math.round(totalCgst * 100) / 100;
-  totalSgst = Math.round(totalSgst * 100) / 100;
-  totalIgst = Math.round(totalIgst * 100) / 100;
+  itemsSubtotal = Math.round(itemsSubtotal * 100) / 100;
+  const shipAmt = Math.max(0, parseFloat(shippingCharges) || 0);
+  const shipGst = Math.max(0, parseFloat(shippingGstRate) || 0);
+
+  const shipCgst = isIntra && shipAmt > 0 ? Math.round(shipAmt * shipGst / 2 / 100 * 100) / 100 : 0;
+  const shipSgst = isIntra && shipAmt > 0 ? Math.round(shipAmt * shipGst / 2 / 100 * 100) / 100 : 0;
+  const shipIgst = !isIntra && shipAmt > 0 ? Math.round(shipAmt * shipGst / 100 * 100) / 100 : 0;
+  const shipTax = Math.round((shipCgst + shipSgst + shipIgst) * 100) / 100;
+
+  totalCgst = Math.round((totalCgst + shipCgst) * 100) / 100;
+  totalSgst = Math.round((totalSgst + shipSgst) * 100) / 100;
+  totalIgst = Math.round((totalIgst + shipIgst) * 100) / 100;
+
+  const subtotal = Math.round((itemsSubtotal + shipAmt) * 100) / 100;
   const totalTax = Math.round((totalCgst + totalSgst + totalIgst) * 100) / 100;
   const total = Math.round((subtotal + totalTax) * 100) / 100;
 
-  return { items: calcItems, subtotal, totalCgst, totalSgst, totalIgst, totalTax, total, isIntra };
+  return {
+    items: calcItems,
+    itemsSubtotal,
+    shippingCharges: shipAmt,
+    shippingGstRate: shipGst,
+    shippingTax: shipTax,
+    shippingTotal: Math.round((shipAmt + shipTax) * 100) / 100,
+    subtotal,
+    totalCgst,
+    totalSgst,
+    totalIgst,
+    totalTax,
+    total,
+    isIntra
+  };
 }
 
 const EXPENSE_CATEGORIES = [

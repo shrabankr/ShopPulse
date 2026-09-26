@@ -286,50 +286,76 @@ const Billing = {
           </div>`}
         </div>
 
-        <!-- Optional Separate Shipping / Delivery Address Section -->
+        <!-- Fulfillment / Delivery Mode & Shipping Options -->
         <div style="margin-top:14px;margin-bottom:16px;padding:12px 14px;background:#f8fafc;border:1px solid var(--border);border-radius:var(--radius-sm)">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">
             <strong style="font-size:.88rem;color:var(--text-primary);display:flex;align-items:center;gap:6px">
-              <span class="material-icons" style="font-size:18px;color:var(--primary)">local_shipping</span> Shipping &amp; Delivery Address (Consignee)
+              <span class="material-icons" style="font-size:18px;color:var(--primary)">local_shipping</span> Delivery Mode &amp; Shipping Charges
             </strong>
-            <div style="display:flex;gap:16px;align-items:center;font-size:.84rem">
+            <div style="display:flex;gap:18px;align-items:center;font-size:.84rem">
               <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-weight:600">
-                <input type="radio" name="shipping-mode" id="ship-mode-same" value="same" ${!doc || !doc.hasShippingAddress ? 'checked' : ''} onchange="Billing._toggleShippingAddress(false)">
-                Same as Billing Address
+                <input type="radio" name="delivery-mode" id="del-mode-store" value="instore" ${!doc || doc.deliveryMode !== 'shipment' ? 'checked' : ''} onchange="Billing._toggleDeliveryMode('instore')">
+                🏪 In-Store Purchase (Default)
               </label>
               <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-weight:600;color:var(--primary)">
-                <input type="radio" name="shipping-mode" id="ship-mode-diff" value="diff" ${doc && doc.hasShippingAddress ? 'checked' : ''} onchange="Billing._toggleShippingAddress(true)">
-                Different Shipping / Delivery Address
+                <input type="radio" name="delivery-mode" id="del-mode-ship" value="shipment" ${doc && doc.deliveryMode === 'shipment' ? 'checked' : ''} onchange="Billing._toggleDeliveryMode('shipment')">
+                🚚 Ship / Deliver to Customer Location
               </label>
             </div>
           </div>
 
-          <!-- Collapsible Separate Shipping Fields -->
-          <div id="shipping-address-container" style="display:${doc && doc.hasShippingAddress ? 'block' : 'none'};padding-top:10px;border-top:1px dashed var(--border)">
-            <div class="form-grid" style="font-size:.84rem">
-              <div class="form-group form-full">
-                <label>Consignee / Recipient Name <span class="required">*</span></label>
-                <input id="ship-name" value="${doc?.shippingName || ''}" placeholder="e.g. Site Office / Branch Warehouse / Mr. Rahul">
+          <!-- Collapsible Shipping & Freight Charges Section (Only shown when Ship/Deliver is chosen) -->
+          <div id="shipping-section-container" style="display:${doc && doc.deliveryMode === 'shipment' ? 'block' : 'none'};padding-top:10px;border-top:1px dashed var(--border)">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;background:#fff;padding:10px 12px;border:1px solid var(--border);border-radius:6px">
+              <div class="form-group" style="margin:0">
+                <label style="font-weight:700;color:var(--primary)">Shipping / Freight Charges (₹)</label>
+                <input id="if-shipping-charges" type="number" step="0.01" min="0" value="${doc?.shippingCharges || ''}" placeholder="e.g. 150 or 300" oninput="Billing._recalc('${biz.stateCode}')" style="font-size:1rem;font-weight:700">
               </div>
-              <div class="form-group form-full">
-                <label>Shipping / Delivery Street Address <span class="required">*</span></label>
-                <textarea id="ship-addr" rows="2" placeholder="Building, Street, Plot No., Industrial Area">${doc?.shippingAddress || ''}</textarea>
+              <div class="form-group" style="margin:0">
+                <label style="font-weight:700">Shipping GST Rate</label>
+                <select id="if-shipping-gst" onchange="Billing._recalc('${biz.stateCode}')">
+                  <option value="18" ${!doc || doc.shippingGstRate === 18 ? 'selected' : ''}>18% (SAC 9965 / 9968 Freight)</option>
+                  <option value="12" ${doc && doc.shippingGstRate === 12 ? 'selected' : ''}>12% GST</option>
+                  <option value="5" ${doc && doc.shippingGstRate === 5 ? 'selected' : ''}>5% (GTA / Transport)</option>
+                  <option value="0" ${doc && doc.shippingGstRate === 0 ? 'selected' : ''}>0% (Exempt / Nil)</option>
+                </select>
               </div>
-              <div class="form-group">
-                <label>Shipping City</label>
-                <input id="ship-city" value="${doc?.shippingCity || ''}" placeholder="e.g. Mumbai">
+            </div>
+
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <span style="font-size:.82rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase">Delivery Destination Address</span>
+              <div style="display:flex;gap:12px;align-items:center;font-size:.8rem">
+                <label style="cursor:pointer"><input type="radio" name="ship-addr-choice" id="ship-addr-same" value="same" ${!doc || !doc.hasShippingAddress ? 'checked' : ''} onchange="Billing._toggleShippingAddrChoice(false)"> Use Customer Billing Address</label>
+                <label style="cursor:pointer;font-weight:600;color:var(--primary)"><input type="radio" name="ship-addr-choice" id="ship-addr-diff" value="diff" ${doc && doc.hasShippingAddress ? 'checked' : ''} onchange="Billing._toggleShippingAddrChoice(true)"> Different Site / Delivery Address</label>
               </div>
-              <div class="form-group">
-                <label>Shipping State</label>
-                <select id="ship-state">${stateOpts}</select>
-              </div>
-              <div class="form-group">
-                <label>Shipping Pincode</label>
-                <input id="ship-pin" value="${doc?.shippingPincode || ''}" placeholder="e.g. 400001" maxlength="6">
-              </div>
-              <div class="form-group">
-                <label>Consignee GSTIN (Optional)</label>
-                <input id="ship-gstin" value="${doc?.shippingGstin || ''}" placeholder="15-digit GSTIN (if registered)" maxlength="15" style="text-transform:uppercase;font-family:monospace">
+            </div>
+
+            <div id="shipping-address-fields" style="display:${doc && doc.hasShippingAddress ? 'block' : 'none'}">
+              <div class="form-grid" style="font-size:.84rem">
+                <div class="form-group form-full">
+                  <label>Consignee / Site Contact Name</label>
+                  <input id="ship-name" value="${doc?.shippingName || ''}" placeholder="e.g. Site Office / Branch Warehouse / Mr. Rahul">
+                </div>
+                <div class="form-group form-full">
+                  <label>Delivery / Site Street Address</label>
+                  <textarea id="ship-addr" rows="2" placeholder="Building, Street, Plot No., Industrial Area">${doc?.shippingAddress || ''}</textarea>
+                </div>
+                <div class="form-group">
+                  <label>City</label>
+                  <input id="ship-city" value="${doc?.shippingCity || ''}" placeholder="e.g. Mumbai">
+                </div>
+                <div class="form-group">
+                  <label>State</label>
+                  <select id="ship-state">${stateOpts}</select>
+                </div>
+                <div class="form-group">
+                  <label>Pincode</label>
+                  <input id="ship-pin" value="${doc?.shippingPincode || ''}" placeholder="e.g. 400001" maxlength="6">
+                </div>
+                <div class="form-group">
+                  <label>Consignee GSTIN (Optional)</label>
+                  <input id="ship-gstin" value="${doc?.shippingGstin || ''}" placeholder="15-digit GSTIN (if registered)" maxlength="15" style="text-transform:uppercase;font-family:monospace">
+                </div>
               </div>
             </div>
           </div>
@@ -701,26 +727,33 @@ const Billing = {
     }
   },
 
-  _toggleShippingAddress(isDifferent) {
-    const container = document.getElementById('shipping-address-container');
-    if (container) {
-      container.style.display = isDifferent ? 'block' : 'none';
-      if (isDifferent) {
-        // Pre-fill defaults from selected customer/supplier if shipping fields are empty
-        const partyEl = document.getElementById('if-party');
-        const isSales = window._iType === 'sales';
-        const party = partyEl?.value ? (isSales ? DB.getCustomerById(partyEl.value) : DB.getSupplierById(partyEl.value)) : null;
-        const nameInput = document.getElementById('ship-name');
-        if (nameInput && !nameInput.value && party) nameInput.value = party.name || '';
-        const addrInput = document.getElementById('ship-addr');
-        if (addrInput && !addrInput.value && party) addrInput.value = party.address || '';
-        const cityInput = document.getElementById('ship-city');
-        if (cityInput && !cityInput.value && party) cityInput.value = party.city || '';
-        const pinInput = document.getElementById('ship-pin');
-        if (pinInput && !pinInput.value && party) pinInput.value = party.pincode || '';
-        const stateSelect = document.getElementById('ship-state');
-        if (stateSelect && party?.stateCode) stateSelect.value = party.stateCode;
-      }
+  _toggleDeliveryMode(mode) {
+    const isShipment = mode === 'shipment';
+    const container = document.getElementById('shipping-section-container');
+    if (container) container.style.display = isShipment ? 'block' : 'none';
+    if (!isShipment) {
+      const shipAmtEl = document.getElementById('if-shipping-charges');
+      if (shipAmtEl) shipAmtEl.value = '';
+    }
+    this._recalc(DB.getBiz().stateCode);
+  },
+
+  _toggleShippingAddrChoice(isDiff) {
+    const fields = document.getElementById('shipping-address-fields');
+    if (fields) fields.style.display = isDiff ? 'block' : 'none';
+    if (isDiff) {
+      const partyEl = document.getElementById('if-party');
+      const party = partyEl?.value ? DB.getCustomerById(partyEl.value) : null;
+      const nameInput = document.getElementById('ship-name');
+      if (nameInput && !nameInput.value && party) nameInput.value = party.name || '';
+      const addrInput = document.getElementById('ship-addr');
+      if (addrInput && !addrInput.value && party) addrInput.value = party.address || '';
+      const cityInput = document.getElementById('ship-city');
+      if (cityInput && !cityInput.value && party) cityInput.value = party.city || '';
+      const pinInput = document.getElementById('ship-pin');
+      if (pinInput && !pinInput.value && party) pinInput.value = party.pincode || '';
+      const stateSelect = document.getElementById('ship-state');
+      if (stateSelect && party?.stateCode) stateSelect.value = party.stateCode;
     }
   },
 
@@ -759,8 +792,12 @@ const Billing = {
     const sellerCode = overrideSellerCode || (isSales ? biz.stateCode : (party?.stateCode || biz.stateCode));
     const buyerCode = isSales ? (posEl ? posEl.value : (party?.stateCode || biz.stateCode)) : biz.stateCode;
 
+    const isShipment = isSales && document.getElementById('del-mode-ship')?.checked;
+    const shippingCharges = isShipment ? (parseFloat(document.getElementById('if-shipping-charges')?.value) || 0) : 0;
+    const shippingGstRate = isShipment ? (parseFloat(document.getElementById('if-shipping-gst')?.value) || 18) : 0;
+
     const rows = this._getRows();
-    const t = calcTotals(rows, sellerCode, buyerCode);
+    const t = calcTotals(rows, sellerCode, buyerCode, shippingCharges, shippingGstRate);
 
     // Update row totals
     const tbody = document.getElementById('items-tbody');
@@ -791,8 +828,15 @@ const Billing = {
       taxRows = `<div class="totals-row"><span class="totals-label">IGST</span><span class="totals-value">${fmtCurrency(t.totalIgst)}</span></div>`;
     }
 
+    let shippingSummaryRow = '';
+    if (t.shippingCharges > 0) {
+      shippingSummaryRow = `<div class="totals-row"><span class="totals-label">Shipping / Freight (${t.shippingGstRate}% GST)</span><span class="totals-value font-bold">${fmtCurrency(t.shippingCharges)}</span></div>`;
+    }
+
     totalsEl.innerHTML = `
-      <div class="totals-row"><span class="totals-label">Taxable Value ${taxBadge}</span><span class="totals-value">${fmtCurrency(t.subtotal)}</span></div>
+      <div class="totals-row"><span class="totals-label">Items Subtotal</span><span class="totals-value">${fmtCurrency(t.itemsSubtotal)}</span></div>
+      ${shippingSummaryRow}
+      <div class="totals-row"><span class="totals-label">Taxable Value ${taxBadge}</span><span class="totals-value font-bold">${fmtCurrency(t.subtotal)}</span></div>
       ${taxRows}
       <div class="totals-row"><span class="totals-label">Total Tax</span><span class="totals-value text-danger">${fmtCurrency(t.totalTax)}</span></div>
       <div class="totals-row grand-total"><span class="totals-label">Grand Total</span><span class="totals-value">${fmtCurrency(t.total)}</span></div>`;
@@ -832,15 +876,12 @@ const Billing = {
     const posEl = document.getElementById('if-pos');
     const sellerStateCode = isSales ? biz.stateCode : party.stateCode;
     const buyerStateCode = isSales ? (posEl?.value || party.stateCode || biz.stateCode) : biz.stateCode;
-    const t = calcTotals(items, sellerStateCode, buyerStateCode);
-    const date = document.getElementById('if-date')?.value || new Date().toISOString().split('T')[0];
-    const dueDate = document.getElementById('if-due')?.value || date;
-    const notes = document.getElementById('if-notes')?.value || '';
-    const reverseCharge = document.getElementById('if-rc')?.value === 'true';
-    const status = isDraft ? 'draft' : 'sent';
 
-    // Separate Shipping / Consignee Address details
-    const hasShippingAddress = document.getElementById('ship-mode-diff')?.checked || false;
+    const deliveryMode = isSales ? (document.getElementById('del-mode-ship')?.checked ? 'shipment' : 'instore') : 'instore';
+    const shippingCharges = (isSales && deliveryMode === 'shipment') ? (parseFloat(document.getElementById('if-shipping-charges')?.value) || 0) : 0;
+    const shippingGstRate = (isSales && deliveryMode === 'shipment') ? (parseFloat(document.getElementById('if-shipping-gst')?.value) || 18) : 0;
+    const hasShippingAddress = isSales && deliveryMode === 'shipment' && (document.getElementById('ship-addr-diff')?.checked || false);
+
     const shippingName = hasShippingAddress ? (document.getElementById('ship-name')?.value.trim() || party.name) : '';
     const shippingAddress = hasShippingAddress ? (document.getElementById('ship-addr')?.value.trim() || '') : '';
     const shippingCity = hasShippingAddress ? (document.getElementById('ship-city')?.value.trim() || '') : '';
@@ -849,6 +890,13 @@ const Billing = {
     const shippingState = hasShippingAddress ? (INDIAN_STATES.find(s => s.code === shippingStateCode)?.name || '') : '';
     const shippingPincode = hasShippingAddress ? (document.getElementById('ship-pin')?.value.trim() || '') : '';
     const shippingGstin = hasShippingAddress ? (document.getElementById('ship-gstin')?.value.toUpperCase().trim() || '') : '';
+
+    const t = calcTotals(items, sellerStateCode, buyerStateCode, shippingCharges, shippingGstRate);
+    const date = document.getElementById('if-date')?.value || new Date().toISOString().split('T')[0];
+    const dueDate = document.getElementById('if-due')?.value || date;
+    const notes = document.getElementById('if-notes')?.value || '';
+    const reverseCharge = document.getElementById('if-rc')?.value === 'true';
+    const status = isDraft ? 'draft' : 'sent';
 
     if (isSales) {
       const data = {
@@ -863,6 +911,7 @@ const Billing = {
         customerWhatsapp: party.whatsapp || party.phone || '',
         placeOfSupply: buyerStateCode, sellerStateCode: biz.stateCode,
         reverseCharge, notes,
+        deliveryMode,
         hasShippingAddress,
         shippingName,
         shippingAddress,
@@ -1611,7 +1660,9 @@ body { font-family: 'Courier New', Courier, monospace, sans-serif; font-size: 8.
 </table>
 <div class="pos-divider"></div>
 <table class="pos-totals">
-  <tr><td>Taxable Subtotal:</td><td class="pos-right">${fmtCurrency(doc.subtotal)}</td></tr>
+  <tr><td>Items Subtotal:</td><td class="pos-right">${fmtCurrency(doc.itemsSubtotal || (doc.subtotal - (doc.shippingCharges || 0)))}</td></tr>
+  ${doc.shippingCharges > 0 ? `<tr><td>Shipping Charges:</td><td class="pos-right">${fmtCurrency(doc.shippingCharges)}</td></tr>` : ''}
+  <tr><td>Taxable Value:</td><td class="pos-right">${fmtCurrency(doc.subtotal)}</td></tr>
   ${doc.isIntra ? `<tr><td>CGST + SGST:</td><td class="pos-right">${fmtCurrency(doc.totalCgst + doc.totalSgst)}</td></tr>` : `<tr><td>IGST:</td><td class="pos-right">${fmtCurrency(doc.totalIgst)}</td></tr>`}
   <tr class="pos-grand"><td><strong>NET TOTAL:</strong></td><td class="pos-right"><strong>${fmtCurrency(doc.total)}</strong></td></tr>
 </table>
@@ -1875,6 +1926,10 @@ table.items .rate, table.items .amount { text-align: right; }
     </div>
     <div class="inv-totals">
       <table>
+        ${doc.shippingCharges > 0 ? `
+        <tr><td>Items Subtotal</td><td>${fmtCurrency(doc.itemsSubtotal || (doc.subtotal - doc.shippingCharges))}</td></tr>
+        <tr><td>Shipping / Delivery (${doc.shippingGstRate || 18}% GST)</td><td>${fmtCurrency(doc.shippingCharges)}</td></tr>
+        ` : ''}
         <tr><td>Taxable Value</td><td>${fmtCurrency(doc.subtotal)}</td></tr>
         ${totalTaxRows}
         <tr><td><strong>Total Tax</strong></td><td>${fmtCurrency(doc.totalTax)}</td></tr>
