@@ -1154,20 +1154,30 @@ const Billing = {
 
       ${doc.notes ? `<div style="font-size:.82rem;color:var(--text-secondary);padding:8px 12px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border);margin-bottom:14px"><strong>Notes:</strong> ${doc.notes}</div>` : ''}
       
-      ${isSales && isLicensed && biz.upiId && dueAmount > 0 ? `
-      <div style="padding:12px 16px;background:linear-gradient(135deg, hsl(220,90%,97%) 0%, #fff 100%);border:1px solid hsl(220,80%,85%);border-radius:var(--radius-md);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
-        <div style="display:flex;align-items:center;gap:12px">
-          <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&margin=0&data=${encodeURIComponent(`upi://pay?pa=${biz.upiId}&pn=${biz.name}&am=${parseFloat(dueAmount).toFixed(2)}&tn=${encodeURIComponent('Invoice ' + no)}&cu=INR`)}" style="width:76px;height:76px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;padding:4px" alt="UPI QR">
+      ${isSales && (biz.bankAccount || biz.upiId) ? `
+      <div style="padding:12px 16px;background:linear-gradient(135deg, hsl(220,90%,97%) 0%, #fff 100%);border:1px solid hsl(220,80%,85%);border-radius:var(--radius-md);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;margin-top:12px">
+        <div style="display:flex;align-items:center;gap:14px;flex:1">
+          ${biz.upiId ? `
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&margin=0&data=${encodeURIComponent(`upi://pay?pa=${biz.upiId}&pn=${biz.name}&am=${parseFloat(dueAmount > 0 ? dueAmount : doc.total).toFixed(2)}&tn=${encodeURIComponent('Invoice ' + no)}&cu=INR`)}" style="width:78px;height:78px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;padding:4px" alt="UPI QR">
+          ` : ''}
           <div>
             <div style="font-weight:700;font-size:.88rem;color:#1e3a8a;display:flex;align-items:center;gap:6px">
-              <span class="material-icons" style="font-size:18px;color:#2563eb">qr_code_scanner</span> Scan &amp; Pay Due Amount via UPI
+              <span class="material-icons" style="font-size:18px;color:#2563eb">${dueAmount > 0 ? 'qr_code_scanner' : 'verified'}</span>
+              ${dueAmount > 0 ? 'Bank Details &amp; Scan to Pay UPI' : 'Bank Account &amp; Payment Transfer Details (Paid)'}
             </div>
-            <div style="font-size:.8rem;color:var(--text-secondary);margin-top:2px">UPI ID: <strong style="color:var(--text-primary)">${biz.upiId}</strong></div>
-            <div style="font-size:.78rem;color:#d97706;font-weight:600;margin-top:2px">Due Amount: ${fmtCurrency(dueAmount)}</div>
+            <div style="font-size:.8rem;color:var(--text-secondary);margin-top:3px;display:flex;gap:14px;flex-wrap:wrap">
+              ${biz.bankName ? `<span>Bank: <strong>${biz.bankName}</strong></span>` : ''}
+              ${biz.bankAccount ? `<span>A/C: <strong class="mono">${biz.bankAccount}</strong></span>` : ''}
+              ${biz.bankIFSC ? `<span>IFSC: <strong class="mono">${biz.bankIFSC}</strong></span>` : ''}
+              ${biz.upiId ? `<span>UPI ID: <strong style="color:var(--primary)">${biz.upiId}</strong></span>` : ''}
+            </div>
+            <div style="font-size:.78rem;font-weight:700;margin-top:4px;color:${dueAmount > 0 ? '#d97706' : '#059669'}">
+              ${dueAmount > 0 ? `Remaining Due: ${fmtCurrency(dueAmount)}` : `✅ FULLY SETTLED (${fmtCurrency(doc.total)})`}
+            </div>
           </div>
         </div>
-        <div style="font-size:.75rem;color:var(--text-secondary);text-align:right">
-          Supports <strong>PhonePe</strong>, <strong>Google Pay</strong>, <strong>Paytm</strong>, <strong>BHIM</strong>
+        <div style="font-size:.74rem;color:var(--text-secondary);text-align:right">
+          Official Payment Gateway &amp; Direct Bank Transfer
         </div>
       </div>
       ` : ''}
@@ -1599,6 +1609,9 @@ const Billing = {
     const partyGstin = isSales ? (doc.customerGstin || '') : (doc.supplierGstin || '');
     const partyAddr = isSales ? doc.customerAddress : (doc.supplierAddress || '');
     const partyState = isSales ? doc.customerState : doc.supplierState;
+    const paidAmount = DB.getDocPaidAmount(doc);
+    const dueAmount = DB.getDocDueAmount(doc);
+    const isPaid = doc.status === 'paid' || (paidAmount >= doc.total && doc.total > 0);
 
     const limits = DB.getTrialLimits();
     const showWatermark = !forcePreview && limits.isTrial && limits.isWatermarkNeeded;
@@ -1666,11 +1679,21 @@ body { font-family: 'Courier New', Courier, monospace, sans-serif; font-size: 8.
   ${doc.isIntra ? `<tr><td>CGST + SGST:</td><td class="pos-right">${fmtCurrency(doc.totalCgst + doc.totalSgst)}</td></tr>` : `<tr><td>IGST:</td><td class="pos-right">${fmtCurrency(doc.totalIgst)}</td></tr>`}
   <tr class="pos-grand"><td><strong>NET TOTAL:</strong></td><td class="pos-right"><strong>${fmtCurrency(doc.total)}</strong></td></tr>
 </table>
-${!limits.isTrial && isSales && biz.upiId ? `
+${isSales && (biz.bankName || biz.bankAccount || biz.upiId) ? `
+<div class="pos-divider"></div>
+<div style="font-size:7pt;line-height:1.35">
+  <div style="font-weight:700;margin-bottom:2px">BANK &amp; PAYMENT DETAILS:</div>
+  ${biz.bankName ? `<div>Bank: ${biz.bankName} | A/C: ${biz.bankAccount || '—'}</div>` : ''}
+  ${biz.bankIFSC ? `<div>IFSC: ${biz.bankIFSC}</div>` : ''}
+  ${biz.upiId ? `<div>UPI ID: <strong>${biz.upiId}</strong></div>` : ''}
+</div>
+` : ''}
+${isSales && biz.upiId ? `
 <div class="pos-center" style="margin-top:6px">
-  <div style="font-size:7pt;font-weight:700">SCAN &amp; PAY UPI</div>
-  <img src="https://api.qrserver.com/v1/create-qr-code/?size=85x85&margin=0&data=${encodeURIComponent(`upi://pay?pa=${biz.upiId}&pn=${biz.name}&am=${parseFloat(doc.total).toFixed(2)}&tn=${encodeURIComponent('Invoice ' + no)}&cu=INR`)}" style="width:70px;height:70px;margin:3px auto;display:block">
-  <div style="font-size:6.5pt">${biz.upiId}</div>
+  <div style="font-size:7pt;font-weight:700">${isPaid ? 'PAYMENT QR / UPI' : 'SCAN &amp; PAY UPI'}</div>
+  <img src="https://api.qrserver.com/v1/create-qr-code/?size=85x85&margin=0&data=${encodeURIComponent(`upi://pay?pa=${biz.upiId}&pn=${biz.name}&am=${parseFloat(dueAmount > 0 ? dueAmount : doc.total).toFixed(2)}&tn=${encodeURIComponent('Invoice ' + no)}&cu=INR`)}" style="width:70px;height:70px;margin:3px auto;display:block;background:#fff">
+  <div style="font-size:6.5pt;font-weight:700;color:${isPaid ? '#059669' : '#000'}">${isPaid ? `✅ PAID (₹${fmtCurrency(doc.total)})` : `${fmtCurrency(dueAmount > 0 ? dueAmount : doc.total)} (Due)`}</div>
+  <div style="font-size:6pt">${biz.upiId}</div>
 </div>
 ` : ''}
 <div class="pos-divider"></div>
@@ -1892,22 +1915,23 @@ table.items .rate, table.items .amount { text-align: right; }
   <div class="inv-footer">
     <div class="inv-bank">
       ${isSales ? `
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
-        <div>
-          <h4 style="font-size:7.5pt;font-weight:700;text-transform:uppercase;color:${primaryColor};margin-bottom:4px">Bank Details for Payment</h4>
-          <table style="font-size:8pt">
-            <tr><td>Bank Name</td><td>${biz.bankName || '—'}</td></tr>
-            <tr><td>Account No.</td><td>${biz.bankAccount || '—'}</td></tr>
-            <tr><td>IFSC Code</td><td>${biz.bankIFSC || '—'}</td></tr>
-            <tr><td>Branch</td><td>${biz.bankBranch || '—'}</td></tr>
-            ${biz.upiId ? `<tr><td>UPI ID</td><td><strong>${biz.upiId}</strong></td></tr>` : ''}
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px">
+        <div style="flex:1">
+          <h4 style="font-size:7.5pt;font-weight:700;text-transform:uppercase;color:${primaryColor};margin-bottom:4px">Bank Details &amp; Payment Transfer</h4>
+          <table style="font-size:8pt;line-height:1.4">
+            ${biz.bankName ? `<tr><td style="color:#555;padding-right:8px">Bank Name:</td><td><strong>${biz.bankName}</strong></td></tr>` : ''}
+            ${biz.bankAccount ? `<tr><td style="color:#555;padding-right:8px">Account No:</td><td><strong>${biz.bankAccount}</strong></td></tr>` : ''}
+            ${biz.bankIFSC ? `<tr><td style="color:#555;padding-right:8px">IFSC Code:</td><td><strong>${biz.bankIFSC}</strong></td></tr>` : ''}
+            ${biz.bankBranch ? `<tr><td style="color:#555;padding-right:8px">Branch:</td><td>${biz.bankBranch}</td></tr>` : ''}
+            ${biz.upiId ? `<tr><td style="color:#555;padding-right:8px">UPI ID:</td><td><strong style="color:${primaryColor}">${biz.upiId}</strong></td></tr>` : ''}
           </table>
         </div>
-        ${!limits.isTrial && biz.upiId ? `
-        <div style="text-align:center;border:1px solid #cbd5e1;padding:5px 8px;border-radius:4px;background:#f8fafc;min-width:96px">
-          <div style="font-size:6.5pt;font-weight:700;color:${primaryColor};margin-bottom:2px;letter-spacing:0.04em">SCAN &amp; PAY UPI</div>
-          <img src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&margin=0&data=${encodeURIComponent(`upi://pay?pa=${biz.upiId}&pn=${biz.name}&am=${parseFloat(doc.total).toFixed(2)}&tn=${encodeURIComponent('Invoice ' + no)}&cu=INR`)}" style="width:78px;height:78px;display:block;margin:0 auto;background:#fff;padding:2px;border:1px solid #e2e8f0" alt="UPI QR">
-          <div style="font-size:6pt;font-weight:700;color:${doc.status === 'paid' ? '#059669' : '#d97706'};margin-top:2px">${fmtCurrency(doc.total)} ${doc.status === 'paid' ? '(Paid)' : '(Due)'}</div>
+        ${biz.upiId ? `
+        <div style="text-align:center;border:1px solid #cbd5e1;padding:6px 10px;border-radius:6px;background:#f8fafc;min-width:105px">
+          <div style="font-size:6.5pt;font-weight:800;color:${primaryColor};margin-bottom:2px;letter-spacing:0.04em">${isPaid ? 'PAYMENT QR / UPI' : 'SCAN &amp; PAY UPI'}</div>
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=95x95&margin=0&data=${encodeURIComponent(`upi://pay?pa=${biz.upiId}&pn=${biz.name}&am=${parseFloat(dueAmount > 0 ? dueAmount : doc.total).toFixed(2)}&tn=${encodeURIComponent('Invoice ' + no)}&cu=INR`)}" style="width:78px;height:78px;display:block;margin:0 auto;background:#fff;padding:2px;border:1px solid #e2e8f0;border-radius:4px" alt="UPI QR">
+          <div style="font-size:6.5pt;font-weight:800;color:${isPaid ? '#059669' : '#d97706'};margin-top:3px">${isPaid ? `✅ PAID IN FULL` : `${fmtCurrency(dueAmount > 0 ? dueAmount : doc.total)} (Due)`}</div>
+          <div style="font-size:5.5pt;color:#64748b;margin-top:1px">${biz.upiId}</div>
         </div>
         ` : ''}
       </div>
