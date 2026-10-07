@@ -46,6 +46,7 @@
     "files": [
       "index.html",
       "css/**",
+      "fonts/**",
       "js/**",
       "electron/**",
       "!node_modules/**",

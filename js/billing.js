@@ -1158,7 +1158,7 @@ const Billing = {
       <div style="padding:12px 16px;background:linear-gradient(135deg, hsl(220,90%,97%) 0%, #fff 100%);border:1px solid hsl(220,80%,85%);border-radius:var(--radius-md);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;margin-top:12px">
         <div style="display:flex;align-items:center;gap:14px;flex:1">
           ${biz.upiId ? `
-          <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&margin=0&data=${encodeURIComponent(`upi://pay?pa=${biz.upiId}&pn=${biz.name}&am=${parseFloat(dueAmount > 0 ? dueAmount : doc.total).toFixed(2)}&tn=${encodeURIComponent('Invoice ' + no)}&cu=INR`)}" style="width:78px;height:78px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;padding:4px" alt="UPI QR">
+          <img src="${genUPIQrDataUrl(`upi://pay?pa=${biz.upiId}&pn=${biz.name}&am=${parseFloat(dueAmount > 0 ? dueAmount : doc.total).toFixed(2)}&tn=${encodeURIComponent('Invoice ' + no)}&cu=INR`, 3)}" style="width:78px;height:78px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;padding:4px" alt="UPI QR">
           ` : ''}
           <div>
             <div style="font-weight:700;font-size:.88rem;color:#1e3a8a;display:flex;align-items:center;gap:6px">
@@ -1691,7 +1691,7 @@ ${isSales && (biz.bankName || biz.bankAccount || biz.upiId) ? `
 ${isSales && biz.upiId ? `
 <div class="pos-center" style="margin-top:6px">
   <div style="font-size:7pt;font-weight:700">${isPaid ? 'PAYMENT QR / UPI' : 'SCAN &amp; PAY UPI'}</div>
-  <img src="https://api.qrserver.com/v1/create-qr-code/?size=85x85&margin=0&data=${encodeURIComponent(`upi://pay?pa=${biz.upiId}&pn=${biz.name}&am=${parseFloat(dueAmount > 0 ? dueAmount : doc.total).toFixed(2)}&tn=${encodeURIComponent('Invoice ' + no)}&cu=INR`)}" style="width:70px;height:70px;margin:3px auto;display:block;background:#fff">
+  <img src="${genUPIQrDataUrl(`upi://pay?pa=${biz.upiId}&pn=${biz.name}&am=${parseFloat(dueAmount > 0 ? dueAmount : doc.total).toFixed(2)}&tn=${encodeURIComponent('Invoice ' + no)}&cu=INR`, 2)}" style="width:70px;height:70px;margin:3px auto;display:block;background:#fff">
   <div style="font-size:6.5pt;font-weight:700;color:${isPaid ? '#059669' : '#000'}">${isPaid ? `✅ PAID (₹${fmtCurrency(doc.total)})` : `${fmtCurrency(dueAmount > 0 ? dueAmount : doc.total)} (Due)`}</div>
   <div style="font-size:6pt">${biz.upiId}</div>
 </div>
@@ -1929,7 +1929,7 @@ table.items .rate, table.items .amount { text-align: right; }
         ${biz.upiId ? `
         <div style="text-align:center;border:1px solid #cbd5e1;padding:6px 10px;border-radius:6px;background:#f8fafc;min-width:105px">
           <div style="font-size:6.5pt;font-weight:800;color:${primaryColor};margin-bottom:2px;letter-spacing:0.04em">${isPaid ? 'PAYMENT QR / UPI' : 'SCAN &amp; PAY UPI'}</div>
-          <img src="https://api.qrserver.com/v1/create-qr-code/?size=95x95&margin=0&data=${encodeURIComponent(`upi://pay?pa=${biz.upiId}&pn=${biz.name}&am=${parseFloat(dueAmount > 0 ? dueAmount : doc.total).toFixed(2)}&tn=${encodeURIComponent('Invoice ' + no)}&cu=INR`)}" style="width:78px;height:78px;display:block;margin:0 auto;background:#fff;padding:2px;border:1px solid #e2e8f0;border-radius:4px" alt="UPI QR">
+          <img src="${genUPIQrDataUrl(`upi://pay?pa=${biz.upiId}&pn=${biz.name}&am=${parseFloat(dueAmount > 0 ? dueAmount : doc.total).toFixed(2)}&tn=${encodeURIComponent('Invoice ' + no)}&cu=INR`, 3)}" style="width:78px;height:78px;display:block;margin:0 auto;background:#fff;padding:2px;border:1px solid #e2e8f0;border-radius:4px" alt="UPI QR">
           <div style="font-size:6.5pt;font-weight:800;color:${isPaid ? '#059669' : '#d97706'};margin-top:3px">${isPaid ? `✅ PAID IN FULL` : `${fmtCurrency(dueAmount > 0 ? dueAmount : doc.total)} (Due)`}</div>
           <div style="font-size:5.5pt;color:#64748b;margin-top:1px">${biz.upiId}</div>
         </div>

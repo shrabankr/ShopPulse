@@ -109,6 +109,21 @@ function validateGSTIN(gstin) {
   return regex.test(gstin.toUpperCase());
 }
 
+function genUPIQrDataUrl(text, cellSize = 3) {
+  if (!text) return '';
+  try {
+    if (typeof qrcode === 'function') {
+      const qr = qrcode(0, 'M');
+      qr.addData(text);
+      qr.make();
+      return qr.createDataURL(cellSize, 0);
+    }
+  } catch (e) {
+    console.warn('Offline QR generator fallback:', e);
+  }
+  return `https://api.qrserver.com/v1/create-qr-code/?size=100x100&margin=0&data=${encodeURIComponent(text)}`;
+}
+
 /* ─────────────────────────────────────────────
    GST Calculation Engine
 ───────────────────────────────────────────── */
