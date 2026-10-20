@@ -93,6 +93,10 @@ const App = {
           <a href="#help" class="nav-item" data-r="help"><span class="material-icons">help_outline</span><span>Help &amp; Support</span></a>
         </div>
       </nav>
+      <div class="sidebar-footer" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;font-size:0.75rem;color:hsl(220,15%,60%);border-top:1px solid rgba(255,255,255,0.07)">
+        <span style="font-weight:600;letter-spacing:0.02em">ShopPulse</span>
+        <span class="badge" style="background:rgba(255,255,255,0.08);color:#cbd5e1;font-size:0.72rem;padding:2px 8px;border-radius:10px;font-weight:600">v${DB.VERSION || '1.1.0'}</span>
+      </div>
     `;
   },
 
@@ -1689,9 +1693,17 @@ ${JSON.stringify(data, null, 2)}
     const snapshots = DB.getSnapshots();
     const stateOpts = INDIAN_STATES.map(s => `<option value="${s.code}" ${b.stateCode === s.code ? 'selected' : ''}>${s.name}</option>`).join('');
     container.innerHTML = `
-      <div class="page-header">
-        <h2>Business Settings &amp; Data Safety</h2>
-        <p>Manage your GST profile, check subscription status, and backup your database.</p>
+      <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+        <div>
+          <h2>Business Settings &amp; Data Safety</h2>
+          <p>Manage your GST profile, check subscription status, and backup your database.</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="badge" style="background:var(--bg);color:var(--text-secondary);border:1px solid var(--border);padding:6px 12px;font-size:0.8rem;font-weight:600">
+            <span class="material-icons" style="font-size:14px;vertical-align:middle;margin-right:3px">info</span>
+            ShopPulse v${DB.VERSION || '1.1.0'}
+          </span>
+        </div>
       </div>
 
       <!-- Unified Subscription & License Status Card -->
@@ -2371,7 +2383,7 @@ ${JSON.stringify(data, null, 2)}
           <div style="flex:1;min-width:260px">
             <h3 style="margin-bottom:4px;color:hsl(271,78%,25%)">Software Developer Contact</h3>
             <div style="font-size:.9rem;color:var(--text-secondary);margin-bottom:8px">
-              Created &amp; Maintained by <strong>Shraban Kumar Mahato</strong> (AndroPCSoft)
+              Created &amp; Maintained by <strong>Shraban Kumar Mahato</strong> (AndroPCSoft) • <strong>v${DB.VERSION || '1.1.0'}</strong>
             </div>
             <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:.86rem">
               <span>📧 Email: <a href="mailto:shraban@andropcsoft.com?subject=ShopPulse%20Support%20Request" style="font-weight:700;color:hsl(271,78%,45%)">shraban@andropcsoft.com</a></span>

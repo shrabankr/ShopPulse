@@ -45,6 +45,7 @@ const GST_RATES = [0, 0.1, 0.25, 1, 1.5, 3, 5, 7.5, 12, 18, 28];
 const PAYMENT_METHODS = ['Cash', 'Bank Transfer', 'UPI', 'Cheque', 'NEFT', 'RTGS', 'Credit Card', 'Other'];
 const UNITS = ['Nos', 'Pcs', 'Box', 'Pack', 'Set', 'Roll', 'Mtr', 'Job', 'Visit', 'License', 'Year', 'Month'];
 const DECIMAL_UNITS = ['Mtr', 'Roll'];
+const APP_VERSION = '1.1.0';
 
 function isDecimalUnit(unit) {
   return DECIMAL_UNITS.includes(unit);
@@ -233,6 +234,7 @@ const RETURN_REASONS_PURCHASE = [
    Database Layer (localStorage)
 ───────────────────────────────────────────── */
 const DB = {
+  VERSION: APP_VERSION,
   K: {
     BIZ: 'sp_biz',
     CUSTOMERS: 'sp_customers',
@@ -1046,7 +1048,7 @@ const DB = {
       productsCount: products.length,
       partiesCount: customers.length + suppliers.length,
       totalSalesRevenue: parseFloat(totalSalesAmt).toFixed(2),
-      version: '1.0.0',
+      version: APP_VERSION,
       timestamp: new Date().toISOString()
     };
 
@@ -1211,7 +1213,7 @@ const DB = {
         author: 'Shraban Kumar Mahato',
         email: 'shraban@andropcsoft.com',
         website: 'andropcsoft.com',
-        version: '1.0.0'
+        version: APP_VERSION
       },
       exportedAt: new Date().toISOString(),
       businessName: biz.name,

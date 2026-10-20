@@ -130,7 +130,7 @@ function buildMenu() {
             dialog.showMessageBox(mainWindow, {
               type: 'info',
               title: 'About ShopPulse',
-              message: 'ShopPulse v1.0.0',
+              message: `ShopPulse v${app.getVersion()}`,
               detail: 'GST-compliant billing, inventory & CRM\nfor Indian IT/CCTV businesses.\n\nAll data stored locally on your computer.',
               buttons: ['OK'],
             });
