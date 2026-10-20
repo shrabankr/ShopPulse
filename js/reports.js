@@ -8,6 +8,8 @@ const Reports = {
     const sales = DB.getSales();
     const purchases = DB.getPurchases();
     const expenses = DB.getExpenses();
+    const cNotes = DB.getCreditNotes();
+    const dNotes = DB.getDebitNotes();
 
     // Date filter helpers
     const now = new Date();
@@ -21,15 +23,23 @@ const Reports = {
     const mSales = sales.filter(s => new Date(s.date) >= currentMonthStart);
     const mPurchases = purchases.filter(p => new Date(p.date) >= currentMonthStart);
     const mExpensesList = expenses.filter(e => new Date(e.date) >= currentMonthStart);
+    const mCreditNotes = cNotes.filter(n => new Date(n.date) >= currentMonthStart);
+    const mDebitNotes = dNotes.filter(n => new Date(n.date) >= currentMonthStart);
     const pmSales = sales.filter(s => { const d = new Date(s.date); return d >= prevMonthStart && d <= prevMonthEnd; });
 
-    const mRevenue = mSales.filter(s => s.status === 'paid').reduce((s, i) => s + i.total, 0);
+    const mGrossRevenue = mSales.filter(s => s.status === 'paid').reduce((s, i) => s + i.total, 0);
+    const mReturnsAmt = mCreditNotes.reduce((s, n) => s + (n.total || 0), 0);
+    const mRevenue = Math.max(0, mGrossRevenue - mReturnsAmt);
     const pmRevenue = pmSales.filter(s => s.status === 'paid').reduce((s, i) => s + i.total, 0);
-    const mPurchaseAmt = mPurchases.filter(p => p.status === 'paid').reduce((s, b) => s + b.total, 0);
+
+    const mGrossPurchase = mPurchases.filter(p => p.status === 'paid').reduce((s, b) => s + b.total, 0);
+    const mPurchaseReturnsAmt = mDebitNotes.reduce((s, n) => s + (n.total || 0), 0);
+    const mPurchaseAmt = Math.max(0, mGrossPurchase - mPurchaseReturnsAmt);
+
     const mExpenseAmt = mExpensesList.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
     const mProfit = mRevenue - mPurchaseAmt - mExpenseAmt;
-    const mOutputTax = mSales.reduce((s, i) => s + (i.totalTax || 0), 0);
-    const mInputTax = mPurchases.reduce((s, b) => s + (b.totalTax || 0), 0);
+    const mOutputTax = Math.max(0, mSales.reduce((s, i) => s + (i.totalTax || 0), 0) - mCreditNotes.reduce((s, n) => s + (n.totalTax || 0), 0));
+    const mInputTax = Math.max(0, mPurchases.reduce((s, b) => s + (b.totalTax || 0), 0) - mDebitNotes.reduce((s, n) => s + (n.totalTax || 0), 0));
     const mExpenseItc = mExpensesList.filter(e => e.isItc).reduce((s, e) => s + (parseFloat(e.gstAmt) || 0), 0);
     const mNetTax = mOutputTax - (mInputTax + mExpenseItc);
 
@@ -229,6 +239,8 @@ const Reports = {
 
       const mSales = filterDocs(sales);
       const mPurchases = filterDocs(purchases);
+      const mCreditNotes = filterDocs(DB.getCreditNotes());
+      const mDebitNotes = filterDocs(DB.getDebitNotes());
 
       // GSTR-1: B2B (registered buyers)
       const b2b = mSales.filter(s => s.customerGstin);
@@ -395,6 +407,52 @@ const Reports = {
       }).join('')}
             </tbody>
           </table>` : '<div class="empty-state" style="padding:20px"><span class="material-icons">receipt</span><p>No B2C transactions this month</p></div>'}
+        </div>
+
+        <!-- GSTR-1: 9B. Credit & Debit Notes (Sales Returns) -->
+        <div class="gstr-section">
+          <div class="gstr-header-box">
+            <span><span class="material-icons" style="vertical-align:middle;margin-right:6px;font-size:18px">assignment_returned</span>GSTR-1: 9B. Credit &amp; Debit Notes (Sales Returns) — ${mCreditNotes.length} records</span>
+          </div>
+          ${mCreditNotes.length ? `
+          <table class="gstr-table">
+            <thead>
+              <tr>
+                <th>Note No.</th>
+                <th>Note Date</th>
+                <th>Original Invoice Ref</th>
+                <th>Customer Name</th>
+                <th>GSTIN</th>
+                <th>Return Reason</th>
+                <th class="text-right">Note Value</th>
+                <th class="text-right">Taxable</th>
+                <th class="text-right">Tax Reversal</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${mCreditNotes.map(n => `
+                <tr>
+                  <td><span class="mono" style="font-weight:700">${n.noteNo}</span></td>
+                  <td>${fmtDate(n.date)}</td>
+                  <td><span class="mono" style="color:var(--primary)">${n.originalInvoiceNo || 'Direct Return'}</span></td>
+                  <td>${n.customerName}</td>
+                  <td><span class="mono">${n.customerGstin || 'Unregistered'}</span></td>
+                  <td><span class="badge badge-warning">${n.reason || 'Return'}</span></td>
+                  <td class="text-right font-bold" style="color:var(--danger)">-${fmtCurrency(n.total)}</td>
+                  <td class="text-right">${fmtCurrency(n.subtotal)}</td>
+                  <td class="text-right font-bold text-danger">-${fmtCurrency(n.totalTax || 0)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="6" class="text-right font-bold">Total Credit Notes (Reduction in Outward Tax)</td>
+                <td class="text-right font-bold text-danger">-${fmtCurrency(mCreditNotes.reduce((s, n) => s + (n.total || 0), 0))}</td>
+                <td class="text-right font-bold">${fmtCurrency(mCreditNotes.reduce((s, n) => s + (n.subtotal || 0), 0))}</td>
+                <td class="text-right font-bold text-danger">-${fmtCurrency(mCreditNotes.reduce((s, n) => s + (n.totalTax || 0), 0))}</td>
+              </tr>
+            </tfoot>
+          </table>` : '<div class="empty-state" style="padding:20px"><p>No Credit Notes (Sales Returns) issued this month</p></div>'}
         </div>
 
         <!-- HSN Summary -->

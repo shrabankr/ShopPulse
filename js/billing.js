@@ -86,6 +86,7 @@ const Billing = {
             <td>${statusBadge}</td>
             <td class="action-col" onclick="event.stopPropagation()">
               <button class="btn btn-xs btn-secondary" onclick="Billing.viewDoc('${d.id}','${type}')" title="View Details"><span class="material-icons" style="font-size:14px">visibility</span></button>
+              <button class="btn btn-xs btn-secondary" onclick="Billing.openReturnForm('${type}','${d.id}')" title="${isSales ? 'Issue Customer Return (Credit Note)' : 'Return to Supplier (Debit Note)'}" style="color:hsl(271,78%,50%)"><span class="material-icons" style="font-size:14px">assignment_return</span></button>
               <button class="btn btn-xs btn-secondary" onclick="Billing.printDoc('${d.id}','${type}')" title="Print Invoice"><span class="material-icons" style="font-size:14px">print</span></button>
               <button class="btn btn-xs btn-secondary" onclick="Billing.shareWhatsApp('${d.id}','${type}')" title="Share WhatsApp"><span class="material-icons" style="font-size:14px;color:#25d366">chat</span></button>
               ${d.status !== 'paid' ? `<button class="btn btn-xs btn-success" onclick="Billing.markPaid('${d.id}','${type}')" title="Record / Manage Payment"><span class="material-icons" style="font-size:14px">add_card</span></button>` : ''}
@@ -99,6 +100,7 @@ const Billing = {
       <div class="page-header-row">
         <h2>${isSales ? 'Sales Invoices' : 'Purchase Bills'}</h2>
         <div class="actions">
+          <button class="btn btn-secondary" onclick="App.route('#returns-${type}')"><span class="material-icons">assignment_return</span> ${isSales ? 'Customer Returns (CN)' : 'Supplier Returns (DN)'}</button>
           <button class="btn btn-primary" onclick="Billing.openNew('${type}')"><span class="material-icons">add</span> New ${isSales ? 'Invoice' : 'Bill'}</button>
         </div>
       </div>
@@ -1010,6 +1012,9 @@ const Billing = {
 
     const actionButtons = `
       <button class="btn btn-ghost" onclick="App.closeModal()">Close</button>
+      <button class="btn btn-warning" onclick="App.closeModal();Billing.openReturnForm('${type}','${id}')" title="${isSales ? 'Issue Customer Return (Credit Note)' : 'Return to Supplier (Debit Note)'}">
+        <span class="material-icons">assignment_return</span> ${isSales ? 'Return (Credit Note)' : 'Return (Debit Note)'}
+      </button>
       <button class="btn btn-secondary" onclick="Billing.shareWhatsApp('${id}','${type}')" title="${isLicensed ? 'Share via WhatsApp' : 'Commercial License Required 💎'}">
         <span class="material-icons" style="color:#25d366">chat</span> WhatsApp ${isLicensed ? '' : '<span style="font-size:10px">💎</span>'}
       </button>
@@ -1041,6 +1046,22 @@ const Billing = {
           <div style="font-size:1.4rem;font-weight:800;margin-top:4px;letter-spacing:-.03em">${fmtCurrency(doc.total)}</div>
         </div>
       </div>
+
+      ${(() => {
+        const linkedNotes = isSales ? DB.getDocCreditNotes(doc.invoiceNo) : DB.getDocDebitNotes(doc.billNo);
+        if (!linkedNotes || !linkedNotes.length) return '';
+        return `
+        <div style="margin-bottom:14px;padding:10px 14px;background:hsl(38,92%,96%);border:1px solid hsl(38,80%,80%);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <div style="display:flex;align-items:center;gap:8px;font-size:.825rem;color:hsl(220,28%,14%)">
+            <span class="material-icons" style="color:var(--warning);font-size:18px">assignment_return</span>
+            <span><strong>Linked ${isSales ? 'Credit Note (Sales Return)' : 'Debit Note (Purchase Return)'}:</strong> ${linkedNotes.map(n => `<span class="mono" style="font-weight:700">${n.noteNo}</span> (${fmtCurrency(n.total)}) · ${n.reason || 'Return'}`).join(', ')}</span>
+          </div>
+          <div>
+            ${linkedNotes.map(n => `<button class="btn btn-xs btn-secondary" onclick="App.closeModal();Billing.viewReturnDoc('${n.id}','${type}')">View Note (${n.noteNo})</button>`).join(' ')}
+          </div>
+        </div>
+        `;
+      })()}
 
       <div class="invoice-parties-grid" style="margin-bottom:16px">
         ${isSales ? `
@@ -2146,5 +2167,1046 @@ ${showWatermark ? `
           ${purchases.length > 0 ? `<tfoot><tr><td colspan="5" class="text-right">Total Payable Due</td><td colspan="2" class="text-right font-bold">${fmtCurrency(purchases.reduce((s, b) => s + DB.getDocDueAmount(b), 0))}</td><td></td></tr></tfoot>` : ''}
         </table>
       </div>`;
+  },
+
+  /* ═══════════════════════════════════════════
+     RETURNS & NOTES (CREDIT & DEBIT NOTES)
+  ═══════════════════════════════════════════ */
+  renderReturns(container, initialTab = 'sales') {
+    let activeTab = initialTab === 'purchases' ? 'purchases' : 'sales';
+    let searchTerm = '';
+    let reasonFilter = 'all';
+
+    const render = () => {
+      const isSales = activeTab === 'sales';
+      const cNotes = DB.getCreditNotes();
+      const dNotes = DB.getDebitNotes();
+      const notes = isSales ? cNotes : dNotes;
+
+      const totalSalesReturnAmt = cNotes.reduce((s, n) => s + (n.total || 0), 0);
+      const totalPurchaseReturnAmt = dNotes.reduce((s, n) => s + (n.total || 0), 0);
+      const totalSalesReturnQty = cNotes.reduce((s, n) => s + (n.items || []).reduce((iq, it) => iq + (parseFloat(it.qty) || 0), 0), 0);
+      const totalPurchaseReturnQty = dNotes.reduce((s, n) => s + (n.items || []).reduce((iq, it) => iq + (parseFloat(it.qty) || 0), 0), 0);
+
+      const filtered = notes.filter(n => {
+        const matchReason = reasonFilter === 'all' || n.reason === reasonFilter;
+        const term = searchTerm.toLowerCase().trim();
+        const party = isSales ? (n.customerName || '') : (n.supplierName || '');
+        const partyGstin = isSales ? (n.customerGstin || '') : (n.supplierGstin || '');
+        const origRef = isSales ? (n.originalInvoiceNo || '') : (n.originalBillNo || '');
+        const matchSearch = !term || (
+          (n.noteNo || '').toLowerCase().includes(term) ||
+          party.toLowerCase().includes(term) ||
+          partyGstin.toLowerCase().includes(term) ||
+          origRef.toLowerCase().includes(term) ||
+          (n.reason || '').toLowerCase().includes(term)
+        );
+        return matchReason && matchSearch;
+      }).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      const reasons = isSales ? RETURN_REASONS_SALES : RETURN_REASONS_PURCHASE;
+
+      container.innerHTML = `
+        <div class="page-header-row">
+          <div>
+            <h2>Returns &amp; Notes (Credit / Debit Notes)</h2>
+            <p style="font-size:.825rem;color:var(--text-secondary);margin-top:2px">
+              GST-compliant customer returns (Credit Notes) &amp; supplier purchase returns (Debit Notes) with automatic stock sync.
+            </p>
+          </div>
+          <div class="actions">
+            ${isSales ? `
+            <button class="btn btn-primary" onclick="Billing.openReturnForm('sales')">
+              <span class="material-icons">assignment_return</span> + Issue Customer Return (Credit Note)
+            </button>
+            ` : `
+            <button class="btn btn-primary" onclick="Billing.openReturnForm('purchases')">
+              <span class="material-icons">assignment_return</span> + Issue Supplier Return (Debit Note)
+            </button>
+            `}
+          </div>
+        </div>
+
+        <!-- KPI Grid -->
+        <div class="kpi-grid" style="margin-bottom:20px">
+          <div class="kpi-card kpi-warning">
+            <div class="kpi-icon"><span class="material-icons">assignment_return</span></div>
+            <div class="kpi-content">
+              <div class="kpi-label">Customer Returns (Credit Notes)</div>
+              <div class="kpi-value">${fmtCurrency(totalSalesReturnAmt)}</div>
+              <div class="kpi-sub">${cNotes.length} Credit Notes · ${totalSalesReturnQty} items returned to stock</div>
+            </div>
+          </div>
+          <div class="kpi-card kpi-primary">
+            <div class="kpi-icon"><span class="material-icons">outbox</span></div>
+            <div class="kpi-content">
+              <div class="kpi-label">Supplier Returns (Debit Notes)</div>
+              <div class="kpi-value">${fmtCurrency(totalPurchaseReturnAmt)}</div>
+              <div class="kpi-sub">${dNotes.length} Debit Notes · ${totalPurchaseReturnQty} items returned to vendor</div>
+            </div>
+          </div>
+          <div class="kpi-card kpi-success">
+            <div class="kpi-icon"><span class="material-icons">inventory_2</span></div>
+            <div class="kpi-content">
+              <div class="kpi-label">Auto Inventory Adjustment</div>
+              <div class="kpi-value" style="font-size:1.15rem">+${totalSalesReturnQty} In / -${totalPurchaseReturnQty} Out</div>
+              <div class="kpi-sub">Live stock updated automatically</div>
+            </div>
+          </div>
+          <div class="kpi-card kpi-info">
+            <div class="kpi-icon"><span class="material-icons">receipt</span></div>
+            <div class="kpi-content">
+              <div class="kpi-label">GST Section 34 Compliance</div>
+              <div class="kpi-value" style="font-size:1.15rem">GSTR-1 Table 9B</div>
+              <div class="kpi-sub">Tax reductions automatically tracked</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <div class="invoice-list-header" style="margin-bottom:14px">
+          <div class="tabs" id="return-type-tabs">
+            <button class="tab-btn ${isSales ? 'active' : ''}" onclick="window._switchReturnTab('sales')">
+              <span class="material-icons" style="font-size:17px">assignment_returned</span> Customer Returns (Credit Notes)
+              <span class="tab-count">${cNotes.length}</span>
+            </button>
+            <button class="tab-btn ${!isSales ? 'active' : ''}" onclick="window._switchReturnTab('purchases')">
+              <span class="material-icons" style="font-size:17px">local_shipping</span> Supplier Returns (Debit Notes)
+              <span class="tab-count">${dNotes.length}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Search & Filter Bar -->
+        <div class="filter-bar">
+          <div class="search-box">
+            <span class="material-icons">search</span>
+            <input type="text" id="return-search" placeholder="Search by note #, ${isSales ? 'customer' : 'supplier'}, original invoice/bill, reason…" value="${searchTerm}">
+          </div>
+          <select class="filter-select" id="return-reason-filter">
+            <option value="all">All Return Reasons (${notes.length})</option>
+            ${reasons.map(r => `<option value="${r}" ${reasonFilter === r ? 'selected' : ''}>${r}</option>`).join('')}
+          </select>
+        </div>
+
+        <!-- Table View -->
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Note No</th>
+                <th>${isSales ? 'Customer' : 'Supplier'}</th>
+                <th>Original Ref</th>
+                <th>Date</th>
+                <th>Reason</th>
+                <th>Returned Items</th>
+                <th class="text-right">Total Credit/Debit</th>
+                <th>Settlement</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filtered.length === 0 ? `
+              <tr>
+                <td colspan="9">
+                  <div class="table-empty">
+                    <span class="material-icons">assignment_return</span>
+                    <p>No ${isSales ? 'Credit Notes' : 'Debit Notes'} found</p>
+                    <button class="btn btn-primary btn-sm" onclick="Billing.openReturnForm('${activeTab}')">
+                      <span class="material-icons">add</span> Create ${isSales ? 'Credit Note' : 'Debit Note'}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+              ` : filtered.map(n => {
+                const party = isSales ? n.customerName : n.supplierName;
+                const gstin = isSales ? n.customerGstin : n.supplierGstin;
+                const origDoc = isSales ? n.originalInvoiceNo : n.originalBillNo;
+                const itemsCount = (n.items || []).reduce((s, it) => s + (parseFloat(it.qty) || 0), 0);
+                
+                let settlementLabel = 'Adjusted against Bill';
+                let settlementBadgeClass = 'badge-paid';
+                if (n.settlementAction === 'store_credit' || n.settlementAction === 'vendor_credit') {
+                  settlementLabel = 'Store Credit / Balance';
+                  settlementBadgeClass = 'badge-info';
+                } else if (n.settlementAction === 'refund_cash' || n.settlementAction === 'refund_bank') {
+                  settlementLabel = 'Refund Settled';
+                  settlementBadgeClass = 'badge-success';
+                }
+
+                return `
+                <tr onclick="Billing.viewReturnDoc('${n.id}','${activeTab}')" style="cursor:pointer">
+                  <td><span class="mono" style="font-weight:700">${n.noteNo}</span></td>
+                  <td>
+                    <div style="font-weight:600">${party || '—'}</div>
+                    <div style="font-size:.72rem;color:var(--text-secondary);font-family:monospace">${gstin || 'Unregistered'}</div>
+                  </td>
+                  <td>
+                    ${origDoc ? `<span class="mono" style="font-size:.75rem;color:var(--primary)">${origDoc}</span>` : '<span class="text-muted">—</span>'}
+                    ${n.originalInvoiceDate || n.originalBillDate ? `<div style="font-size:.7rem;color:var(--text-secondary)">${fmtDate(n.originalInvoiceDate || n.originalBillDate)}</div>` : ''}
+                  </td>
+                  <td style="white-space:nowrap">${fmtDate(n.date)}</td>
+                  <td><span class="badge badge-warning" style="font-size:.72rem">${n.reason || 'General Return'}</span></td>
+                  <td><strong style="color:var(--text-primary)">${itemsCount}</strong> <span style="font-size:.75rem;color:var(--text-secondary)">units</span></td>
+                  <td class="text-right amount-cell">
+                    <div style="font-weight:700;color:${isSales ? 'var(--danger)' : 'var(--success)'}">
+                      ${isSales ? '-' : '+'}${fmtCurrency(n.total)}
+                    </div>
+                    <div style="font-size:.7rem;color:var(--text-secondary)">Tax: ${fmtCurrency(n.totalTax || 0)}</div>
+                  </td>
+                  <td><span class="badge ${settlementBadgeClass}">${settlementLabel}</span></td>
+                  <td class="action-col" onclick="event.stopPropagation()">
+                    <button class="btn btn-xs btn-secondary" onclick="Billing.viewReturnDoc('${n.id}','${activeTab}')" title="View Document Details"><span class="material-icons" style="font-size:14px">visibility</span></button>
+                    <button class="btn btn-xs btn-secondary" onclick="Billing.printReturnDoc('${n.id}','${activeTab}')" title="Print GST Note"><span class="material-icons" style="font-size:14px">print</span></button>
+                    <button class="btn btn-xs btn-secondary" onclick="Billing.shareReturnWhatsApp('${n.id}','${activeTab}')" title="WhatsApp Share"><span class="material-icons" style="font-size:14px;color:#25d366">chat</span></button>
+                    ${DB.getRole() !== 'staff' ? `<button class="btn btn-xs btn-ghost" onclick="Billing.deleteReturnDoc('${n.id}','${activeTab}')" title="Delete Note"><span class="material-icons" style="font-size:14px;color:var(--danger)">delete</span></button>` : ''}
+                  </td>
+                </tr>
+                `;
+              }).join('')}
+            </tbody>
+            ${filtered.length > 0 ? `
+            <tfoot>
+              <tr>
+                <td colspan="6" class="text-right">Total ${isSales ? 'Credit Value' : 'Debit Value'}</td>
+                <td class="text-right font-bold" style="font-size:.95rem;color:${isSales ? 'var(--danger)' : 'var(--success)'}">
+                  ${isSales ? '-' : '+'}${fmtCurrency(filtered.reduce((s, n) => s + (n.total || 0), 0))}
+                </td>
+                <td colspan="2"></td>
+              </tr>
+            </tfoot>
+            ` : ''}
+          </table>
+        </div>
+      `;
+
+      window._switchReturnTab = (tab) => {
+        activeTab = tab;
+        searchTerm = '';
+        reasonFilter = 'all';
+        render();
+      };
+
+      const searchInput = container.querySelector('#return-search');
+      if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+          searchTerm = e.target.value;
+          render();
+        });
+      }
+
+      const reasonSelect = container.querySelector('#return-reason-filter');
+      if (reasonSelect) {
+        reasonSelect.addEventListener('change', (e) => {
+          reasonFilter = e.target.value;
+          render();
+        });
+      }
+    };
+
+    render();
+  },
+
+  /* ═══════════════════════════════════════════
+     RETURN CREATION FORM (MODAL)
+  ═══════════════════════════════════════════ */
+  openReturnForm(returnType = 'sales', prefillDocId = null) {
+    const isSales = returnType === 'sales';
+    const biz = DB.getBiz();
+    const parties = isSales ? DB.getCustomers() : DB.getSuppliers();
+    const products = DB.getProducts();
+    const today = new Date().toISOString().split('T')[0];
+
+    const noteNo = isSales ? DB.nextCreditNoteNo() : DB.nextDebitNoteNo();
+    const reasons = isSales ? RETURN_REASONS_SALES : RETURN_REASONS_PURCHASE;
+
+    let prefillPartyId = '';
+    let prefillOrigNo = '';
+    let prefillOrigDate = '';
+    let prefillItems = [];
+
+    if (prefillDocId) {
+      const doc = isSales ? DB.getSaleById(prefillDocId) : DB.getPurchaseById(prefillDocId);
+      if (doc) {
+        prefillPartyId = isSales ? doc.customerId : doc.supplierId;
+        prefillOrigNo = isSales ? doc.invoiceNo : doc.billNo;
+        prefillOrigDate = doc.date;
+        prefillItems = (doc.items || []).map(it => ({
+          productId: it.productId || '',
+          name: it.name || '',
+          hsn: it.hsn || '',
+          unit: it.unit || 'Nos',
+          qty: it.qty || 1,
+          rate: it.rate || 0,
+          gstRate: it.gstRate !== undefined ? it.gstRate : 18
+        }));
+      }
+    }
+
+    if (!prefillItems.length) {
+      prefillItems.push({ productId: '', name: '', hsn: '', unit: 'Nos', qty: 1, rate: 0, gstRate: 18 });
+    }
+
+    window._returnPrefillItems = prefillItems;
+    window._returnType = returnType;
+
+    const modalTitle = isSales
+      ? `<span class="material-icons" style="color:var(--warning);vertical-align:middle;margin-right:6px">assignment_returned</span> Issue Customer Return (Credit Note)`
+      : `<span class="material-icons" style="color:var(--primary);vertical-align:middle;margin-right:6px">local_shipping</span> Issue Supplier Return (Debit Note)`;
+
+    App.modal(modalTitle, `
+      <div id="return-modal-form">
+        <!-- Return Note Header Meta -->
+        <div class="form-grid" style="margin-bottom:16px">
+          <div class="form-group">
+            <label>${isSales ? 'Credit Note No' : 'Debit Note No'} <span class="required">*</span></label>
+            <input id="rf-no" value="${noteNo}" readonly style="background:var(--bg);font-weight:700">
+          </div>
+          <div class="form-group">
+            <label>Return Date <span class="required">*</span></label>
+            <input id="rf-date" type="date" value="${today}">
+          </div>
+        </div>
+
+        <!-- Party & Original Invoice/Bill Ref -->
+        <div class="form-grid" style="margin-bottom:16px">
+          <div class="form-group">
+            <label>${isSales ? 'Customer (Buyer)' : 'Supplier (Vendor)'} <span class="required">*</span></label>
+            <select id="rf-party" onchange="Billing._onReturnPartyChange()">
+              <option value="">— Select ${isSales ? 'Customer' : 'Supplier'} —</option>
+              ${parties.map(p => `<option value="${p.id}" ${p.id === prefillPartyId ? 'selected' : ''}>${p.name}${p.gstin ? ' (' + p.gstin + ')' : ''}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Original ${isSales ? 'Sales Invoice' : 'Purchase Bill'} Ref</label>
+            <select id="rf-orig-doc" onchange="Billing._onReturnOriginalDocChange()">
+              <option value="">— Direct Return / Counter Sale —</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Return Reason & Settlement Method -->
+        <div class="form-grid" style="margin-bottom:18px">
+          <div class="form-group">
+            <label>Reason for Return <span class="required">*</span></label>
+            <select id="rf-reason">
+              ${reasons.map(r => `<option value="${r}">${r}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Settlement / Adjustment Action <span class="required">*</span></label>
+            <select id="rf-settlement">
+              ${isSales ? `
+              <option value="adjust_invoice">Adjust against Original Invoice / Deduct from Due Balance</option>
+              <option value="store_credit">Issue Store Credit / Ledger Advance for Next Purchase</option>
+              <option value="refund_cash">Immediate Cash Refund to Customer</option>
+              <option value="refund_bank">Immediate Bank / UPI Refund to Customer</option>
+              ` : `
+              <option value="adjust_bill">Adjust against Purchase Bill / Deduct from Payable Balance</option>
+              <option value="vendor_credit">Vendor Credit Note (Credit in Supplier Ledger)</option>
+              <option value="refund_bank">Bank / UPI Refund Received from Vendor</option>
+              <option value="refund_cash">Cash Refund Received from Vendor</option>
+              `}
+            </select>
+          </div>
+        </div>
+
+        <!-- Notice Banner: Stock Impact -->
+        <div style="padding:10px 14px;background:hsl(221,83%,96%);border:1px solid hsl(221,70%,86%);border-radius:var(--radius-sm);margin-bottom:16px;font-size:.825rem;display:flex;align-items:center;gap:8px">
+          <span class="material-icons" style="color:var(--primary);font-size:20px">inventory_2</span>
+          <span>
+            <strong>Inventory Stock Automation:</strong> ${isSales 
+              ? 'Returned quantities will be <strong>RESTORED (+qty)</strong> into product stock automatically upon saving.' 
+              : 'Returned quantities will be <strong>DEDUCTED (-qty)</strong> from product stock automatically upon saving.'}
+          </span>
+        </div>
+
+        <!-- Items Table -->
+        <div class="invoice-section-title" style="display:flex;justify-content:space-between;align-items:center">
+          <span><span class="material-icons">list_alt</span> Returned Line Items</span>
+          <button type="button" class="btn btn-xs btn-secondary" onclick="Billing._addReturnRow()">
+            <span class="material-icons" style="font-size:14px">add</span> + Add Item Row
+          </button>
+        </div>
+
+        <div class="table-wrap" style="margin-bottom:16px">
+          <table class="table" style="font-size:.82rem">
+            <thead>
+              <tr>
+                <th style="min-width:180px">Product / Item Description</th>
+                <th style="width:90px">HSN/SAC</th>
+                <th style="width:75px">Return Qty</th>
+                <th style="width:75px">Unit</th>
+                <th style="width:90px" class="text-right">Rate (₹)</th>
+                <th style="width:80px">GST%</th>
+                <th style="width:90px" class="text-right">Taxable</th>
+                <th style="width:100px" class="text-right">Total</th>
+                <th style="width:40px"></th>
+              </tr>
+            </thead>
+            <tbody id="return-items-tbody"></tbody>
+          </table>
+        </div>
+
+        <!-- Totals & Notes Row -->
+        <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:20px;align-items:start">
+          <div class="form-group">
+            <label>Return Notes / Defect Details / Remarks</label>
+            <textarea id="rf-notes" rows="3" placeholder="e.g. Serial numbers, defect description, RMA authorization code, manufacturer warranty claim ref…"></textarea>
+          </div>
+          <div class="inv-totals-box" id="return-totals-box" style="background:#f8fafc;padding:12px 16px;border-radius:var(--radius-sm);border:1px solid var(--border)">
+            <!-- Filled dynamically by _recalcReturn -->
+          </div>
+        </div>
+      </div>
+    `, `
+      <button class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="Billing._saveReturn('${returnType}')">
+        <span class="material-icons">check</span> Save &amp; Issue ${isSales ? 'Credit Note' : 'Debit Note'}
+      </button>
+    `, 'modal-xl');
+
+    // Populate party invoices/bills and line items
+    this._onReturnPartyChange(prefillOrigNo);
+    const tbody = document.getElementById('return-items-tbody');
+    if (tbody) {
+      tbody.innerHTML = '';
+      window._returnPrefillItems.forEach(it => this._addReturnRow(it));
+    }
+    this._recalcReturn();
+  },
+
+  _onReturnPartyChange(selectOrigDocNo = null) {
+    const isSales = window._returnType === 'sales';
+    const partyId = document.getElementById('rf-party')?.value;
+    const origSelect = document.getElementById('rf-orig-doc');
+    if (!origSelect) return;
+
+    origSelect.innerHTML = `<option value="">— Direct Return / Counter Sale —</option>`;
+    if (!partyId) return;
+
+    if (isSales) {
+      const sales = DB.getSales().filter(s => s.customerId === partyId);
+      sales.forEach(s => {
+        const isSelected = selectOrigDocNo && s.invoiceNo === selectOrigDocNo;
+        origSelect.innerHTML += `<option value="${s.id}" data-no="${s.invoiceNo}" data-date="${s.date}" ${isSelected ? 'selected' : ''}>Inv #${s.invoiceNo} (${fmtDate(s.date)} — ${fmtCurrency(s.total)})</option>`;
+      });
+    } else {
+      const purchases = DB.getPurchases().filter(p => p.supplierId === partyId);
+      purchases.forEach(p => {
+        const isSelected = selectOrigDocNo && p.billNo === selectOrigDocNo;
+        origSelect.innerHTML += `<option value="${p.id}" data-no="${p.billNo}" data-date="${p.date}" ${isSelected ? 'selected' : ''}>PO #${p.billNo} (${fmtDate(p.date)} — ${fmtCurrency(p.total)})</option>`;
+      });
+    }
+  },
+
+  _onReturnOriginalDocChange() {
+    const isSales = window._returnType === 'sales';
+    const docId = document.getElementById('rf-orig-doc')?.value;
+    if (!docId) return;
+
+    const doc = isSales ? DB.getSaleById(docId) : DB.getPurchaseById(docId);
+    if (!doc || !doc.items || !doc.items.length) return;
+
+    const tbody = document.getElementById('return-items-tbody');
+    if (!tbody) return;
+
+    tbody.innerHTML = '';
+    doc.items.forEach(it => {
+      this._addReturnRow({
+        productId: it.productId || '',
+        name: it.name || '',
+        hsn: it.hsn || '',
+        unit: it.unit || 'Nos',
+        qty: it.qty || 1,
+        rate: it.rate || 0,
+        gstRate: it.gstRate !== undefined ? it.gstRate : 18
+      });
+    });
+
+    App.toast(`Loaded ${doc.items.length} items from ${isSales ? 'Invoice' : 'Bill'} #${isSales ? doc.invoiceNo : doc.billNo} 📋`, 'info');
+    this._recalcReturn();
+  },
+
+  _addReturnRow(data = null) {
+    const tbody = document.getElementById('return-items-tbody');
+    if (!tbody) return;
+
+    const products = DB.getProducts();
+    const productOpts = products.map(p => `<option value="${p.id}" data-hsn="${p.hsn || ''}" data-rate="${p.sellingPrice || 0}" data-p-rate="${p.purchasePrice || 0}" data-gst="${p.gstRate || 0}" data-unit="${p.unit || 'Nos'}">${p.name}</option>`).join('');
+
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>
+        <input class="ritem-name" value="${data?.name || ''}" placeholder="Product name or select from catalog" style="width:100%;margin-bottom:4px">
+        <select class="ritem-prod" onchange="Billing._onReturnProductSelect(this)" style="width:100%;font-size:.75rem">
+          <option value="">— Or Pick from Products Catalog —</option>
+          ${productOpts}
+        </select>
+      </td>
+      <td><input class="ritem-hsn mono" value="${data?.hsn || ''}" placeholder="HSN" style="width:100%"></td>
+      <td><input type="number" class="ritem-qty" value="${data?.qty !== undefined ? data.qty : 1}" min="0.001" step="any" oninput="Billing._recalcReturn()" style="width:100%;font-weight:700"></td>
+      <td>
+        <select class="ritem-unit" style="width:100%">
+          ${UNITS.map(u => `<option value="${u}" ${data?.unit === u ? 'selected' : ''}>${u}</option>`).join('')}
+        </select>
+      </td>
+      <td><input type="number" class="ritem-rate text-right" value="${data?.rate !== undefined ? data.rate : 0}" step="any" oninput="Billing._recalcReturn()" style="width:100%"></td>
+      <td>
+        <select class="ritem-gst" onchange="Billing._recalcReturn()" style="width:100%">
+          ${GST_RATES.map(r => `<option value="${r}" ${data?.gstRate === r ? 'selected' : (data?.gstRate === undefined && r === 18 ? 'selected' : '')}>${r}%</option>`).join('')}
+        </select>
+      </td>
+      <td class="text-right ritem-taxable font-bold" style="white-space:nowrap;padding-top:14px">₹0.00</td>
+      <td class="text-right ritem-total font-bold" style="white-space:nowrap;padding-top:14px;color:var(--primary)">₹0.00</td>
+      <td style="text-align:center;padding-top:10px">
+        <button type="button" class="btn btn-xs btn-ghost" onclick="this.closest('tr').remove();Billing._recalcReturn()" style="color:var(--danger)">✕</button>
+      </td>
+    `;
+
+    if (data?.productId) {
+      const sel = row.querySelector('.ritem-prod');
+      if (sel) sel.value = data.productId;
+    }
+
+    tbody.appendChild(row);
+    this._recalcReturn();
+  },
+
+  _onReturnProductSelect(sel) {
+    const row = sel.closest('tr');
+    if (!row) return;
+    const opt = sel.options[sel.selectedIndex];
+    if (!sel.value) return;
+
+    const isSales = window._returnType === 'sales';
+    const nameInput = row.querySelector('.ritem-name');
+    const hsnInput = row.querySelector('.ritem-hsn');
+    const rateInput = row.querySelector('.ritem-rate');
+    const gstSelect = row.querySelector('.ritem-gst');
+    const unitSelect = row.querySelector('.ritem-unit');
+
+    if (nameInput) nameInput.value = opt.textContent;
+    if (hsnInput) hsnInput.value = opt.dataset.hsn || '';
+    if (rateInput) rateInput.value = isSales ? (opt.dataset.rate || 0) : (opt.dataset.pRate || opt.dataset.rate || 0);
+    if (gstSelect && opt.dataset.gst) gstSelect.value = opt.dataset.gst;
+    if (unitSelect && opt.dataset.unit) unitSelect.value = opt.dataset.unit;
+
+    this._recalcReturn();
+  },
+
+  _getReturnRows() {
+    const rows = [];
+    const tbody = document.getElementById('return-items-tbody');
+    if (!tbody) return rows;
+
+    tbody.querySelectorAll('tr').forEach(tr => {
+      const name = tr.querySelector('.ritem-name')?.value.trim();
+      const productId = tr.querySelector('.ritem-prod')?.value || '';
+      const hsn = tr.querySelector('.ritem-hsn')?.value.trim() || '';
+      const qty = parseFloat(tr.querySelector('.ritem-qty')?.value) || 0;
+      const unit = tr.querySelector('.ritem-unit')?.value || 'Nos';
+      const rate = parseFloat(tr.querySelector('.ritem-rate')?.value) || 0;
+      const gstRate = parseFloat(tr.querySelector('.ritem-gst')?.value) || 0;
+
+      if (name || productId) {
+        rows.push({ productId, name, hsn, qty, unit, rate, gstRate, discount: 0 });
+      }
+    });
+    return rows;
+  },
+
+  _recalcReturn() {
+    const biz = DB.getBiz();
+    const isSales = window._returnType === 'sales';
+    const partyId = document.getElementById('rf-party')?.value;
+    const party = isSales ? DB.getCustomerById(partyId) : DB.getSupplierById(partyId);
+
+    const sellerCode = isSales ? biz.stateCode : (party?.stateCode || biz.stateCode);
+    const buyerCode = isSales ? (party?.stateCode || biz.stateCode) : biz.stateCode;
+
+    const rows = this._getReturnRows();
+    const t = calcTotals(rows, sellerCode, buyerCode, 0, 0);
+
+    const tbody = document.getElementById('return-items-tbody');
+    if (tbody) {
+      Array.from(tbody.querySelectorAll('tr')).forEach((tr, i) => {
+        const item = t.items[i];
+        if (!item) return;
+        const taxEl = tr.querySelector('.ritem-taxable');
+        const totEl = tr.querySelector('.ritem-total');
+        if (taxEl) taxEl.textContent = fmtCurrency(item.taxableValue);
+        if (totEl) totEl.textContent = fmtCurrency(item.totalAmt);
+      });
+    }
+
+    const totalsBox = document.getElementById('return-totals-box');
+    if (totalsBox) {
+      totalsBox.innerHTML = `
+        <div class="totals-row"><span class="totals-label">Taxable Value</span><span class="totals-value font-bold">${fmtCurrency(t.subtotal)}</span></div>
+        ${t.isIntra ? `
+        <div class="totals-row"><span class="totals-label">CGST</span><span class="totals-value">${fmtCurrency(t.totalCgst)}</span></div>
+        <div class="totals-row"><span class="totals-label">SGST</span><span class="totals-value">${fmtCurrency(t.totalSgst)}</span></div>
+        ` : `
+        <div class="totals-row"><span class="totals-label">IGST</span><span class="totals-value">${fmtCurrency(t.totalIgst)}</span></div>
+        `}
+        <div class="totals-row"><span class="totals-label">Total Tax</span><span class="totals-value text-danger">${fmtCurrency(t.totalTax)}</span></div>
+        <div class="totals-row grand-total" style="border-top:2px solid var(--border);padding-top:6px;margin-top:4px">
+          <span class="totals-label font-bold" style="font-size:1rem">Net ${isSales ? 'Credit Value' : 'Debit Value'}</span>
+          <span class="totals-value font-bold" style="font-size:1.15rem;color:${isSales ? 'var(--danger)' : 'var(--success)'}">${fmtCurrency(t.total)}</span>
+        </div>
+      `;
+    }
+  },
+
+  _saveReturn(returnType) {
+    const isSales = returnType === 'sales';
+    const biz = DB.getBiz();
+    const partyId = document.getElementById('rf-party')?.value;
+    if (!partyId) {
+      App.toast(`Please select a ${isSales ? 'customer' : 'supplier'}`, 'error');
+      return;
+    }
+
+    const party = isSales ? DB.getCustomerById(partyId) : DB.getSupplierById(partyId);
+    if (!party) {
+      App.toast('Party details not found', 'error');
+      return;
+    }
+
+    const items = this._getReturnRows();
+    if (!items.length || items.every(i => i.qty <= 0)) {
+      App.toast('Add at least one returned item with quantity greater than 0', 'error');
+      return;
+    }
+
+    const origDocSel = document.getElementById('rf-orig-doc');
+    const origDocId = origDocSel?.value || '';
+    const origDocOpt = origDocSel?.options[origDocSel.selectedIndex];
+    const origDocNo = origDocOpt?.dataset.no || '';
+    const origDocDate = origDocOpt?.dataset.date || '';
+
+    const sellerCode = isSales ? biz.stateCode : (party.stateCode || biz.stateCode);
+    const buyerCode = isSales ? (party.stateCode || biz.stateCode) : biz.stateCode;
+    const t = calcTotals(items, sellerCode, buyerCode, 0, 0);
+
+    const noteNo = document.getElementById('rf-no')?.value.trim() || (isSales ? DB.nextCreditNoteNo() : DB.nextDebitNoteNo());
+    const date = document.getElementById('rf-date')?.value || new Date().toISOString().split('T')[0];
+    const reason = document.getElementById('rf-reason')?.value || 'Customer Return';
+    const settlementAction = document.getElementById('rf-settlement')?.value || (isSales ? 'adjust_invoice' : 'adjust_bill');
+    const notes = document.getElementById('rf-notes')?.value.trim() || '';
+
+    if (isSales) {
+      const creditNote = {
+        noteNo,
+        date,
+        customerId: party.id,
+        customerName: party.name,
+        customerGstin: party.gstin || '',
+        customerAddress: `${party.address || ''}, ${party.city || ''} - ${party.pincode || ''}`,
+        customerState: party.state,
+        customerStateCode: party.stateCode,
+        customerPhone: party.phone || '',
+        originalInvoiceId: origDocId,
+        originalInvoiceNo: origDocNo,
+        originalInvoiceDate: origDocDate,
+        reason,
+        settlementAction,
+        notes,
+        ...t
+      };
+
+      DB.saveCreditNote(creditNote, true);
+      App.toast(`✅ Credit Note ${noteNo} issued! Stock restored (+${t.items.reduce((s, it) => s + (parseFloat(it.qty) || 0), 0)} items).`, 'success');
+    } else {
+      const debitNote = {
+        noteNo,
+        date,
+        supplierId: party.id,
+        supplierName: party.name,
+        supplierGstin: party.gstin || '',
+        supplierAddress: `${party.address || ''}, ${party.city || ''} - ${party.pincode || ''}`,
+        supplierState: party.state,
+        supplierStateCode: party.stateCode,
+        supplierPhone: party.phone || '',
+        originalBillId: origDocId,
+        originalBillNo: origDocNo,
+        originalBillDate: origDocDate,
+        reason,
+        settlementAction,
+        notes,
+        ...t
+      };
+
+      DB.saveDebitNote(debitNote, true);
+      App.toast(`✅ Debit Note ${noteNo} issued! Stock deducted (-${t.items.reduce((s, it) => s + (parseFloat(it.qty) || 0), 0)} items).`, 'success');
+    }
+
+    App.closeModal();
+    App.refreshSidebar();
+    const c = document.getElementById('page-content');
+    if (window.location.hash.startsWith('#returns')) {
+      this.renderReturns(c, returnType);
+    } else {
+      App.route();
+    }
+  },
+
+  /* ═══════════════════════════════════════════
+     VIEW RETURN DOCUMENT MODAL
+  ═══════════════════════════════════════════ */
+  viewReturnDoc(id, returnType = 'sales') {
+    const isSales = returnType === 'sales';
+    const note = isSales ? DB.getCreditNoteById(id) : DB.getDebitNoteById(id);
+    if (!note) {
+      App.toast('Return note document not found', 'error');
+      return;
+    }
+
+    const biz = DB.getBiz();
+    const partyName = isSales ? note.customerName : note.supplierName;
+    const partyGstin = isSales ? note.customerGstin : note.supplierGstin;
+    const partyAddr = isSales ? note.customerAddress : note.supplierAddress;
+    const origNo = isSales ? note.originalInvoiceNo : note.originalBillNo;
+    const origDate = isSales ? note.originalInvoiceDate : note.originalBillDate;
+
+    let settlementText = 'Adjusted against original document / ledger balance';
+    if (note.settlementAction === 'store_credit' || note.settlementAction === 'vendor_credit') {
+      settlementText = 'Kept as credit balance for future transactions';
+    } else if (note.settlementAction === 'refund_cash') {
+      settlementText = 'Refunded via Cash';
+    } else if (note.settlementAction === 'refund_bank') {
+      settlementText = 'Refunded via Direct Bank / UPI Transfer';
+    }
+
+    App.modal(`${isSales ? 'Tax Credit Note' : 'Tax Debit Note'}: ${note.noteNo}`, `
+      <div style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div>
+          <div style="font-size:1.2rem;font-weight:800;letter-spacing:-.02em;color:${isSales ? 'var(--danger)' : 'var(--primary)'}">
+            ${note.noteNo}
+          </div>
+          <div style="font-size:.8rem;color:var(--text-secondary)">Date: ${fmtDate(note.date)} · ${isSales ? 'Credit Note (Sales Return)' : 'Debit Note (Purchase Return)'}</div>
+        </div>
+        <div style="text-align:right">
+          <span class="badge ${isSales ? 'badge-warning' : 'badge-primary'}" style="font-size:.8rem;padding:4px 10px">${note.reason || 'Return'}</span>
+          <div style="font-size:1.35rem;font-weight:800;margin-top:4px;color:${isSales ? 'var(--danger)' : 'var(--success)'}">${fmtCurrency(note.total)}</div>
+        </div>
+      </div>
+
+      <!-- Parties and Original Document Reference -->
+      <div class="invoice-parties-grid" style="margin-bottom:14px">
+        <div class="invoice-party-box">
+          <h4>${isSales ? 'Customer (Issued To)' : 'Supplier / Vendor (Returned To)'}</h4>
+          <div class="party-detail-name">${partyName}</div>
+          <div class="party-detail-line">${partyAddr || '—'}</div>
+          ${partyGstin ? `<div class="party-detail-gstin">GSTIN: ${partyGstin}</div>` : '<div class="party-detail-line text-muted">Unregistered</div>'}
+        </div>
+        <div class="invoice-party-box" style="background:#fcfcfc">
+          <h4>Original Document &amp; Legal Reference</h4>
+          <div class="party-detail-line"><strong>Original Ref:</strong> ${origNo ? `${isSales ? 'Invoice' : 'Bill'} #${origNo}` : 'Direct Counter Return'}</div>
+          ${origDate ? `<div class="party-detail-line"><strong>Document Date:</strong> ${fmtDate(origDate)}</div>` : ''}
+          <div class="party-detail-line"><strong>GST Law:</strong> Section 34 of CGST Act, 2017</div>
+          <div class="party-detail-line"><strong>Settlement:</strong> ${settlementText}</div>
+        </div>
+      </div>
+
+      <!-- Items Returned -->
+      <div class="table-wrap" style="margin-bottom:14px">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Description of Goods Returned</th>
+              <th>HSN/SAC</th>
+              <th>Qty Returned</th>
+              <th>Unit</th>
+              <th class="text-right">Rate</th>
+              <th class="text-right">Taxable</th>
+              <th class="text-right">Tax</th>
+              <th class="text-right">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(note.items || []).map((it, i) => `
+              <tr>
+                <td>${i + 1}</td>
+                <td style="font-weight:600">${it.name}</td>
+                <td><span class="mono">${it.hsn || '—'}</span></td>
+                <td><strong style="color:var(--primary)">${it.qty}</strong></td>
+                <td>${it.unit || 'Nos'}</td>
+                <td class="text-right">${fmtCurrency(it.rate)}</td>
+                <td class="text-right">${fmtCurrency(it.taxableValue)}</td>
+                <td class="text-right">${fmtCurrency((it.cgstAmt || 0) + (it.sgstAmt || 0) + (it.igstAmt || 0))}</td>
+                <td class="text-right font-bold">${fmtCurrency(it.totalAmt)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+          <tfoot>
+            <tr><td colspan="6"></td><td class="text-right">Subtotal</td><td></td><td class="text-right font-bold">${fmtCurrency(note.subtotal)}</td></tr>
+            ${note.isIntra ? `
+            <tr><td colspan="7" class="text-right">CGST</td><td></td><td class="text-right">${fmtCurrency(note.totalCgst)}</td></tr>
+            <tr><td colspan="7" class="text-right">SGST</td><td></td><td class="text-right">${fmtCurrency(note.totalSgst)}</td></tr>
+            ` : `
+            <tr><td colspan="7" class="text-right">IGST</td><td></td><td class="text-right">${fmtCurrency(note.totalIgst)}</td></tr>
+            `}
+            <tr><td colspan="7" class="text-right font-bold" style="font-size:1rem">Net ${isSales ? 'Credit Value' : 'Debit Value'}</td><td></td><td class="text-right font-bold" style="font-size:1.1rem;color:${isSales ? 'var(--danger)' : 'var(--success)'}">${fmtCurrency(note.total)}</td></tr>
+          </tfoot>
+        </table>
+      </div>
+
+      ${note.notes ? `
+      <div style="font-size:.825rem;color:var(--text-secondary);padding:10px 14px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border);margin-bottom:14px">
+        <strong>Return Remarks / Defect Notes:</strong> ${note.notes}
+      </div>
+      ` : ''}
+
+      <div style="padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--radius-sm);font-size:.8rem;color:#166534;display:flex;align-items:center;gap:8px">
+        <span class="material-icons" style="font-size:18px">inventory_2</span>
+        <span>Inventory status: Goods quantities have been safely updated in stock movements register.</span>
+      </div>
+    `, `
+      <button class="btn btn-ghost" onclick="App.closeModal()">Close</button>
+      <button class="btn btn-secondary" onclick="Billing.shareReturnWhatsApp('${note.id}','${returnType}')">
+        <span class="material-icons" style="color:#25d366">chat</span> WhatsApp Share
+      </button>
+      <button class="btn btn-primary" onclick="Billing.printReturnDoc('${note.id}','${returnType}')">
+        <span class="material-icons">print</span> Print GST Note
+      </button>
+    `, 'modal-lg');
+  },
+
+  /* ═══════════════════════════════════════════
+     PRINT GST CREDIT / DEBIT NOTE
+  ═══════════════════════════════════════════ */
+  printReturnDoc(id, returnType = 'sales') {
+    const isSales = returnType === 'sales';
+    const note = isSales ? DB.getCreditNoteById(id) : DB.getDebitNoteById(id);
+    if (!note) return;
+
+    const biz = DB.getBiz();
+    const partyName = isSales ? note.customerName : note.supplierName;
+    const partyGstin = isSales ? note.customerGstin : note.supplierGstin;
+    const partyAddr = isSales ? note.customerAddress : note.supplierAddress;
+    const origNo = isSales ? note.originalInvoiceNo : note.originalBillNo;
+    const origDate = isSales ? note.originalInvoiceDate : note.originalBillDate;
+
+    const docTitle = isSales ? 'TAX CREDIT NOTE' : 'TAX DEBIT NOTE';
+    const docSubtitle = isSales ? 'Issued under Section 34 of the CGST Act, 2017 (Sales Return)' : 'Issued under Section 34 of the CGST Act, 2017 (Purchase Return)';
+
+    let totalTaxRows = '';
+    if (note.isIntra) {
+      totalTaxRows = `
+        <tr><td>CGST Output Reversal</td><td>${fmtCurrency(note.totalCgst)}</td></tr>
+        <tr><td>SGST Output Reversal</td><td>${fmtCurrency(note.totalSgst)}</td></tr>`;
+    } else {
+      totalTaxRows = `<tr><td>IGST Output Reversal</td><td>${fmtCurrency(note.totalIgst)}</td></tr>`;
+    }
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>${docTitle} — ${note.noteNo}</title>
+<link rel="stylesheet" href="css/fonts.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', Arial, sans-serif; font-size: 8.5pt; color: #1e293b; background: #fff; padding: 8mm 10mm; line-height: 1.4; }
+.note-container { max-width: 190mm; margin: 0 auto; border: 1.5px solid #0f172a; padding: 10px 14px; border-radius: 6px; }
+.note-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-bottom: 8px; }
+.biz-title { font-size: 14pt; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: -0.01em; }
+.biz-sub { font-size: 7.8pt; color: #475569; margin-top: 2px; }
+.doc-badge { text-align: right; }
+.doc-name { font-size: 13pt; font-weight: 900; color: ${isSales ? '#b91c1c' : '#1d4ed8'}; letter-spacing: 0.05em; text-transform: uppercase; }
+.doc-law { font-size: 6.8pt; color: #64748b; font-style: italic; margin-top: 1px; }
+.meta-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 8px; margin-bottom: 10px; font-size: 8pt; }
+.party-box { border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px 10px; background: #f8fafc; }
+.party-box h4 { font-size: 7.2pt; text-transform: uppercase; color: #64748b; margin-bottom: 3px; font-weight: 700; }
+.party-name { font-weight: 800; font-size: 9pt; color: #0f172a; }
+.ref-table { width: 100%; font-size: 7.8pt; border-collapse: collapse; }
+.ref-table td { padding: 2px 0; }
+.items-table { width: 100%; border-collapse: collapse; font-size: 8pt; margin-bottom: 8px; }
+.items-table th { background: #0f172a; color: #fff; padding: 5px 6px; font-size: 7.2pt; text-transform: uppercase; text-align: left; }
+.items-table td { padding: 5px 6px; border-bottom: 1px solid #e2e8f0; }
+.text-right { text-align: right; }
+.mono { font-family: monospace; font-size: 7.5pt; }
+.totals-section { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 8px; }
+.totals-table { width: 68mm; border-collapse: collapse; font-size: 8pt; }
+.totals-table td { padding: 3px 0; border-bottom: 1px solid #e2e8f0; }
+.totals-table tr.grand-row td { font-size: 10pt; font-weight: 900; color: #0f172a; border-top: 1.5px solid #0f172a; border-bottom: 1.5px solid #0f172a; padding: 4px 0; }
+.words-box { font-size: 7.5pt; font-style: italic; padding: 6px 8px; background: #f1f5f9; border-radius: 4px; flex: 1; }
+.sign-grid { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 16px; padding-top: 8px; border-top: 1px dashed #cbd5e1; font-size: 7.5pt; }
+.sign-box { text-align: center; width: 65mm; }
+.sign-line { border-top: 1px solid #0f172a; margin-top: 32px; padding-top: 4px; font-weight: 700; }
+@media print { body { padding: 0; } .note-container { border: none; padding: 0; } }
+</style></head>
+<body>
+<div class="note-container">
+  <div class="note-header">
+    <div>
+      <div class="biz-title">${biz.name}</div>
+      <div class="biz-sub">${biz.address}, ${biz.city} — ${biz.pincode} (${biz.state})</div>
+      <div class="biz-sub">GSTIN: <strong>${biz.gstin || '—'}</strong> | Phone: ${biz.phone} | Email: ${biz.email}</div>
+    </div>
+    <div class="doc-badge">
+      <div class="doc-name">${docTitle}</div>
+      <div class="doc-law">${docSubtitle}</div>
+      <div style="font-size:9pt;font-weight:800;color:#0f172a;margin-top:4px">No: ${note.noteNo}</div>
+      <div style="font-size:8pt;color:#475569">Date: <strong>${fmtDate(note.date)}</strong></div>
+    </div>
+  </div>
+
+  <div class="meta-grid">
+    <div class="party-box">
+      <h4>${isSales ? 'Billed To (Customer / Recipient)' : 'Returned To (Supplier / Vendor)'}</h4>
+      <div class="party-name">${partyName}</div>
+      <div style="margin-top:2px">${partyAddr || '—'}</div>
+      <div style="margin-top:2px">GSTIN: <strong>${partyGstin || 'Unregistered'}</strong> | State: ${isSales ? (note.customerState || biz.state) : (note.supplierState || '—')}</div>
+    </div>
+    <div class="party-box">
+      <h4>Original Tax Document &amp; Adjustment Audit</h4>
+      <table class="ref-table">
+        <tr><td><strong>Original Doc Ref:</strong></td><td class="text-right">${origNo ? `${isSales ? 'Tax Invoice' : 'Purchase Bill'} #${origNo}` : 'Direct Counter Return'}</td></tr>
+        ${origDate ? `<tr><td><strong>Original Doc Date:</strong></td><td class="text-right">${fmtDate(origDate)}</td></tr>` : ''}
+        <tr><td><strong>Return Reason:</strong></td><td class="text-right" style="font-weight:700;color:#b91c1c">${note.reason || 'General Return'}</td></tr>
+        <tr><td><strong>Settlement Action:</strong></td><td class="text-right">${note.settlementAction === 'adjust_invoice' ? 'Adjust against Invoice' : (note.settlementAction === 'store_credit' ? 'Store Credit' : 'Cash / Bank Refund')}</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <table class="items-table">
+    <thead>
+      <tr>
+        <th style="width:24px">#</th>
+        <th>Description of Goods Returned</th>
+        <th style="width:55px">HSN/SAC</th>
+        <th style="width:45px" class="text-right">Qty</th>
+        <th style="width:40px">Unit</th>
+        <th style="width:65px" class="text-right">Rate</th>
+        <th style="width:70px" class="text-right">Taxable</th>
+        <th style="width:65px" class="text-right">Tax</th>
+        <th style="width:75px" class="text-right">Total (₹)</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${(note.items || []).map((it, idx) => `
+        <tr>
+          <td>${idx + 1}</td>
+          <td><strong>${it.name}</strong></td>
+          <td><span class="mono">${it.hsn || '—'}</span></td>
+          <td class="text-right"><strong>${it.qty}</strong></td>
+          <td>${it.unit || 'Nos'}</td>
+          <td class="text-right">${parseFloat(it.rate).toFixed(2)}</td>
+          <td class="text-right">${parseFloat(it.taxableValue).toFixed(2)}</td>
+          <td class="text-right">${parseFloat((it.cgstAmt || 0) + (it.sgstAmt || 0) + (it.igstAmt || 0)).toFixed(2)}</td>
+          <td class="text-right" style="font-weight:700">${parseFloat(it.totalAmt).toFixed(2)}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+
+  <div class="totals-section">
+    <div class="words-box">
+      <div><strong>Amount in Words:</strong> ${numberToWords(note.total)}</div>
+      ${note.notes ? `<div style="margin-top:4px"><strong>Remarks:</strong> ${note.notes}</div>` : ''}
+      <div style="margin-top:4px;font-size:7pt;color:#64748b">Section 34 CGST Act: This document confirms the return of goods and reverses respective GST output/input credits.</div>
+    </div>
+    <table class="totals-table">
+      <tr><td>Taxable Value</td><td class="text-right">${fmtCurrency(note.subtotal)}</td></tr>
+      ${totalTaxRows}
+      <tr><td>Total Tax Reversal</td><td class="text-right">${fmtCurrency(note.totalTax)}</td></tr>
+      <tr class="grand-row"><td>NET ${isSales ? 'CREDIT' : 'DEBIT'} AMOUNT</td><td class="text-right">${fmtCurrency(note.total)}</td></tr>
+    </table>
+  </div>
+
+  <div class="sign-grid">
+    <div class="sign-box">
+      <div class="sign-line">${isSales ? "Customer / Receiver's Acknowledgment" : "Vendor's Acceptance & Seal"}</div>
+    </div>
+    <div class="sign-box">
+      <div class="sign-line">For <strong>${biz.name}</strong><br>(Authorized Signatory)</div>
+    </div>
+  </div>
+</div>
+</body></html>`;
+
+    this._executePrint(html);
+  },
+
+  /* ═══════════════════════════════════════════
+     SHARE RETURN VIA WHATSAPP
+  ═══════════════════════════════════════════ */
+  shareReturnWhatsApp(id, returnType = 'sales') {
+    const isSales = returnType === 'sales';
+    const note = isSales ? DB.getCreditNoteById(id) : DB.getDebitNoteById(id);
+    if (!note) return;
+
+    const biz = DB.getBiz();
+    const partyName = isSales ? note.customerName : note.supplierName;
+    const phone = isSales ? (note.customerPhone || '') : (note.supplierPhone || '');
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+
+    const docTitle = isSales ? 'CREDIT NOTE (SALES RETURN)' : 'DEBIT NOTE (PURCHASE RETURN)';
+    const origRef = isSales ? note.originalInvoiceNo : note.originalBillNo;
+
+    const itemsSummary = (note.items || []).map(it => `• *${it.name}* (Qty: ${it.qty} ${it.unit || 'Nos'}) - ₹${(it.totalAmt || 0).toLocaleString('en-IN')}`).join('\n');
+
+    let msg = `↩️ *${docTitle} — ${biz.name}*\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `📄 *Note No:* ${note.noteNo}\n`;
+    msg += `📅 *Date:* ${fmtDate(note.date)}\n`;
+    msg += `👤 *Party:* ${partyName}\n`;
+    if (origRef) msg += `🔗 *Against ${isSales ? 'Invoice' : 'Bill'}:* ${origRef}\n`;
+    msg += `⚠️ *Reason:* ${note.reason || 'Return'}\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `📦 *Returned Items:*\n${itemsSummary}\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `💰 *Total ${isSales ? 'Credit' : 'Debit'} Amount:* ₹${(note.total || 0).toLocaleString('en-IN')}\n`;
+    msg += `📝 *Settlement:* ${note.settlementAction === 'adjust_invoice' ? 'Adjusted against invoice' : (note.settlementAction === 'store_credit' ? 'Store Credit' : 'Cash/Bank Refund')}\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `Thank you for choosing ${biz.name}.`;
+
+    const waUrl = cleanPhone 
+      ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`
+      : `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
+
+    window.open(waUrl, '_blank');
+  },
+
+  /* ═══════════════════════════════════════════
+     DELETE RETURN DOCUMENT
+  ═══════════════════════════════════════════ */
+  deleteReturnDoc(id, returnType = 'sales') {
+    if (DB.getRole() === 'staff') {
+      App.toast('🔒 Staff cannot delete return notes. Owner Mode required.', 'error');
+      App.toggleRoleModal();
+      return;
+    }
+
+    const isSales = returnType === 'sales';
+    const note = isSales ? DB.getCreditNoteById(id) : DB.getDebitNoteById(id);
+    if (!note) return;
+
+    App.modal('Delete Return Note', `
+      <div class="confirm-body">
+        <span class="material-icons" style="color:var(--danger)">delete_forever</span>
+        <h3>Delete ${isSales ? 'Credit Note' : 'Debit Note'} "${note.noteNo}"?</h3>
+        <p style="margin-top:6px;line-height:1.5">
+          Deleting this note will <strong>automatically revert the inventory stock adjustment</strong> (${isSales ? 'deduct -qty' : 'restore +qty'}).
+        </p>
+      </div>
+    `, `
+      <button class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="Billing._doDeleteReturn('${id}','${returnType}')">Delete &amp; Revert Stock</button>
+    `, 'modal-sm');
+  },
+
+  _doDeleteReturn(id, returnType) {
+    if (returnType === 'sales') {
+      DB.deleteCreditNote(id);
+    } else {
+      DB.deleteDebitNote(id);
+    }
+    App.toast('Return note deleted and inventory stock reversed safely.', 'warning');
+    App.closeModal();
+    App.refreshSidebar();
+    const c = document.getElementById('page-content');
+    this.renderReturns(c, returnType);
   }
 };

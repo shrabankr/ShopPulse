@@ -68,10 +68,9 @@ const App = {
         <div class="nav-section">
           <span class="nav-section-label">Transactions</span>
           <a href="#billing-sales" class="nav-item" data-r="billing-sales"><span class="material-icons">receipt_long</span><span>Sales Invoices</span></a>
-          ${isStaff ? '' : `
-          <a href="#billing-purchases" class="nav-item" data-r="billing-purchases"><span class="material-icons">shopping_bag</span><span>Purchase Bills</span></a>
-          <a href="#expenses" class="nav-item" data-r="expenses"><span class="material-icons">receipt</span><span>Expenses</span></a>
-          `}
+          ${isStaff ? '' : `<a href="#billing-purchases" class="nav-item" data-r="billing-purchases"><span class="material-icons">shopping_bag</span><span>Purchase Bills</span></a>`}
+          <a href="#returns" class="nav-item" data-r="returns"><span class="material-icons">assignment_return</span><span>Returns &amp; Notes</span></a>
+          ${isStaff ? '' : `<a href="#expenses" class="nav-item" data-r="expenses"><span class="material-icons">receipt</span><span>Expenses</span></a>`}
           <a href="#receivables" class="nav-item" data-r="receivables"><span class="material-icons">account_balance_wallet</span><span>Receivables</span>${unpaidSales ? `<span class="nav-badge">${unpaidSales}</span>` : ''}</a>
           ${isStaff ? '' : `<a href="#payables" class="nav-item" data-r="payables"><span class="material-icons">payments</span><span>Payables</span>${unpaidBuys ? `<span class="nav-badge">${unpaidBuys}</span>` : ''}</a>`}
         </div>
@@ -178,7 +177,9 @@ const App = {
 
     const titles = {
       dashboard: 'Dashboard', 'billing-sales': 'Sales Invoices',
-      'billing-purchases': 'Purchase Bills', expenses: 'Operating Expenses',
+      'billing-purchases': 'Purchase Bills',
+      returns: 'Returns & Notes', 'returns-sales': 'Customer Returns (Credit Notes)', 'returns-purchases': 'Supplier Returns (Debit Notes)',
+      expenses: 'Operating Expenses',
       receivables: 'Receivables', payables: 'Payables', inventory: 'Inventory',
       customers: 'Customers', suppliers: 'Suppliers',
       reports: 'Reports', gst: 'GST Returns', ai: 'AI Assistant', settings: 'Settings', help: 'Help & Support'
@@ -218,6 +219,9 @@ const App = {
       case 'dashboard': this.renderDashboard(c); break;
       case 'billing-sales': Billing.render(c, 'sales'); break;
       case 'billing-purchases': Billing.render(c, 'purchases'); break;
+      case 'returns': Billing.renderReturns(c); break;
+      case 'returns-sales': Billing.renderReturns(c, 'sales'); break;
+      case 'returns-purchases': Billing.renderReturns(c, 'purchases'); break;
       case 'expenses': Expenses.render(c); break;
       case 'receivables': Billing.renderReceivables(c); break;
       case 'payables': Billing.renderPayables(c); break;
@@ -1969,12 +1973,14 @@ ${JSON.stringify(data, null, 2)}
         </div>
 
         <div class="card">
-          <div class="card-header"><h3>Invoice Customization</h3></div>
+          <div class="card-header"><h3>Invoice &amp; Return Document Customization</h3></div>
           <div class="card-body">
             <div class="form-grid">
               <div class="form-group"><label>Sales Invoice Prefix</label><input id="s-invpfx" value="${b.invoicePrefix || 'SCS'}" maxlength="6"></div>
               <div class="form-group"><label>Purchase Bill Prefix</label><input id="s-billpfx" value="${b.billPrefix || 'SCS-PO'}" maxlength="6"></div>
-              <div class="form-group"><label>Default Payment Terms (days)</label><input id="s-terms" type="number" value="${b.defaultPaymentTerms || 30}" min="0"></div>
+              <div class="form-group"><label>Credit Note Prefix (Customer Return)</label><input id="s-cnpfx" value="${b.creditNotePrefix || 'CN'}" maxlength="6"></div>
+              <div class="form-group"><label>Debit Note Prefix (Supplier Return)</label><input id="s-dnpfx" value="${b.debitNotePrefix || 'DN'}" maxlength="6"></div>
+              <div class="form-group form-full"><label>Default Payment Terms (days)</label><input id="s-terms" type="number" value="${b.defaultPaymentTerms || 30}" min="0"></div>
               <div class="form-group form-full"><label>Terms &amp; Conditions (printed on invoice)</label><textarea id="s-tnc">${b.termsAndConditions || ''}</textarea></div>
             </div>
           </div>
@@ -2336,6 +2342,8 @@ ${JSON.stringify(data, null, 2)}
       backupDir: document.getElementById('s-backup-dir')?.value.trim() || DB.getBiz().backupDir || '',
       invoicePrefix: document.getElementById('s-invpfx').value.trim() || 'INV',
       billPrefix: document.getElementById('s-billpfx').value.trim() || 'PO',
+      creditNotePrefix: document.getElementById('s-cnpfx')?.value.trim() || 'CN',
+      debitNotePrefix: document.getElementById('s-dnpfx')?.value.trim() || 'DN',
       defaultPaymentTerms: parseInt(document.getElementById('s-terms').value) || 30,
       termsAndConditions: document.getElementById('s-tnc').value.trim(),
     };

@@ -209,6 +209,26 @@ const EXPENSE_CATEGORIES = [
   'Other / Misc'
 ];
 
+const RETURN_REASONS_SALES = [
+  'Defective / Damaged Goods (RMA)',
+  'Wrong Item Supplied',
+  'Customer Exchange / Return',
+  'Quality Issue / Performance Dissatisfaction',
+  'Order Cancellation / Post-Sale Discount',
+  'Excess Goods Returned',
+  'Other Reason'
+];
+
+const RETURN_REASONS_PURCHASE = [
+  'Defective / Faulty on Arrival (DOA)',
+  'Damaged in Transit',
+  'Wrong Item / Not as per PO Specification',
+  'Quality Rejection / Testing Failed',
+  'Vendor Recall / Warranty Claim',
+  'Excess Quantity Supplied by Vendor',
+  'Other Reason'
+];
+
 /* ─────────────────────────────────────────────
    Database Layer (localStorage)
 ───────────────────────────────────────────── */
@@ -221,6 +241,8 @@ const DB = {
     CATEGORIES: 'sp_categories',
     SALES: 'sp_sales',
     PURCHASES: 'sp_purchases',
+    CREDIT_NOTES: 'sp_credit_notes',
+    DEBIT_NOTES: 'sp_debit_notes',
     EXPENSES: 'sp_expenses',
     MOVEMENTS: 'sp_movements',
     AUTH: 'sp_auth',
@@ -244,6 +266,8 @@ const DB = {
       bankName: 'HDFC Bank', bankAccount: '50200012345678', bankIFSC: 'HDFC0000123', bankBranch: 'Station Road, Pune', upiId: 'shraban@okaxis',
       invoicePrefix: 'APS', invoiceCounter: 1, invoiceFormat: 'classic',
       billPrefix: 'PO', billCounter: 1,
+      creditNotePrefix: 'CN', creditNoteCounter: 1,
+      debitNotePrefix: 'DN', debitNoteCounter: 1,
       defaultPaymentTerms: 30, signatory: 'Shraban Kumar Mahato', termsAndConditions: 'Goods once sold will not be taken back.\nWarranty as per manufacturer terms.\nInterest @18% p.a. will be charged on delayed payments.',
     };
   },
@@ -403,6 +427,138 @@ const DB = {
     return no;
   },
 
+  /* ─── Credit Notes / Sales Returns (Customer Returns) ─── */
+  getCreditNotes() { return this._get(this.K.CREDIT_NOTES) || []; },
+  getCreditNoteById(id) { return this.getCreditNotes().find(n => n.id === id); },
+  getDocCreditNotes(invoiceNo) {
+    if (!invoiceNo) return [];
+    return this.getCreditNotes().filter(cn => cn.originalInvoiceNo === invoiceNo);
+  },
+  saveCreditNote(data, isNew = true) {
+    const list = this.getCreditNotes();
+    if (!isNew) {
+      const i = list.findIndex(n => n.id === data.id);
+      if (i > -1) list[i] = data; else list.push(data);
+      this._set(this.K.CREDIT_NOTES, list);
+      return data;
+    }
+    data.id = genId('CN');
+    data.createdAt = new Date().toISOString();
+    // Restock returned inventory
+    if (data.items) {
+      data.items.forEach(item => {
+        if (item.productId) {
+          const qty = parseFloat(item.qty) || 0;
+          this.adjustStock(item.productId, +qty);
+          this._addMov({
+            productId: item.productId,
+            type: 'in',
+            qty: qty,
+            reference: data.noteNo,
+            date: data.date,
+            note: `Sales Return (CN): ${data.noteNo}${data.originalInvoiceNo ? ' for Inv #' + data.originalInvoiceNo : ''} — ${data.reason || 'Customer Return'}`
+          });
+        }
+      });
+    }
+    list.push(data);
+    this._set(this.K.CREDIT_NOTES, list);
+    return data;
+  },
+  deleteCreditNote(id) {
+    const note = this.getCreditNoteById(id);
+    if (note && note.items) {
+      // Revert restocked inventory
+      note.items.forEach(item => {
+        if (item.productId) {
+          const qty = parseFloat(item.qty) || 0;
+          this.adjustStock(item.productId, -qty);
+          this._addMov({
+            productId: item.productId,
+            type: 'out',
+            qty: qty,
+            reference: 'CN-REVERT',
+            date: new Date().toISOString().split('T')[0],
+            note: `Reverted CN #${note.noteNo} deletion`
+          });
+        }
+      });
+    }
+    this._set(this.K.CREDIT_NOTES, this.getCreditNotes().filter(n => n.id !== id));
+  },
+  nextCreditNoteNo() {
+    const b = this.getBiz();
+    const no = `${b.creditNotePrefix || 'CN'}/${getFY()}/${String(b.creditNoteCounter || 1).padStart(4, '0')}`;
+    this.setBiz({ ...b, creditNoteCounter: (b.creditNoteCounter || 1) + 1 });
+    return no;
+  },
+
+  /* ─── Debit Notes / Purchase Returns (Supplier Returns) ─── */
+  getDebitNotes() { return this._get(this.K.DEBIT_NOTES) || []; },
+  getDebitNoteById(id) { return this.getDebitNotes().find(n => n.id === id); },
+  getDocDebitNotes(billNo) {
+    if (!billNo) return [];
+    return this.getDebitNotes().filter(dn => dn.originalBillNo === billNo);
+  },
+  saveDebitNote(data, isNew = true) {
+    const list = this.getDebitNotes();
+    if (!isNew) {
+      const i = list.findIndex(n => n.id === data.id);
+      if (i > -1) list[i] = data; else list.push(data);
+      this._set(this.K.DEBIT_NOTES, list);
+      return data;
+    }
+    data.id = genId('DN');
+    data.createdAt = new Date().toISOString();
+    // Reduce inventory as goods are returned to supplier
+    if (data.items) {
+      data.items.forEach(item => {
+        if (item.productId) {
+          const qty = parseFloat(item.qty) || 0;
+          this.adjustStock(item.productId, -qty);
+          this._addMov({
+            productId: item.productId,
+            type: 'out',
+            qty: qty,
+            reference: data.noteNo,
+            date: data.date,
+            note: `Purchase Return (DN): ${data.noteNo}${data.originalBillNo ? ' for Bill #' + data.originalBillNo : ''} — ${data.reason || 'Supplier Return'}`
+          });
+        }
+      });
+    }
+    list.push(data);
+    this._set(this.K.DEBIT_NOTES, list);
+    return data;
+  },
+  deleteDebitNote(id) {
+    const note = this.getDebitNoteById(id);
+    if (note && note.items) {
+      // Revert deducted inventory
+      note.items.forEach(item => {
+        if (item.productId) {
+          const qty = parseFloat(item.qty) || 0;
+          this.adjustStock(item.productId, +qty);
+          this._addMov({
+            productId: item.productId,
+            type: 'in',
+            qty: qty,
+            reference: 'DN-REVERT',
+            date: new Date().toISOString().split('T')[0],
+            note: `Reverted DN #${note.noteNo} deletion`
+          });
+        }
+      });
+    }
+    this._set(this.K.DEBIT_NOTES, this.getDebitNotes().filter(n => n.id !== id));
+  },
+  nextDebitNoteNo() {
+    const b = this.getBiz();
+    const no = `${b.debitNotePrefix || 'DN'}/${getFY()}/${String(b.debitNoteCounter || 1).padStart(4, '0')}`;
+    this.setBiz({ ...b, debitNoteCounter: (b.debitNoteCounter || 1) + 1 });
+    return no;
+  },
+
   /* Payments & Multi-Split Management */
   getDocPayments(doc) {
     if (!doc) return [];
@@ -433,7 +589,25 @@ const DB = {
     if (!doc) return 0;
     const total = parseFloat(doc.total) || 0;
     const paid = this.getDocPaidAmount(doc);
-    return Math.max(0, parseFloat((total - paid).toFixed(2)));
+    let returnAdj = 0;
+    if (doc.invoiceNo) {
+      const cns = this.getDocCreditNotes(doc.invoiceNo);
+      returnAdj = cns.filter(c => c.settlementAction === 'adjust_invoice').reduce((s, c) => s + (parseFloat(c.total) || 0), 0);
+    } else if (doc.billNo) {
+      const dns = this.getDocDebitNotes(doc.billNo);
+      returnAdj = dns.filter(d => d.settlementAction === 'adjust_bill').reduce((s, d) => s + (parseFloat(d.total) || 0), 0);
+    }
+    return Math.max(0, parseFloat((total - paid - returnAdj).toFixed(2)));
+  },
+
+  getDocReturnAmount(doc) {
+    if (!doc) return 0;
+    if (doc.invoiceNo) {
+      return this.getDocCreditNotes(doc.invoiceNo).reduce((s, c) => s + (parseFloat(c.total) || 0), 0);
+    } else if (doc.billNo) {
+      return this.getDocDebitNotes(doc.billNo).reduce((s, d) => s + (parseFloat(d.total) || 0), 0);
+    }
+    return 0;
   },
 
   addDocPayment(id, type, payment) {
@@ -1353,6 +1527,48 @@ const DB = {
     mkExpense('Assistant Technician Site Wages', 'Salaries & Wages', 12000, daysAgo(15), 'Bank Transfer', 'Nilesh G. (Tech)', 0, false, 'On-site installation support wages');
     mkExpense('Office Tea, Water & Client Refreshments', 'Tea & Refreshments', 1850, daysAgo(8), 'Cash', 'Local Vendor', 0, false, 'Monthly pantry expenses');
     mkExpense('QuickHeal Antivirus License Stock', 'Software & Subscriptions', 5600, daysAgo(3), 'UPI', 'IT Software Hub', 1008, true, 'Antivirus renewals for client PCs');
+
+    // ── Sample Returns (Credit Note & Debit Note) ──
+    const biz = this.getBiz();
+    const cnItems = [{ productId: p5.id, name: p5.name, hsn: p5.hsn, unit: p5.unit, qty: 1, rate: 4800, discount: 0, gstRate: 18 }];
+    const cnTotals = calcTotals(cnItems, biz.stateCode, c3.stateCode || biz.stateCode);
+    this.saveCreditNote({
+      noteNo: 'CN/2024-25/0001',
+      date: daysAgo(12),
+      customerId: c3.id,
+      customerName: c3.name,
+      customerGstin: c3.gstin || '',
+      customerAddress: `${c3.address || ''}, ${c3.city || ''}`,
+      customerState: c3.state,
+      customerStateCode: c3.stateCode,
+      originalInvoiceNo: 'SCS/2024-25/0008',
+      originalInvoiceDate: daysAgo(55),
+      reason: 'Defective / Damaged Goods (RMA)',
+      settlementAction: 'adjust_invoice',
+      settlementNote: 'Adjusted against pending balance on invoice SCS/2024-25/0008',
+      notes: 'Customer returned 1 defective camera unit for warranty credit',
+      ...cnTotals
+    }, true);
+
+    const dnItems = [{ productId: p10.id, name: p10.name, hsn: p10.hsn, unit: p10.unit, qty: 2, rate: 3200, discount: 0, gstRate: 18 }];
+    const dnTotals = calcTotals(dnItems, s2.stateCode || biz.stateCode, biz.stateCode);
+    this.saveDebitNote({
+      noteNo: 'DN/2024-25/0001',
+      date: daysAgo(15),
+      supplierId: s2.id,
+      supplierName: s2.name,
+      supplierGstin: s2.gstin || '',
+      supplierAddress: `${s2.address || ''}, ${s2.city || ''}`,
+      supplierState: s2.state,
+      supplierStateCode: s2.stateCode,
+      originalBillNo: 'SCS-PO/2024-25/0003',
+      originalBillDate: daysAgo(20),
+      reason: 'Defective / Faulty on Arrival (DOA)',
+      settlementAction: 'adjust_bill',
+      settlementNote: 'Deducted from payable balance on bill SCS-PO/2024-25/0003',
+      notes: 'Returned 2 units faulty patch panels to Rashi Peripherals for replacement credit',
+      ...dnTotals
+    }, true);
 
     this._set(this.K.SEEDED, true);
   }
