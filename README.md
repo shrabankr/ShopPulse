@@ -6,6 +6,19 @@
 
 ---
 
+## 🌟 What's New in v1.1.0 — Computer & Electronics Store Edition
+- 🛡️ **Hardware Serial Number (S/N) & IMEI Tracking**: Record line-item serial numbers across Sales Invoices, Purchase Bills, and print them on all receipts.
+- ⏳ **Warranty Engine & Expiry Tracking**: Supports Testing Warranty, 3M, 6M, 1–5 Years, and Lifetime coverage with live active/expired badges.
+- 🔍 **Hardware Serial & Warranty Lookup Hub**: 1-click topbar search (`Warranty S/N`) to instantly look up any S/N, view customer invoice, remaining warranty, and distributor RMA records.
+- 🏷️ **Dual Pricing Engine (Retail vs Dealer / Wholesale)**: Auto-detects dealer accounts and offers a 1-click rate toggle pill on line items.
+- 🔫 **Barcode Scanner Gun Fast-Add Bar**: Scan barcodes directly into invoices with offline audio feedback.
+- 📜 **Quotation & Estimations**: Issue quotations with 1-click item-by-item conversion to GST Tax Invoices.
+- 🔄 **Sales & Purchase Return Engine**: Issue Credit Notes and Debit Notes with automated real-time stock restoration.
+- 🧾 **Multi-Format Invoicing**: Classic GST, Modern Blue, 3" POS Thermal Slip (80mm), and Executive Dark templates.
+- ✈️ **100% Offline Capable**: Bundled offline Inter fonts and Material Icons — zero external network or CDN dependency.
+
+---
+
 ## 🧑‍💼 Business Context
 
 **Who uses this:** A small Indian IT & CCTV business (computers, parts, CCTV cameras, networking equipment, and Annual Maintenance Contract services) that sells to other businesses and organisations (B2B).
@@ -300,13 +313,14 @@ sp_biz        → shops        (one row per tenant)
 |---|---|
 | Language | Vanilla JavaScript (ES6+, strict mode) |
 | Styling | Vanilla CSS with CSS custom properties (variables) |
-| Charts | Chart.js 4.4.3 (CDN) |
-| Icons | Google Material Icons (CDN) |
-| Fonts | Google Fonts — Inter |
-| Storage | Browser localStorage (JSON serialized) |
-| Routing | URL hash-based (`#dashboard`, `#billing-sales`, etc.) |
-| Printing | Opens new browser tab with full HTML invoice for native print |
-| Hosting | Any static file server (or just open index.html directly) |
+| Offline Assets | 100% Local (Bundled Inter fonts & Material Icons in fonts/) |
+| Charts | Local Chart.js 4.4.3 (js/chart.umd.min.js) |
+| QR Code | Local QRCode.js (js/qrcode.min.js) |
+| Desktop App | Electron 31 (Windows x64 executable & portable zip) |
+| Storage | Browser localStorage (JSON serialized, zero external server) |
+| Routing | URL hash-based (#dashboard, #billing-sales, #quotations, #returns, etc.) |
+| Printing | Multi-format (Classic GST, Modern Blue, 3-inch POS Thermal Receipt, Executive Dark) |
+| Hosting | Any static file server or direct double-click on index.html / ShopPulse.exe |
 
 ---
 
