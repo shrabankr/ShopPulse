@@ -26,10 +26,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Windows Standalone Installer & Portable Executable
-        run: npx electron-builder --win --x64
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Windows Standalone Installer
+        run: npx electron-builder --win --x64 --publish never
 
       - name: Package Desktop Directory Archive
         run: npm run pack
@@ -44,32 +42,31 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            dist/*.exe
-            dist/*.zip
-          name: ShopPulse Release ${{ github.ref_name }} (Beta)
+            dist/*Setup*.exe
+            dist/ShopPulse-windows-x64.zip
+          name: ShopPulse ${{ github.ref_name }} — Specialized Computer & Electronics Store Edition
           body: |
-            ## ⚡ ShopPulse Desktop ${{ github.ref_name }} (Beta)
-            
-            All-in-One GST-Compliant Billing, Inventory, and CRM for Indian IT & CCTV Businesses.
-            
+            ## ⚡ ShopPulse Desktop ${{ github.ref_name }}
+
+            Specialized GST-Compliant Billing, Inventory, RMA, and CRM for Indian Computer, CCTV & Electronics Retailers.
+
             ### ✨ What's New in ${{ github.ref_name }}:
-            - 📁 **Configurable PDF & Backup Locations**: Set custom folders for PDF invoices and database backups with folder browsing.
-            - 🖨️ **Interactive Print Preview & PDF Dispatch Toolbar**: Choose between **Select Printer & Print** (choose any connected printer) and **Save as PDF** (native vector PDF export dialog).
-            - 💳 **Partial & Split Multi-Mode Payments**: Record split payments (e.g. ₹100 via Cash + ₹1,000 via UPI) with live remaining balance tracking.
-            - ✏️ **Edit Payment Method Post-Payment**: Correct payment mode (e.g. Cash to UPI), dates, amounts, and UTR/cheque reference numbers anytime from invoice history.
-            - 🚚 **Separate Billing & Shipping Address**: 1-click radio toggle with full consignee delivery details printed on GST tax invoices.
-            - 🎨 **Live Bill Format Preview**: Interactive live preview modal with 5 distinct invoice formats (*Classic*, *Modern Minimalist*, *3-Inch POS Receipt*, *Executive Slate & Gold*, *Custom Template*).
-            - 🔒 **Owner Security PIN Management**: 3-step secure PIN update (*Current PIN*, *New PIN*, *Confirm PIN*) with master developer recovery.
-            - 📲 **WhatsApp Integration**: WhatsApp business numbers, 1-click customer WhatsApp chat, and WhatsApp bill sharing.
-            - 🛠️ **Developer Master Console**: Full diagnostics, DB inspection, and plan switcher.
+            - 🛡️ **Hardware Serial Number (S/N) & IMEI Tracking**: Record line-item serial numbers across Sales Invoices, Purchase Bills, and print them on all receipts.
+            - ⏳ **Warranty Engine & Expiry Tracking**: Supports Testing Warranty, 3M, 6M, 1–5 Years, and Lifetime coverage with live active/expired badges.
+            - 🔍 **Hardware Serial & Warranty Lookup Hub**: 1-click topbar search (`Warranty S/N`) to instantly look up any S/N, view customer invoice, remaining warranty, and distributor RMA records.
+            - 🏷️ **Dual Pricing Engine (Retail vs Dealer / Wholesale)**: Auto-detects dealer accounts and offers a 1-click rate toggle pill on line items.
+            - 🔫 **Barcode Scanner Gun Fast-Add Bar**: Scan barcodes directly into invoices with zero-dependency offline audio feedback.
+            - 📜 **Quotation & Estimations**: Issue quotations with 1-click item-by-item conversion to GST Tax Invoices.
+            - 🔄 **Sales & Purchase Return Engine**: Issue Credit Notes and Debit Notes with automated real-time stock restoration.
+            - 🧾 **Multi-Format Invoicing**: Classic GST, Modern Blue, 3" POS Thermal Slip (80mm), and Executive Dark templates.
+            - ✈️ **100% Offline Capable**: Bundled offline Inter fonts and Material Icons — zero external network or CDN dependency.
             
             ### 📥 Download Options:
-            - **`ShopPulse-Setup.exe`**: Full Windows Installer (installs to Desktop & Start Menu, bundles all DLLs).
-            - **`ShopPulse-windows-x64.zip`**: Portable ZIP archive — extract and run `ShopPulse.exe` anywhere without installing.
-            - **`ShopPulse.exe`** — Direct executable.
+            - **`ShopPulse-Setup-${{ github.ref_name }}.exe`**: Windows Installer Wizard (installs Desktop icon & Start Menu shortcut).
+            - **`ShopPulse-windows-x64.zip`**: Portable ZIP archive — extract anywhere and double-click `ShopPulse.exe` (no installation needed).
             
             ### 🚀 How to Run:
-            1. Download and extract `ShopPulse-windows-x64.zip`.
-            2. Double-click `ShopPulse.exe` to launch immediately (Offline-first, no setup needed).
+            1. Download and run **`ShopPulse-Setup-${{ github.ref_name }}.exe`** for standard installation, OR extract **`ShopPulse-windows-x64.zip`** for portable use.
+            2. Double-click `ShopPulse.exe` to launch immediately (100% offline-ready).
           draft: false
           prerelease: false
