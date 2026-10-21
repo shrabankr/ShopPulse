@@ -74,7 +74,10 @@ const CRM = {
                       <div style="display:flex;align-items:center;gap:10px">
                         <div class="contact-avatar" style="width:36px;height:36px;border-radius:8px;background:var(--primary-light);color:var(--primary-dark);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.82rem;flex-shrink:0">${avatar}</div>
                         <div>
-                          <div style="font-weight:600">${c.name}</div>
+                          <div style="font-weight:600;display:flex;align-items:center;gap:6px">
+                            ${c.name}
+                            ${c.customerType === 'dealer' ? `<span class="badge" style="background:hsl(271,78%,92%);color:hsl(271,78%,35%);font-size:.65rem;padding:1px 6px;font-weight:700">DEALER / TECH</span>` : ''}
+                          </div>
                           ${c.city ? `<div style="font-size:.75rem;color:var(--text-secondary)">${c.city}</div>` : ''}
                         </div>
                       </div>
@@ -196,6 +199,14 @@ const CRM = {
     App.modal(c ? `Edit ${isCustomer ? 'Customer' : 'Supplier'}` : `Add ${isCustomer ? 'Customer' : 'Supplier'}`,
       `<div class="form-grid">
         <div class="form-group form-full"><label>Name <span class="required">*</span></label><input id="c-name" value="${c?.name || ''}"></div>
+        ${isCustomer ? `
+        <div class="form-group form-full">
+          <label>Customer Pricing Category</label>
+          <select id="c-type" style="font-weight:600">
+            <option value="retail" ${!c || c.customerType !== 'dealer' ? 'selected' : ''}>Standard Retail Customer (Regular Prices)</option>
+            <option value="dealer" ${c && c.customerType === 'dealer' ? 'selected' : ''}>Dealer / CCTV Installer / Technician (Auto-Applies Wholesale Rates)</option>
+          </select>
+        </div>` : ''}
         <div class="form-group">
           <label>GSTIN</label>
           <input id="c-gstin" value="${c?.gstin || ''}" placeholder="27AAAAA0000A1Z5 (blank if unregistered)" maxlength="15" style="font-family:monospace;letter-spacing:.05em;text-transform:uppercase">
@@ -247,6 +258,7 @@ const CRM = {
     const data = {
       id: existingId || null,
       name, gstin, pan: document.getElementById('c-pan')?.value?.toUpperCase().trim() || '',
+      customerType: isCustomer ? (document.getElementById('c-type')?.value || 'retail') : undefined,
       address: document.getElementById('c-addr')?.value?.trim() || '',
       city: document.getElementById('c-city')?.value?.trim() || '',
       state: state?.name || '', stateCode: stateEl?.value || '',

@@ -81,6 +81,41 @@ function daysBetween(d1, d2) {
   return Math.floor(diff / 86400000);
 }
 
+function calcWarrantyExpiry(startDateStr, warrantyStr) {
+  if (!startDateStr || !warrantyStr) return null;
+  const start = new Date(startDateStr);
+  if (isNaN(start.getTime())) return null;
+
+  const w = (warrantyStr || '').toLowerCase().trim();
+  let monthsToAdd = 0;
+  let daysToAdd = 0;
+
+  if (w.includes('year') || w.includes('yr')) {
+    const num = parseFloat(w) || 1;
+    monthsToAdd = Math.round(num * 12);
+  } else if (w.includes('month') || w.includes('mo')) {
+    const num = parseFloat(w) || 1;
+    monthsToAdd = Math.round(num);
+  } else if (w.includes('day')) {
+    const num = parseFloat(w) || 7;
+    daysToAdd = Math.round(num);
+  } else if (w.includes('lifetime')) {
+    monthsToAdd = 120; // 10 years
+  } else {
+    const num = parseFloat(w);
+    if (!isNaN(num) && num > 0) monthsToAdd = Math.round(num * 12);
+  }
+
+  const expiry = new Date(start);
+  if (monthsToAdd > 0) {
+    expiry.setMonth(expiry.getMonth() + monthsToAdd);
+  }
+  if (daysToAdd > 0) {
+    expiry.setDate(expiry.getDate() + daysToAdd);
+  }
+  return expiry.toISOString().split('T')[0];
+}
+
 function numberToWords(amount) {
   amount = Math.round(amount);
   if (amount === 0) return 'Zero Rupees Only';
@@ -589,6 +624,113 @@ const DB = {
     const no = `${b.quotationPrefix || 'QTN'}/${getFY()}/${String(b.quotationCounter || 1).padStart(4, '0')}`;
     this.setBiz({ ...b, quotationCounter: (b.quotationCounter || 1) + 1 });
     return no;
+  },
+
+  /* ─── Hardware Serial Number & Warranty Engine ─── */
+  searchSerial(query) {
+    if (!query || typeof query !== 'string') return [];
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+
+    const today = new Date().toISOString().split('T')[0];
+    const results = [];
+
+    // 1. Search Sales Invoices
+    const sales = this.getSales();
+    const purchases = this.getPurchases();
+
+    sales.forEach(sale => {
+      (sale.items || []).forEach(item => {
+        const serials = (item.serialNo || '').toLowerCase();
+        if (serials && serials.includes(q)) {
+          const expiryDate = calcWarrantyExpiry(sale.date, item.warranty);
+          let isUnderWarranty = false;
+          let daysLeft = 0;
+          let statusText = 'No Warranty Specified';
+
+          if (expiryDate) {
+            daysLeft = daysBetween(expiryDate, today);
+            isUnderWarranty = daysLeft >= 0;
+            if (isUnderWarranty) {
+              const years = Math.floor(daysLeft / 365);
+              const remDays = daysLeft % 365;
+              const months = Math.floor(remDays / 30);
+              const durationText = years > 0 ? `${years}y ${months}m` : `${daysLeft} days`;
+              statusText = `Active (${durationText} remaining)`;
+            } else {
+              const expiredAgo = Math.abs(daysLeft);
+              statusText = `Expired (${expiredAgo} days ago)`;
+            }
+          }
+
+          // Cross-reference purchase bill for distributor RMA
+          let supplierInfo = null;
+          const matchingPurchase = purchases.find(p =>
+            (p.items || []).some(pi =>
+              (pi.serialNo && pi.serialNo.toLowerCase().includes(q)) ||
+              (item.productId && pi.productId === item.productId)
+            )
+          );
+
+          if (matchingPurchase) {
+            supplierInfo = {
+              id: matchingPurchase.id,
+              supplierName: matchingPurchase.supplierName,
+              billNo: matchingPurchase.billNo,
+              billDate: matchingPurchase.date,
+              supplierPhone: matchingPurchase.supplierPhone || ''
+            };
+          }
+
+          results.push({
+            type: 'sale',
+            docId: sale.id,
+            docNo: sale.invoiceNo,
+            docDate: sale.date,
+            customerName: sale.customerName,
+            customerPhone: sale.customerPhone || '',
+            customerGstin: sale.customerGstin || '',
+            productName: item.name,
+            productId: item.productId,
+            serialNo: item.serialNo,
+            warranty: item.warranty || 'Standard',
+            expiryDate,
+            daysLeft,
+            isUnderWarranty,
+            statusText,
+            supplierInfo
+          });
+        }
+      });
+    });
+
+    // 2. Search Purchase Bills
+    purchases.forEach(pur => {
+      (pur.items || []).forEach(item => {
+        const serials = (item.serialNo || '').toLowerCase();
+        if (serials && serials.includes(q)) {
+          // Avoid duplicate if already linked in sales
+          const alreadyLinked = results.some(r => r.type === 'sale' && r.supplierInfo && r.supplierInfo.billNo === pur.billNo);
+          if (!alreadyLinked) {
+            results.push({
+              type: 'purchase',
+              docId: pur.id,
+              docNo: pur.billNo,
+              docDate: pur.date,
+              supplierName: pur.supplierName,
+              supplierPhone: pur.supplierPhone || '',
+              productName: item.name,
+              productId: item.productId,
+              serialNo: item.serialNo,
+              warranty: item.warranty || 'Standard',
+              statusText: 'Inward / Supplier Purchase'
+            });
+          }
+        }
+      });
+    });
+
+    return results;
   },
 
   /* Payments & Multi-Split Management */
@@ -1386,12 +1528,12 @@ const DB = {
     });
 
     // ── Customers (Businesses & Organisations) ──
-    const c1 = this.saveCustomer({ name: 'Zenith Infotech Pvt Ltd', gstin: '27AABCZ9321K1Z4', phone: '9823001122', whatsapp: '9823001122', email: 'accounts@zenithinfotech.com', address: 'Plot 15, Rajiv Gandhi IT Park', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411057', contactPerson: 'Suresh Patil' });
-    const c2 = this.saveCustomer({ name: 'St. Xavier School & College', gstin: '27AABTS4218M1ZQ', phone: '9823003344', whatsapp: '9823003344', email: 'admin@stxaviers.edu.in', address: '5, MG Road, Camp', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411001', contactPerson: 'Fr. Thomas' });
-    const c3 = this.saveCustomer({ name: 'City Hospital & Research Centre', gstin: '27AABCC7123H1ZR', phone: '9823005566', whatsapp: '9823005566', email: 'accounts@cityhospital.in', address: '88 Nagar Road, Yerawada', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411006', contactPerson: 'Mrs. Shinde' });
-    const c4 = this.saveCustomer({ name: 'Nagpur Municipal Corporation', gstin: '27AAANS8891P1ZX', phone: '0712-2567890', whatsapp: '9823007700', email: 'it.dept@nagpurcorp.gov.in', address: 'Mahapal Complex, Kasturchand Park', city: 'Nagpur', state: 'Maharashtra', stateCode: '27', pincode: '440001', contactPerson: 'Mr. Borse (IT Officer)' });
-    const c5 = this.saveCustomer({ name: 'Alpha Manufacturing Ltd', gstin: '24AABCA4512R1ZT', phone: '9712001234', whatsapp: '9712001234', email: 'it@alphamfg.com', address: 'GIDC Industrial Estate, Phase II', city: 'Surat', state: 'Gujarat', stateCode: '24', pincode: '394221', contactPerson: 'Rajesh Shah' });
-    const c6 = this.saveCustomer({ name: 'Kohinoor Group of Hotels', gstin: '27AABCK3312L1ZV', phone: '9823007788', whatsapp: '9823007788', email: 'finance@kohinoorhotels.com', address: '42 FC Road', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411005', contactPerson: 'Deepa Kulkarni' });
+    const c1 = this.saveCustomer({ name: 'Zenith Infotech Pvt Ltd', customerType: 'dealer', gstin: '27AABCZ9321K1Z4', phone: '9823001122', whatsapp: '9823001122', email: 'accounts@zenithinfotech.com', address: 'Plot 15, Rajiv Gandhi IT Park', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411057', contactPerson: 'Suresh Patil' });
+    const c2 = this.saveCustomer({ name: 'St. Xavier School & College', customerType: 'retail', gstin: '27AABTS4218M1ZQ', phone: '9823003344', whatsapp: '9823003344', email: 'admin@stxaviers.edu.in', address: '5, MG Road, Camp', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411001', contactPerson: 'Fr. Thomas' });
+    const c3 = this.saveCustomer({ name: 'City Hospital & Research Centre', customerType: 'retail', gstin: '27AABCC7123H1ZR', phone: '9823005566', whatsapp: '9823005566', email: 'accounts@cityhospital.in', address: '88 Nagar Road, Yerawada', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411006', contactPerson: 'Mrs. Shinde' });
+    const c4 = this.saveCustomer({ name: 'Nagpur Municipal Corporation', customerType: 'retail', gstin: '27AAANS8891P1ZX', phone: '0712-2567890', whatsapp: '9823007700', email: 'it.dept@nagpurcorp.gov.in', address: 'Mahapal Complex, Kasturchand Park', city: 'Nagpur', state: 'Maharashtra', stateCode: '27', pincode: '440001', contactPerson: 'Mr. Borse (IT Officer)' });
+    const c5 = this.saveCustomer({ name: 'Alpha Manufacturing Ltd', customerType: 'retail', gstin: '24AABCA4512R1ZT', phone: '9712001234', whatsapp: '9712001234', email: 'it@alphamfg.com', address: 'GIDC Industrial Estate, Phase II', city: 'Surat', state: 'Gujarat', stateCode: '24', pincode: '394221', contactPerson: 'Rajesh Shah' });
+    const c6 = this.saveCustomer({ name: 'Kohinoor Group of Hotels', customerType: 'retail', gstin: '27AABCK3312L1ZV', phone: '9823007788', whatsapp: '9823007788', email: 'finance@kohinoorhotels.com', address: '42 FC Road', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411005', contactPerson: 'Deepa Kulkarni' });
 
     // ── Suppliers (IT & CCTV Distributors) ──
     const s1 = this.saveSupplier({ name: 'Ingram Micro India Pvt Ltd', gstin: '27AAACI5892K1ZE', phone: '1800209800', email: 'orders@ingrammicro.in', address: 'Kalina, Santacruz East', city: 'Mumbai', state: 'Maharashtra', stateCode: '27', pincode: '400098' });
@@ -1401,22 +1543,22 @@ const DB = {
 
     // ── Products & Services ──
     // Computers & Laptops
-    const p1  = this.saveProduct({ name: 'HP ProBook 450 G10 Laptop (i5/8GB/512GB)', sku: 'HP-PB450-G10', hsn: '8471', category: 'Laptops', unit: 'Nos', purchasePrice: 48000, sellingPrice: 56000, gstRate: 18, stock: 12, reorderLevel: 3 });
-    const p2  = this.saveProduct({ name: 'Dell OptiPlex 3000 Desktop PC', sku: 'DELL-OP3000', hsn: '8471', category: 'Desktops', unit: 'Nos', purchasePrice: 32000, sellingPrice: 38500, gstRate: 18, stock: 8, reorderLevel: 2 });
-    const p3  = this.saveProduct({ name: 'HP Color LaserJet Pro MFP', sku: 'HP-CLJ-MFP', hsn: '8443', category: 'Printers', unit: 'Nos', purchasePrice: 18000, sellingPrice: 22000, gstRate: 18, stock: 5, reorderLevel: 2 });
+    const p1  = this.saveProduct({ name: 'HP ProBook 450 G10 Laptop (i5/8GB/512GB)', sku: 'HP-PB450-G10', barcode: '890100100001', hsn: '8471', category: 'Laptops', unit: 'Nos', purchasePrice: 48000, sellingPrice: 56000, dealerPrice: 51500, warranty: '1 Year', gstRate: 18, stock: 12, reorderLevel: 3 });
+    const p2  = this.saveProduct({ name: 'Dell OptiPlex 3000 Desktop PC', sku: 'DELL-OP3000', barcode: '890100100002', hsn: '8471', category: 'Desktops', unit: 'Nos', purchasePrice: 32000, sellingPrice: 38500, dealerPrice: 35500, warranty: '3 Years', gstRate: 18, stock: 8, reorderLevel: 2 });
+    const p3  = this.saveProduct({ name: 'HP Color LaserJet Pro MFP', sku: 'HP-CLJ-MFP', barcode: '890100100003', hsn: '8443', category: 'Printers', unit: 'Nos', purchasePrice: 18000, sellingPrice: 22000, dealerPrice: 19800, warranty: '1 Year', gstRate: 18, stock: 5, reorderLevel: 2 });
     // CCTV & Surveillance
-    const p4  = this.saveProduct({ name: 'Hikvision 2MP IP Dome Camera', sku: 'HKV-DS-2CD2121', hsn: '8525', category: 'CCTV', unit: 'Nos', purchasePrice: 1800, sellingPrice: 2800, gstRate: 18, stock: 50, reorderLevel: 15 });
-    const p5  = this.saveProduct({ name: 'Hikvision 5MP Bullet Camera (Outdoor)', sku: 'HKV-DS-2CD2T56', hsn: '8525', category: 'CCTV', unit: 'Nos', purchasePrice: 3200, sellingPrice: 4800, gstRate: 18, stock: 30, reorderLevel: 10 });
-    const p6  = this.saveProduct({ name: 'Hikvision 8-Ch NVR (4K, POE)', sku: 'HKV-DS-7608NI', hsn: '8521', category: 'CCTV', unit: 'Nos', purchasePrice: 8500, sellingPrice: 12500, gstRate: 18, stock: 10, reorderLevel: 3 });
-    const p7  = this.saveProduct({ name: '2TB Surveillance HDD (Seagate SkyHawk)', sku: 'SEG-SK2TB', hsn: '8471', category: 'Storage', unit: 'Nos', purchasePrice: 4200, sellingPrice: 5500, gstRate: 18, stock: 20, reorderLevel: 5 });
+    const p4  = this.saveProduct({ name: 'Hikvision 2MP IP Dome Camera', sku: 'HKV-DS-2CD2121', barcode: '890100100004', hsn: '8525', category: 'CCTV', unit: 'Nos', purchasePrice: 1800, sellingPrice: 2800, dealerPrice: 2250, warranty: '2 Years', gstRate: 18, stock: 50, reorderLevel: 15 });
+    const p5  = this.saveProduct({ name: 'Hikvision 5MP Bullet Camera (Outdoor)', sku: 'HKV-DS-2CD2T56', barcode: '890100100005', hsn: '8525', category: 'CCTV', unit: 'Nos', purchasePrice: 3200, sellingPrice: 4800, dealerPrice: 4100, warranty: '2 Years', gstRate: 18, stock: 30, reorderLevel: 10 });
+    const p6  = this.saveProduct({ name: 'Hikvision 8-Ch NVR (4K, POE)', sku: 'HKV-DS-7608NI', barcode: '890100100006', hsn: '8521', category: 'CCTV', unit: 'Nos', purchasePrice: 8500, sellingPrice: 12500, dealerPrice: 10500, warranty: '2 Years', gstRate: 18, stock: 10, reorderLevel: 3 });
+    const p7  = this.saveProduct({ name: '2TB Surveillance HDD (Seagate SkyHawk)', sku: 'SEG-SK2TB', barcode: '890100100007', hsn: '8471', category: 'Storage', unit: 'Nos', purchasePrice: 4200, sellingPrice: 5500, dealerPrice: 4800, warranty: '3 Years', gstRate: 18, stock: 20, reorderLevel: 5 });
     // Networking
-    const p8  = this.saveProduct({ name: 'TP-Link 24-Port Gigabit Switch', sku: 'TP-TL-SG1024D', hsn: '8517', category: 'Networking', unit: 'Nos', purchasePrice: 5500, sellingPrice: 7200, gstRate: 18, stock: 8, reorderLevel: 2 });
-    const p9  = this.saveProduct({ name: 'Fortinet FortiGate Firewall 60F', sku: 'FTN-FG-60F', hsn: '8517', category: 'Networking', unit: 'Nos', purchasePrice: 28000, sellingPrice: 36000, gstRate: 18, stock: 4, reorderLevel: 1 });
-    const p10 = this.saveProduct({ name: 'CAT6 UTP Cable (305m Box)', sku: 'CAT6-305M', hsn: '8544', category: 'Networking', unit: 'Box', purchasePrice: 3200, sellingPrice: 4500, gstRate: 18, stock: 15, reorderLevel: 4 });
-    const p11 = this.saveProduct({ name: 'Vertiv 1KVA Online UPS', sku: 'VTV-UPS-1KVA', hsn: '8504', category: 'UPS & Power', unit: 'Nos', purchasePrice: 12000, sellingPrice: 15500, gstRate: 18, stock: 6, reorderLevel: 2 });
+    const p8  = this.saveProduct({ name: 'TP-Link 24-Port Gigabit Switch', sku: 'TP-TL-SG1024D', barcode: '890100100008', hsn: '8517', category: 'Networking', unit: 'Nos', purchasePrice: 5500, sellingPrice: 7200, dealerPrice: 6300, warranty: '3 Years', gstRate: 18, stock: 8, reorderLevel: 2 });
+    const p9  = this.saveProduct({ name: 'Fortinet FortiGate Firewall 60F', sku: 'FTN-FG-60F', barcode: '890100100009', hsn: '8517', category: 'Networking', unit: 'Nos', purchasePrice: 28000, sellingPrice: 36000, dealerPrice: 31500, warranty: '1 Year', gstRate: 18, stock: 4, reorderLevel: 1 });
+    const p10 = this.saveProduct({ name: 'CAT6 UTP Cable (305m Box)', sku: 'CAT6-305M', barcode: '890100100010', hsn: '8544', category: 'Networking', unit: 'Box', purchasePrice: 3200, sellingPrice: 4500, dealerPrice: 3800, warranty: 'Testing Warranty', gstRate: 18, stock: 15, reorderLevel: 4 });
+    const p11 = this.saveProduct({ name: 'Vertiv 1KVA Online UPS', sku: 'VTV-UPS-1KVA', barcode: '890100100011', hsn: '8504', category: 'UPS & Power', unit: 'Nos', purchasePrice: 12000, sellingPrice: 15500, dealerPrice: 13800, warranty: '2 Years', gstRate: 18, stock: 6, reorderLevel: 2 });
     // Computer Parts
-    const p12 = this.saveProduct({ name: 'Kingston 16GB DDR4 RAM (3200MHz)', sku: 'KNG-16GB-DDR4', hsn: '8473', category: 'Computer Parts', unit: 'Nos', purchasePrice: 2800, sellingPrice: 3800, gstRate: 18, stock: 30, reorderLevel: 10 });
-    const p13 = this.saveProduct({ name: 'Samsung 512GB SSD (SATA)', sku: 'SAM-SSD-512', hsn: '8471', category: 'Computer Parts', unit: 'Nos', purchasePrice: 3200, sellingPrice: 4500, gstRate: 18, stock: 25, reorderLevel: 8 });
+    const p12 = this.saveProduct({ name: 'Kingston 16GB DDR4 RAM (3200MHz)', sku: 'KNG-16GB-DDR4', barcode: '890100100012', hsn: '8473', category: 'Computer Parts', unit: 'Nos', purchasePrice: 2800, sellingPrice: 3800, dealerPrice: 3200, warranty: '3 Years', gstRate: 18, stock: 30, reorderLevel: 10 });
+    const p13 = this.saveProduct({ name: 'Samsung 512GB SSD (SATA)', sku: 'SAM-SSD-512', barcode: '890100100013', hsn: '8471', category: 'Computer Parts', unit: 'Nos', purchasePrice: 3200, sellingPrice: 4500, dealerPrice: 3800, warranty: '3 Years', gstRate: 18, stock: 25, reorderLevel: 8 });
     // Services (SAC Codes)
     const p14 = this.saveProduct({ name: 'Annual Maintenance Contract (AMC) — Computer', sku: 'SVC-AMC-PC', hsn: '998314', category: 'AMC Services', unit: 'Nos/Year', purchasePrice: 0, sellingPrice: 3500, gstRate: 18, stock: 9999, reorderLevel: 0 });
     const p15 = this.saveProduct({ name: 'Annual Maintenance Contract (AMC) — CCTV System', sku: 'SVC-AMC-CCTV', hsn: '998314', category: 'AMC Services', unit: 'System/Year', purchasePrice: 0, sellingPrice: 8000, gstRate: 18, stock: 9999, reorderLevel: 0 });
@@ -1467,18 +1609,18 @@ const DB = {
     // ── Sales Invoices ──
     // INV 001 — CCTV supply & installation for school (PAID)
     mkSale('SCS/2024-25/0001', daysAgo(60), c2,
-      [{ productId: p4.id, name: p4.name, hsn: p4.hsn, unit: p4.unit, qty: 16, rate: 2800, discount: 5, gstRate: 18 },
-       { productId: p6.id, name: p6.name, hsn: p6.hsn, unit: p6.unit, qty: 2,  rate: 12500, discount: 0, gstRate: 18 },
-       { productId: p7.id, name: p7.name, hsn: p7.hsn, unit: p7.unit, qty: 2,  rate: 5500, discount: 0, gstRate: 18 },
-       { productId: p16.id, name: p16.name, hsn: p16.hsn, unit: p16.unit, qty: 2, rate: 5000, discount: 0, gstRate: 18 }],
+      [{ productId: p4.id, name: p4.name, hsn: p4.hsn, unit: p4.unit, qty: 16, rate: 2800, discount: 5, gstRate: 18, serialNo: 'HK-2MP-88391 to 88406', warranty: '2 Years' },
+       { productId: p6.id, name: p6.name, hsn: p6.hsn, unit: p6.unit, qty: 2,  rate: 12500, discount: 0, gstRate: 18, serialNo: 'NVR-7608-8801, NVR-7608-8802', warranty: '2 Years' },
+       { productId: p7.id, name: p7.name, hsn: p7.hsn, unit: p7.unit, qty: 2,  rate: 5500, discount: 0, gstRate: 18, serialNo: 'SEG-2TB-9911, SEG-2TB-9912', warranty: '3 Years' },
+       { productId: p16.id, name: p16.name, hsn: p16.hsn, unit: p16.unit, qty: 2, rate: 5000, discount: 0, gstRate: 18, warranty: '1 Year Support' }],
       'paid', daysAgo(45), 'Bank Transfer', 'CCTV installation — Main building & Hostel block');
 
     // INV 002 — Laptops + networking for IT company (PAID)
     mkSale('SCS/2024-25/0002', daysAgo(50), c1,
-      [{ productId: p1.id, name: p1.name, hsn: p1.hsn, unit: p1.unit, qty: 10, rate: 56000, discount: 3, gstRate: 18 },
-       { productId: p8.id, name: p8.name, hsn: p8.hsn, unit: p8.unit, qty: 1,  rate: 7200,  discount: 0, gstRate: 18 },
-       { productId: p17.id, name: p17.name, hsn: p17.hsn, unit: p17.unit, qty: 1, rate: 4500, discount: 0, gstRate: 18 }],
-      'paid', daysAgo(35), 'NEFT', 'New office IT setup');
+      [{ productId: p1.id, name: p1.name, hsn: p1.hsn, unit: p1.unit, qty: 10, rate: 51500, discount: 0, gstRate: 18, serialNo: 'HP-PB450-SN001 to SN010', warranty: '1 Year' },
+       { productId: p8.id, name: p8.name, hsn: p8.hsn, unit: p8.unit, qty: 1,  rate: 6300,  discount: 0, gstRate: 18, serialNo: 'TP-SG1024-55410', warranty: '3 Years' },
+       { productId: p17.id, name: p17.name, hsn: p17.hsn, unit: p17.unit, qty: 1, rate: 4500, discount: 0, gstRate: 18, warranty: '30 Days Testing' }],
+      'paid', daysAgo(35), 'NEFT', 'New office IT setup — Dealer Pricing');
 
     // INV 003 — AMC renewal for hospital (PAID)
     mkSale('SCS/2024-25/0003', daysAgo(40), c3,
@@ -1529,9 +1671,9 @@ const DB = {
 
     // PO 002 — CCTV cameras from Hikvision (PAID)
     mkPurchase('SCS-PO/2024-25/0002', daysAgo(55), s3,
-      [{ productId: p4.id, name: p4.name, hsn: p4.hsn, unit: p4.unit, qty: 50, rate: 1800, discount: 2, gstRate: 18 },
-       { productId: p5.id, name: p5.name, hsn: p5.hsn, unit: p5.unit, qty: 30, rate: 3200, discount: 2, gstRate: 18 },
-       { productId: p6.id, name: p6.name, hsn: p6.hsn, unit: p6.unit, qty: 10, rate: 8500, discount: 0, gstRate: 18 }],
+      [{ productId: p4.id, name: p4.name, hsn: p4.hsn, unit: p4.unit, qty: 50, rate: 1800, discount: 2, gstRate: 18, serialNo: 'HK-2MP-88391 to 88440', warranty: '2 Years' },
+       { productId: p5.id, name: p5.name, hsn: p5.hsn, unit: p5.unit, qty: 30, rate: 3200, discount: 2, gstRate: 18, warranty: '2 Years' },
+       { productId: p6.id, name: p6.name, hsn: p6.hsn, unit: p6.unit, qty: 10, rate: 8500, discount: 0, gstRate: 18, serialNo: 'NVR-7608-8801, NVR-7608-8802', warranty: '2 Years' }],
       'paid', daysAgo(40));
 
     // PO 003 — Networking equipment from Rashi Peripherals (UNPAID)

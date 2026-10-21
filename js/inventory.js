@@ -55,14 +55,21 @@ const Inventory = {
                   <tr>
                     <td>
                       <div style="font-weight:600">${p.name}</div>
-                      ${p.unit ? `<div style="font-size:.75rem;color:var(--text-secondary)">${p.unit}</div>` : ''}
+                      <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-top:2px">
+                        ${p.unit ? `<span style="font-size:.72rem;color:var(--text-secondary)">${p.unit}</span>` : ''}
+                        ${p.warranty ? `<span class="badge" style="background:hsl(217,91%,95%);color:hsl(217,91%,35%);font-size:.68rem;padding:1px 5px">🛡️ ${p.warranty}</span>` : ''}
+                        ${p.barcode ? `<span class="badge" style="background:var(--bg);border:1px solid var(--border);color:var(--text-secondary);font-size:.68rem;font-family:monospace">||| ${p.barcode}</span>` : ''}
+                      </div>
                     </td>
                     <td><span class="mono">${p.sku || '—'}</span></td>
                     <td><span class="mono">${p.hsn || '—'}</span></td>
                     <td>${p.category || '—'}</td>
                     <td><span class="badge badge-primary">${p.gstRate || 0}%</span></td>
                     <td class="text-right">${DB.getRole() === 'staff' ? '<span class="text-muted">🔒 Hidden</span>' : fmtCurrency(p.purchasePrice)}</td>
-                    <td class="text-right font-bold">${fmtCurrency(p.sellingPrice)}</td>
+                    <td class="text-right">
+                      <div class="font-bold">${fmtCurrency(p.sellingPrice)}</div>
+                      ${p.dealerPrice ? `<div style="font-size:.72rem;color:var(--text-secondary)" title="Wholesale / Technician Rate">Dealer: ${fmtCurrency(p.dealerPrice)}</div>` : ''}
+                    </td>
                     <td class="text-right">
                       <span style="font-weight:700;font-size:.95rem">${p.stock}</span>
                       <span style="font-size:.75rem;color:var(--text-secondary)"> / min ${p.reorderLevel}</span>
@@ -206,12 +213,34 @@ const Inventory = {
           <select id="p-gst">${gstOpts}</select>
         </div>
         <div class="form-group">
-          <label>Selling Price (₹) <span class="required">*</span></label>
+          <label>Selling / Retail Price (₹) <span class="required">*</span></label>
           <input id="p-sp" type="number" value="${p?.sellingPrice || ''}" min="0" step="0.01" placeholder="0.00">
+        </div>
+        <div class="form-group">
+          <label>Dealer / Wholesale Price (₹)</label>
+          <input id="p-dp" type="number" value="${p?.dealerPrice || ''}" min="0" step="0.01" placeholder="Optional discount rate for installers">
         </div>
         <div class="form-group">
           <label>Purchase / Cost Price (₹)</label>
           <input id="p-pp" type="number" value="${p?.purchasePrice || ''}" min="0" step="0.01" placeholder="0.00">
+        </div>
+        <div class="form-group">
+          <label>Warranty Period</label>
+          <select id="p-warranty">
+            <option value="No Warranty" ${p?.warranty === 'No Warranty' ? 'selected' : ''}>No Warranty</option>
+            <option value="7 Days Replacement" ${p?.warranty === '7 Days Replacement' ? 'selected' : ''}>7 Days Replacement</option>
+            <option value="1 Month" ${p?.warranty === '1 Month' ? 'selected' : ''}>1 Month Testing</option>
+            <option value="6 Months" ${p?.warranty === '6 Months' ? 'selected' : ''}>6 Months</option>
+            <option value="1 Year" ${!p || p?.warranty === '1 Year' ? 'selected' : ''}>1 Year Manufacturer</option>
+            <option value="2 Years" ${p?.warranty === '2 Years' ? 'selected' : ''}>2 Years Manufacturer</option>
+            <option value="3 Years" ${p?.warranty === '3 Years' ? 'selected' : ''}>3 Years Manufacturer</option>
+            <option value="5 Years" ${p?.warranty === '5 Years' ? 'selected' : ''}>5 Years Manufacturer</option>
+            <option value="Lifetime" ${p?.warranty === 'Lifetime' ? 'selected' : ''}>Lifetime Limited</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Barcode / EAN (Optional)</label>
+          <input id="p-barcode" value="${p?.barcode || ''}" placeholder="Scan or enter barcode number" style="font-family:monospace">
         </div>
         <div class="form-group" id="p-stock-group">
           <label>Current Stock Quantity</label>
@@ -254,11 +283,14 @@ const Inventory = {
     const data = {
       id: existingId || null,
       name, sku: document.getElementById('p-sku')?.value?.trim() || '',
+      barcode: document.getElementById('p-barcode')?.value?.trim() || '',
       hsn, category: document.getElementById('p-cat')?.value || 'Other',
       unit: document.getElementById('p-unit')?.value || 'Nos',
       gstRate: parseFloat(document.getElementById('p-gst')?.value) || 0,
       purchasePrice: parseFloat(document.getElementById('p-pp')?.value) || 0,
       sellingPrice: sp,
+      dealerPrice: parseFloat(document.getElementById('p-dp')?.value) || 0,
+      warranty: document.getElementById('p-warranty')?.value || '1 Year',
       stock: parseInt(document.getElementById('p-stock')?.value) || 0,
       reorderLevel: parseInt(document.getElementById('p-reorder')?.value) || 0,
       description: document.getElementById('p-desc')?.value?.trim() || '',

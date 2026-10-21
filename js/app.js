@@ -145,6 +145,9 @@ const App = {
         ${licBadge}
       </div>
       <div class="topbar-actions">
+        <button class="btn btn-secondary btn-sm" onclick="Billing.openSerialLookupModal()" title="Search Serial Number &amp; Warranty Status" style="display:inline-flex;align-items:center;gap:4px">
+          <span class="material-icons" style="font-size:16px;color:var(--primary)">verified</span> Warranty S/N
+        </button>
         ${role === 'staff' ? '' : `
         <button class="btn btn-secondary btn-sm" onclick="Expenses.openForm()">
           <span class="material-icons">receipt</span> Add Expense

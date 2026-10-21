@@ -364,7 +364,17 @@ const Billing = {
         </div>
 
         <!-- Line Items -->
-        <div class="invoice-section-title" style="margin-top:20px"><span class="material-icons">list</span> Line Items</div>
+        <div class="invoice-section-title" style="margin-top:20px;display:flex;justify-content:space-between;align-items:center">
+          <span><span class="material-icons">list</span> Line Items</span>
+          <span id="dealer-active-pill" style="display:none;background:hsl(271,78%,92%);color:hsl(271,78%,35%);font-size:.75rem;padding:2px 8px;border-radius:12px;font-weight:700">⚡ Dealer / Wholesale Pricing Active</span>
+        </div>
+
+        <!-- Fast Barcode / SKU Scanner Bar -->
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)">
+          <span class="material-icons" style="font-size:20px;color:var(--primary)">qr_code_scanner</span>
+          <input id="barcode-quick-scan" placeholder="Scan Barcode / S/N with USB scanner or type SKU &amp; press Enter to add..." style="flex:1;font-weight:600;font-size:.85rem;background:transparent;border:none;outline:none" onkeydown="Billing._handleBarcodeScan(event)">
+          <button type="button" class="btn btn-xs btn-secondary" onclick="Billing._triggerBarcodeAdd()">+ Add Scanned</button>
+        </div>
         <div class="line-items-wrap">
           <table class="line-items-table">
             <thead>
@@ -441,7 +451,10 @@ const Billing = {
     return products.map(p => {
       const price = isSales ? p.sellingPrice : p.purchasePrice;
       const sel = p.id === selectedId ? 'selected' : '';
-      return `<option value="${p.id}" ${sel}>${p.name}${p.sku ? ' (' + p.sku + ')' : ''} — ${fmtCurrency(price)}</option>`;
+      const warrTag = p.warranty ? ` [${p.warranty}]` : '';
+      const dealerTag = (isSales && p.dealerPrice) ? ` (Dealer: ₹${p.dealerPrice})` : '';
+      const skuTag = p.sku ? ' (' + p.sku + ')' : '';
+      return `<option value="${p.id}" ${sel}>${p.name}${skuTag} — ${fmtCurrency(price)}${dealerTag}${warrTag}</option>`;
     }).join('');
   },
 
@@ -473,11 +486,18 @@ const Billing = {
           ${this._getProductOptions(item.productId)}
         </select>
         <input class="item-name" value="${item.name || ''}" placeholder="Product description…" style="margin-top:4px" oninput="Billing._recalc('${biz.stateCode}')">
+        <div style="display:flex;gap:4px;margin-top:4px">
+          <input class="item-serial" value="${item.serialNo || ''}" placeholder="S/N / IMEI (e.g. SN1001)..." style="font-size:.74rem;font-family:monospace;flex:1.4;padding:3px 6px" title="Serial Number(s) for warranty" oninput="Billing._recalc('${biz.stateCode}')">
+          <input class="item-warranty" value="${item.warranty || ''}" placeholder="Warranty (e.g. 1 Year)" style="font-size:.74rem;flex:1;padding:3px 6px" title="Warranty Period" oninput="Billing._recalc('${biz.stateCode}')">
+        </div>
       </td>
       <td><input class="item-hsn" value="${item.hsn || ''}" placeholder="HSN/SAC" oninput="Billing._recalc('${biz.stateCode}')"></td>
       <td><input class="item-qty" type="number" value="${formattedQty}" min="${allowDecimal ? '0.01' : '1'}" step="${allowDecimal ? '0.01' : '1'}" oninput="Billing._onQtyInput(this)"></td>
       <td><select class="item-unit" onchange="Billing._onUnitChange(this)">${UNITS.map(u => `<option value="${u}" ${u === unit ? 'selected' : ''}>${u}</option>`).join('')}</select></td>
-      <td><input class="item-rate" type="number" value="${item.rate || 0}" min="0" step="0.01" oninput="Billing._recalc('${biz.stateCode}')"></td>
+      <td>
+        <input class="item-rate" type="number" value="${item.rate || 0}" min="0" step="0.01" oninput="Billing._recalc('${biz.stateCode}')">
+        <div class="rate-tier-pill" style="font-size:.68rem;margin-top:2px;display:none"></div>
+      </td>
       <td><input class="item-disc" type="number" value="${item.discount || 0}" min="0" max="100" step="0.01" oninput="Billing._recalc('${biz.stateCode}')"></td>
       <td><select class="item-gst" onchange="Billing._recalc('${biz.stateCode}')">${GST_RATES.map(r => `<option value="${r}" ${parseFloat(item.gstRate) === r ? 'selected' : ''}>${r}%</option>`).join('')}</select></td>
       <td class="td-total item-taxable">₹0.00</td>
@@ -488,7 +508,11 @@ const Billing = {
     // Pre-select product in dropdown
     if (item.productId) {
       const sel = tr.querySelector('.item-product');
-      if (sel) sel.value = item.productId;
+      if (sel) {
+        sel.value = item.productId;
+        const p = DB.getProductById(item.productId);
+        if (p) this._updateRateTierPill(tr, p);
+      }
     }
 
     tbody.appendChild(tr);
@@ -600,9 +624,22 @@ const Billing = {
     }
 
     const isSales = window._iType === 'sales';
+    const partyId = document.getElementById('if-party')?.value;
+    const party = isSales && partyId ? DB.getCustomerById(partyId) : null;
+    const isDealer = party?.customerType === 'dealer';
+
+    const chosenRate = isSales ? ((isDealer && p.dealerPrice > 0) ? p.dealerPrice : (p.sellingPrice || 0)) : (p.purchasePrice || 0);
+
     row.querySelector('.item-name').value = p.name || '';
     row.querySelector('.item-hsn').value = p.hsn || '';
-    row.querySelector('.item-rate').value = isSales ? (p.sellingPrice || 0) : (p.purchasePrice || 0);
+    row.querySelector('.item-rate').value = chosenRate;
+
+    // Auto-fill warranty
+    const warrInput = row.querySelector('.item-warranty');
+    if (warrInput && p.warranty) warrInput.value = p.warranty;
+
+    // Display / Update Dealer vs Retail rate toggle pill
+    this._updateRateTierPill(row, p);
 
     const gstSel = row.querySelector('.item-gst');
     if (gstSel && p.gstRate !== undefined) gstSel.value = p.gstRate;
@@ -614,6 +651,138 @@ const Billing = {
     }
 
     this._recalc(DB.getBiz().stateCode);
+  },
+
+  _updateRateTierPill(row, p) {
+    const pillWrap = row?.querySelector('.rate-tier-pill');
+    if (!pillWrap) return;
+    if (!p || !p.dealerPrice || window._iType !== 'sales') {
+      pillWrap.style.display = 'none';
+      return;
+    }
+    pillWrap.style.display = 'block';
+    pillWrap.innerHTML = `
+      <span style="display:inline-flex;gap:4px;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 5px">
+        <a href="javascript:void(0)" onclick="Billing._setRowRate(this, ${p.sellingPrice})" title="Switch to Retail Price" style="color:var(--primary);font-weight:600">R: ₹${p.sellingPrice}</a>
+        <span style="color:var(--border)">|</span>
+        <a href="javascript:void(0)" onclick="Billing._setRowRate(this, ${p.dealerPrice})" title="Switch to Dealer Price" style="color:hsl(271,78%,45%);font-weight:700">D: ₹${p.dealerPrice}</a>
+      </span>
+    `;
+  },
+
+  _setRowRate(linkEl, rate) {
+    const row = linkEl.closest('tr');
+    if (!row) return;
+    const rateInput = row.querySelector('.item-rate');
+    if (rateInput) {
+      rateInput.value = rate;
+      this._recalc(DB.getBiz().stateCode);
+    }
+  },
+
+  /* Barcode Scanner Gun Fast-Add Methods */
+  _handleBarcodeScan(event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      this._triggerBarcodeAdd();
+    }
+  },
+
+  _playScanBeep() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1760, ctx.currentTime);
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.08);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.08);
+    } catch (e) {
+      // AudioContext muted/unsupported
+    }
+  },
+
+  _triggerBarcodeAdd() {
+    const input = document.getElementById('barcode-quick-scan');
+    if (!input) return;
+    const query = input.value.trim().toLowerCase();
+    if (!query) return;
+
+    const products = DB.getProducts();
+    const p = products.find(prod =>
+      (prod.barcode && prod.barcode.toLowerCase() === query) ||
+      (prod.sku && prod.sku.toLowerCase() === query) ||
+      (prod.id && prod.id.toLowerCase() === query) ||
+      (prod.name && prod.name.toLowerCase() === query)
+    );
+
+    if (!p) {
+      App.toast(`Item not found for barcode / SKU "${query}"`, 'warning');
+      input.select();
+      return;
+    }
+
+    this._playScanBeep();
+
+    const tbody = document.getElementById('items-tbody');
+    const existingRow = tbody ? Array.from(tbody.querySelectorAll('tr')).find(r => r.querySelector('.item-product')?.value === p.id) : null;
+
+    if (existingRow) {
+      const qtyInput = existingRow.querySelector('.item-qty');
+      const curQty = parseFloat(qtyInput?.value) || 1;
+      const newQty = curQty + 1;
+      if (qtyInput) qtyInput.value = newQty;
+      existingRow.style.transition = 'background 0.3s';
+      existingRow.style.background = 'hsl(142,76%,90%)';
+      setTimeout(() => { existingRow.style.background = ''; }, 1200);
+      App.toast(`Incremented "${p.name}" to ${newQty} 📦`, 'info');
+    } else {
+      const firstRow = tbody?.querySelector('tr[data-idx="0"]');
+      const isFirstEmpty = firstRow && !firstRow.querySelector('.item-product')?.value && !firstRow.querySelector('.item-name')?.value;
+
+      const isSales = window._iType === 'sales';
+      const partyId = document.getElementById('if-party')?.value;
+      const party = isSales && partyId ? DB.getCustomerById(partyId) : null;
+      const isDealer = party?.customerType === 'dealer';
+      const chosenRate = isSales ? ((isDealer && p.dealerPrice > 0) ? p.dealerPrice : (p.sellingPrice || 0)) : (p.purchasePrice || 0);
+
+      const newItem = {
+        productId: p.id,
+        name: p.name,
+        hsn: p.hsn || '',
+        unit: p.unit || 'Nos',
+        qty: 1,
+        rate: chosenRate,
+        discount: 0,
+        gstRate: p.gstRate !== undefined ? p.gstRate : 18,
+        warranty: p.warranty || '1 Year',
+        serialNo: ''
+      };
+
+      if (isFirstEmpty) {
+        firstRow.querySelector('.item-product').value = p.id;
+        firstRow.querySelector('.item-name').value = p.name;
+        firstRow.querySelector('.item-hsn').value = p.hsn || '';
+        firstRow.querySelector('.item-rate').value = chosenRate;
+        const warrInput = firstRow.querySelector('.item-warranty');
+        if (warrInput) warrInput.value = p.warranty || '1 Year';
+        firstRow.querySelector('.item-gst').value = p.gstRate !== undefined ? p.gstRate : 18;
+        this._updateRateTierPill(firstRow, p);
+      } else {
+        this._addRow(newItem);
+      }
+      App.toast(`Scanned &amp; Added: "${p.name}" ✨`, 'success');
+    }
+
+    this._recalc(DB.getBiz().stateCode);
+    input.value = '';
+    input.focus();
   },
 
   toggleQuickParty(show) {
@@ -723,6 +892,29 @@ const Billing = {
       if (posEl) {
         posEl.value = isSales ? (party.stateCode || biz.stateCode) : (biz.stateCode);
       }
+
+      // Check if dealer pricing applies
+      const isDealer = isSales && party.customerType === 'dealer';
+      const dealerPill = document.getElementById('dealer-active-pill');
+      if (dealerPill) {
+        dealerPill.style.display = isDealer ? 'inline-block' : 'none';
+      }
+      if (isDealer) {
+        App.toast(`⚡ Dealer Pricing Tier active for ${party.name}! Wholesale rates applied.`, 'info');
+        const tbody = document.getElementById('items-tbody');
+        if (tbody) {
+          Array.from(tbody.querySelectorAll('tr')).forEach(tr => {
+            const pId = tr.querySelector('.item-product')?.value;
+            if (pId) {
+              const p = DB.getProductById(pId);
+              if (p && p.dealerPrice > 0) {
+                tr.querySelector('.item-rate').value = p.dealerPrice;
+                this._updateRateTierPill(tr, p);
+              }
+            }
+          });
+        }
+      }
       this._recalc();
     } else {
       preview.innerHTML = `<h4>${isSales ? 'To (Buyer / Recipient)' : 'From (Seller / Supplier)'}</h4><div class="party-detail-line text-muted">Select a ${isSales ? 'customer' : 'supplier'} above…</div>`;
@@ -772,6 +964,8 @@ const Billing = {
       rows.push({
         productId: tr.querySelector('.item-product')?.value || '',
         name: tr.querySelector('.item-name')?.value || '',
+        serialNo: tr.querySelector('.item-serial')?.value.trim() || '',
+        warranty: tr.querySelector('.item-warranty')?.value.trim() || '',
         hsn: tr.querySelector('.item-hsn')?.value || '',
         unit: unit,
         qty: qty,
@@ -1116,7 +1310,11 @@ const Billing = {
             ${(doc.items || []).map((item, i) => `
               <tr>
                 <td>${i + 1}</td>
-                <td>${item.name}${item.discount ? `<span class="text-muted" style="font-size:.78rem"> (${item.discount}% disc)</span>` : ''}</td>
+                <td>
+                  <div style="font-weight:600">${item.name}${item.discount ? `<span class="text-muted" style="font-size:.78rem"> (${item.discount}% disc)</span>` : ''}</div>
+                  ${item.serialNo ? `<div style="font-size:.75rem;font-family:monospace;color:var(--text-secondary);margin-top:2px">S/N: <strong>${item.serialNo}</strong></div>` : ''}
+                  ${item.warranty ? `<div style="font-size:.75rem;color:var(--primary);font-weight:600;margin-top:1px">🛡️ Warranty: ${item.warranty}</div>` : ''}
+                </td>
                 <td><span class="mono">${item.hsn || '—'}</span></td>
                 <td>${item.qty}</td>
                 <td>${item.unit}</td>
@@ -1684,7 +1882,11 @@ body { font-family: 'Courier New', Courier, monospace, sans-serif; font-size: 8.
   <tbody>
     ${(doc.items || []).map(it => `
       <tr>
-        <td>${it.name}</td>
+        <td>
+          <div style="font-weight:700">${it.name}</div>
+          ${it.serialNo ? `<div style="font-size:6.5pt;font-family:monospace">S/N: ${it.serialNo}</div>` : ''}
+          ${it.warranty ? `<div style="font-size:6.5pt">Warr: ${it.warranty}</div>` : ''}
+        </td>
         <td class="pos-right">${it.qty} ${it.unit}</td>
         <td class="pos-right">${parseFloat(it.rate).toFixed(0)}</td>
         <td class="pos-right font-bold">${parseFloat(it.totalAmt).toFixed(2)}</td>
@@ -1768,7 +1970,11 @@ ${isSales && biz.upiId ? `
         : `<td class="rate">${item.igstRate}%</td><td class="amount">${fmtCurrency(item.igstAmt)}</td>`;
       return `<tr ${zebraRows && i % 2 === 1 ? 'style="background:#f8fafc"' : ''}>
         <td class="sr">${i + 1}</td>
-        <td>${item.name}${item.discount ? ` <em>(${item.discount}% disc)</em>` : ''}</td>
+        <td>
+          <div style="font-weight:600">${item.name}${item.discount ? ` <em>(${item.discount}% disc)</em>` : ''}</div>
+          ${item.serialNo ? `<div style="font-size:7.5pt;font-family:monospace;color:#475569;margin-top:1px">S/N: <strong>${item.serialNo}</strong></div>` : ''}
+          ${item.warranty ? `<div style="font-size:7.5pt;color:#2563eb;font-weight:600">Warranty: ${item.warranty}</div>` : ''}
+        </td>
         <td class="hsn">${item.hsn || ''}</td>
         <td class="qty">${item.qty}</td>
         <td>${item.unit}</td>
@@ -3977,7 +4183,10 @@ body { font-family: 'Inter', Arial, sans-serif; font-size: 8.5pt; color: #1e293b
             ${(quote.items || []).map((it, idx) => `
               <tr>
                 <td>${idx + 1}</td>
-                <td><strong>${it.name}</strong></td>
+                <td>
+                  <strong>${it.name}</strong>
+                  ${it.warranty ? `<div style="font-size:.74rem;color:var(--primary);font-weight:600;margin-top:1px">🛡️ Warranty: ${it.warranty}</div>` : ''}
+                </td>
                 <td class="mono">${it.hsn || '—'}</td>
                 <td class="text-right font-bold">${it.qty} ${it.unit || ''}</td>
                 <td class="text-right">${fmtCurrency(it.rate)}</td>
@@ -4613,5 +4822,175 @@ body { font-family: 'Inter', Arial, sans-serif; font-size: 8.5pt; color: #1e293b
     App.closeModal();
     const c = document.getElementById('page-content');
     this.renderQuotations(c, window._quoteFilter || 'all');
+  },
+
+  /* ─── Hardware Serial Number & Warranty Hub ─── */
+  openSerialLookupModal(initialQuery = '') {
+    const bodyHtml = `
+      <div style="margin-bottom:14px">
+        <div style="font-size:.85rem;color:var(--text-secondary);margin-bottom:8px">
+          Instantly look up any hardware serial number (S/N) or IMEI to verify real-time warranty validity, customer purchase invoice, or distributor RMA info.
+        </div>
+        <div style="display:flex;gap:8px">
+          <div style="position:relative;flex:1">
+            <span class="material-icons" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:18px">qr_code_scanner</span>
+            <input type="text" id="serial-lookup-query" class="form-control" style="padding-left:36px;font-family:monospace;font-size:.95rem"
+              placeholder="Scan barcode gun or type Serial / IMEI..." value="${initialQuery}" autofocus
+              oninput="Billing._renderSerialLookupResults(this.value)"
+              onkeydown="if(event.key==='Enter') Billing._renderSerialLookupResults(this.value)">
+          </div>
+          <button class="btn btn-primary" onclick="Billing._renderSerialLookupResults(document.getElementById('serial-lookup-query').value)">
+            <span class="material-icons" style="font-size:16px">search</span> Search S/N
+          </button>
+        </div>
+      </div>
+      <div id="serial-lookup-results-box" style="max-height:60vh;overflow-y:auto;padding-right:4px">
+        <!-- Rendered results -->
+      </div>
+    `;
+
+    App.modal('Hardware Serial Number & Warranty Hub', bodyHtml, `
+      <button class="btn btn-secondary" onclick="App.closeModal()">Close</button>
+    `, 'modal-lg');
+
+    // Auto-search if initial query provided, or show quick guide
+    setTimeout(() => {
+      const input = document.getElementById('serial-lookup-query');
+      if (input) {
+        input.focus();
+        Billing._renderSerialLookupResults(input.value);
+      }
+    }, 50);
+  },
+
+  _renderSerialLookupResults(query) {
+    const box = document.getElementById('serial-lookup-results-box');
+    if (!box) return;
+
+    const q = (query || '').trim();
+    if (!q) {
+      box.innerHTML = `
+        <div style="border:2px dashed var(--border);border-radius:var(--radius);padding:24px 16px;text-align:center;background:var(--bg)">
+          <span class="material-icons" style="font-size:38px;color:var(--primary);opacity:.7">verified</span>
+          <div style="font-weight:600;margin-top:6px;font-size:.95rem">Serial &amp; Warranty Verification Ready</div>
+          <div style="font-size:.82rem;color:var(--text-secondary);max-width:440px;margin:6px auto 0">
+            Scan hardware barcode or enter Serial / IMEI from a customer-returned product to check active warranty and distributor inward bills.
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    const results = DB.searchSerial(q);
+    if (!results || results.length === 0) {
+      box.innerHTML = `
+        <div style="border:1px solid var(--border);border-radius:var(--radius);padding:24px 16px;text-align:center;background:var(--bg)">
+          <span class="material-icons" style="font-size:38px;color:var(--danger);opacity:.6">search_off</span>
+          <div style="font-weight:700;margin-top:6px;font-size:.95rem;color:var(--danger)">No Match Found for "${q}"</div>
+          <div style="font-size:.82rem;color:var(--text-secondary);max-width:420px;margin:6px auto 0">
+            No sales invoice or purchase bill records have this serial number. Ensure the S/N was recorded during invoicing or inward purchase.
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    box.innerHTML = results.map(res => {
+      const isSale = res.type === 'sale';
+      const badgeClass = res.isUnderWarranty ? 'badge-paid' : (res.statusText.includes('Expired') ? 'badge-danger' : 'badge-draft');
+      const badgeIcon = res.isUnderWarranty ? 'verified' : (res.statusText.includes('Expired') ? 'gpp_bad' : 'info');
+
+      return `
+        <div class="card" style="margin-bottom:12px;border:1px solid var(--border);box-shadow:none;background:#ffffff">
+          <div class="card-body" style="padding:14px 16px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+              <div>
+                <div style="font-size:1rem;font-weight:700;color:var(--text-primary)">
+                  ${res.productName}
+                </div>
+                <div style="font-family:monospace;font-size:.82rem;color:var(--text-secondary);margin-top:2px">
+                  S/N: <strong style="color:var(--primary);background:var(--bg);padding:1px 6px;border-radius:3px;border:1px solid var(--border)">${res.serialNo}</strong>
+                </div>
+              </div>
+              <div>
+                <span class="badge ${badgeClass}" style="display:inline-flex;align-items:center;gap:4px;font-size:.8rem;padding:4px 8px">
+                  <span class="material-icons" style="font-size:14px">${badgeIcon}</span> ${res.statusText}
+                </span>
+              </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;font-size:.83rem;margin-bottom:12px;padding:10px;background:var(--bg);border-radius:var(--radius-sm)">
+              ${isSale ? `
+                <div>
+                  <div style="color:var(--text-secondary);font-size:.74rem;text-transform:uppercase;font-weight:600">Customer (Sold To)</div>
+                  <div style="font-weight:600">${res.customerName}</div>
+                  ${res.customerPhone ? `<div style="color:var(--text-secondary);font-size:.78rem">📞 ${res.customerPhone}</div>` : ''}
+                </div>
+                <div>
+                  <div style="color:var(--text-secondary);font-size:.74rem;text-transform:uppercase;font-weight:600">Sales Invoice</div>
+                  <div><strong>#${res.docNo}</strong></div>
+                  <div style="color:var(--text-secondary);font-size:.78rem">Dated: ${fmtDate(res.docDate)}</div>
+                </div>
+                <div>
+                  <div style="color:var(--text-secondary);font-size:.74rem;text-transform:uppercase;font-weight:600">Warranty Coverage</div>
+                  <div><strong>${res.warranty}</strong></div>
+                  <div style="color:var(--text-secondary);font-size:.78rem">${res.expiryDate ? 'Expires: ' + fmtDate(res.expiryDate) : 'No expiry date'}</div>
+                </div>
+              ` : `
+                <div>
+                  <div style="color:var(--text-secondary);font-size:.74rem;text-transform:uppercase;font-weight:600">Distributor / Supplier</div>
+                  <div style="font-weight:600">${res.supplierName}</div>
+                  ${res.supplierPhone ? `<div style="color:var(--text-secondary);font-size:.78rem">📞 ${res.supplierPhone}</div>` : ''}
+                </div>
+                <div>
+                  <div style="color:var(--text-secondary);font-size:.74rem;text-transform:uppercase;font-weight:600">Purchase Bill</div>
+                  <div><strong>#${res.docNo}</strong></div>
+                  <div style="color:var(--text-secondary);font-size:.78rem">Dated: ${fmtDate(res.docDate)}</div>
+                </div>
+                <div>
+                  <div style="color:var(--text-secondary);font-size:.74rem;text-transform:uppercase;font-weight:600">Warranty Term</div>
+                  <div><strong>${res.warranty}</strong></div>
+                </div>
+              `}
+            </div>
+
+            ${isSale && res.supplierInfo ? `
+              <div style="padding:8px 12px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:var(--radius-sm);font-size:.82rem;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+                <div>
+                  <strong style="color:hsl(226,71%,40%)">📦 Inward Distributor Record (RMA Supplier):</strong>
+                  <span> ${res.supplierInfo.supplierName} (Bill #${res.supplierInfo.billNo} • ${fmtDate(res.supplierInfo.billDate)}) ${res.supplierInfo.supplierPhone ? '• 📞 ' + res.supplierInfo.supplierPhone : ''}</span>
+                </div>
+                <button class="btn btn-xs btn-secondary" onclick="App.closeModal();Billing.viewDoc('${res.supplierInfo.id || res.supplierInfo.billNo}','purchases')">
+                  View Supplier Bill
+                </button>
+              </div>
+            ` : ''}
+
+            <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap">
+              ${isSale ? `
+                <button class="btn btn-xs btn-secondary" onclick="App.closeModal();Billing.viewDoc('${res.docId}','sales')">
+                  <span class="material-icons" style="font-size:13px">receipt</span> View Invoice
+                </button>
+                <button class="btn btn-xs btn-warning" onclick="App.closeModal();Billing.openReturnForm('sales','${res.docId}')" title="Accept Customer Return &amp; Issue Credit Note">
+                  <span class="material-icons" style="font-size:13px">assignment_return</span> Customer Return
+                </button>
+                ${res.supplierInfo ? `
+                  <button class="btn btn-xs btn-danger" onclick="App.closeModal();Billing.openReturnForm('purchases','${res.supplierInfo.id || res.supplierInfo.billNo}')" title="Send to Distributor for RMA / Repair / Replacement">
+                    <span class="material-icons" style="font-size:13px">build</span> Supplier RMA Claim
+                  </button>
+                ` : ''}
+              ` : `
+                <button class="btn btn-xs btn-secondary" onclick="App.closeModal();Billing.viewDoc('${res.docId}','purchases')">
+                  <span class="material-icons" style="font-size:13px">receipt</span> View Purchase Bill
+                </button>
+                <button class="btn btn-xs btn-danger" onclick="App.closeModal();Billing.openReturnForm('purchases','${res.docId}')" title="Return to Supplier (Debit Note)">
+                  <span class="material-icons" style="font-size:13px">assignment_return</span> Supplier Return (Debit Note)
+                </button>
+              `}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
   }
 };
