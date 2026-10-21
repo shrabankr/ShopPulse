@@ -245,6 +245,7 @@ const DB = {
     PURCHASES: 'sp_purchases',
     CREDIT_NOTES: 'sp_credit_notes',
     DEBIT_NOTES: 'sp_debit_notes',
+    QUOTATIONS: 'sp_quotations',
     EXPENSES: 'sp_expenses',
     MOVEMENTS: 'sp_movements',
     AUTH: 'sp_auth',
@@ -270,6 +271,7 @@ const DB = {
       billPrefix: 'PO', billCounter: 1,
       creditNotePrefix: 'CN', creditNoteCounter: 1,
       debitNotePrefix: 'DN', debitNoteCounter: 1,
+      quotationPrefix: 'QTN', quotationCounter: 1,
       defaultPaymentTerms: 30, signatory: 'Shraban Kumar Mahato', termsAndConditions: 'Goods once sold will not be taken back.\nWarranty as per manufacturer terms.\nInterest @18% p.a. will be charged on delayed payments.',
     };
   },
@@ -558,6 +560,34 @@ const DB = {
     const b = this.getBiz();
     const no = `${b.debitNotePrefix || 'DN'}/${getFY()}/${String(b.debitNoteCounter || 1).padStart(4, '0')}`;
     this.setBiz({ ...b, debitNoteCounter: (b.debitNoteCounter || 1) + 1 });
+    return no;
+  },
+
+  /* ─── Quotations & Estimates ─── */
+  getQuotations() { return this._get(this.K.QUOTATIONS) || []; },
+  getQuotationById(id) { return this.getQuotations().find(q => q.id === id); },
+  saveQuotation(data, isNew = true) {
+    const list = this.getQuotations();
+    if (!isNew) {
+      const i = list.findIndex(q => q.id === data.id);
+      if (i > -1) list[i] = data; else list.unshift(data);
+      this._set(this.K.QUOTATIONS, list);
+      return data;
+    }
+    data.id = genId('QTN');
+    data.createdAt = new Date().toISOString();
+    // Quotations do not alter stock
+    list.unshift(data);
+    this._set(this.K.QUOTATIONS, list);
+    return data;
+  },
+  deleteQuotation(id) {
+    this._set(this.K.QUOTATIONS, this.getQuotations().filter(q => q.id !== id));
+  },
+  nextQuotationNo() {
+    const b = this.getBiz();
+    const no = `${b.quotationPrefix || 'QTN'}/${getFY()}/${String(b.quotationCounter || 1).padStart(4, '0')}`;
+    this.setBiz({ ...b, quotationCounter: (b.quotationCounter || 1) + 1 });
     return no;
   },
 
@@ -1221,6 +1251,9 @@ const DB = {
       stats: {
         salesCount: this.getSales().length,
         purchasesCount: this.getPurchases().length,
+        quotationsCount: this.getQuotations().length,
+        creditNotesCount: this.getCreditNotes().length,
+        debitNotesCount: this.getDebitNotes().length,
         expensesCount: this.getExpenses().length,
         productsCount: this.getProducts().length,
         customersCount: this.getCustomers().length,
@@ -1234,6 +1267,9 @@ const DB = {
         products: this.getProducts(),
         sales: this.getSales(),
         purchases: this.getPurchases(),
+        quotations: this.getQuotations(),
+        creditNotes: this.getCreditNotes(),
+        debitNotes: this.getDebitNotes(),
         expenses: this.getExpenses(),
         movements: this.getMovements(),
         auth: this.getAuth()
@@ -1298,6 +1334,9 @@ const DB = {
     if (d.products) this._set(this.K.PRODUCTS, d.products);
     if (d.sales) this._set(this.K.SALES, d.sales);
     if (d.purchases) this._set(this.K.PURCHASES, d.purchases);
+    if (d.quotations) this._set(this.K.QUOTATIONS, d.quotations);
+    if (d.creditNotes) this._set(this.K.CREDIT_NOTES, d.creditNotes);
+    if (d.debitNotes) this._set(this.K.DEBIT_NOTES, d.debitNotes);
     if (d.expenses) this._set(this.K.EXPENSES, d.expenses);
     if (d.movements) this._set(this.K.MOVEMENTS, d.movements);
     if (d.auth) this.setAuth(d.auth);
@@ -1570,6 +1609,57 @@ const DB = {
       settlementNote: 'Deducted from payable balance on bill SCS-PO/2024-25/0003',
       notes: 'Returned 2 units faulty patch panels to Rashi Peripherals for replacement credit',
       ...dnTotals
+    }, true);
+
+    // ── Sample Quotations / Estimates ──
+    const q1Items = [
+      { productId: p5.id, name: p5.name, hsn: p5.hsn, unit: p5.unit, qty: 6, rate: 4800, discount: 5, gstRate: 18 },
+      { productId: p6.id, name: p6.name, hsn: p6.hsn, unit: p6.unit, qty: 1, rate: 8500, discount: 0, gstRate: 18 },
+      { productId: p7.id, name: p7.name, hsn: p7.hsn, unit: p7.unit, qty: 1, rate: 4200, discount: 0, gstRate: 18 },
+      { productId: p9.id, name: p9.name, hsn: p9.hsn, unit: p9.unit, qty: 2, rate: 2200, discount: 0, gstRate: 18 }
+    ];
+    const q1Totals = calcTotals(q1Items, biz.stateCode, c1.stateCode || biz.stateCode);
+    this.saveQuotation({
+      quotationNo: 'QTN/2024-25/0001',
+      date: daysAgo(5),
+      validDays: 15,
+      validUntil: daysAgo(-10),
+      customerId: c1.id,
+      customerName: c1.name,
+      customerGstin: c1.gstin || '',
+      customerAddress: `${c1.address || ''}, ${c1.city || ''}`,
+      customerState: c1.state,
+      customerStateCode: c1.stateCode,
+      status: 'sent',
+      deliveryMode: 'instore',
+      shippingCharges: 0,
+      notes: 'Quotation for 6-camera commercial surveillance setup with 8ch DVR and 2TB surveillance storage.\nValidity: 15 days from issue date.',
+      ...q1Totals
+    }, true);
+
+    const q2Items = [
+      { productId: p1.id, name: p1.name, hsn: p1.hsn, unit: p1.unit, qty: 2, rate: 46500, discount: 2, gstRate: 18 },
+      { productId: p3.id, name: p3.name, hsn: p3.hsn, unit: p3.unit, qty: 1, rate: 16500, discount: 0, gstRate: 18 }
+    ];
+    const q2Totals = calcTotals(q2Items, biz.stateCode, c2.stateCode || biz.stateCode);
+    this.saveQuotation({
+      quotationNo: 'QTN/2024-25/0002',
+      date: daysAgo(25),
+      validDays: 30,
+      validUntil: daysAgo(5),
+      customerId: c2.id,
+      customerName: c2.name,
+      customerGstin: c2.gstin || '',
+      customerAddress: `${c2.address || ''}, ${c2.city || ''}`,
+      customerState: c2.state,
+      customerStateCode: c2.stateCode,
+      status: 'converted',
+      convertedToInvoiceNo: 'SCS/2024-25/0005',
+      convertedAt: daysAgo(20),
+      deliveryMode: 'shipment',
+      shippingCharges: 350,
+      notes: 'Corporate office workstation quote. Converted to Invoice SCS/2024-25/0005.',
+      ...q2Totals
     }, true);
 
     this._set(this.K.SEEDED, true);

@@ -3208,5 +3208,1410 @@ body { font-family: 'Inter', Arial, sans-serif; font-size: 8.5pt; color: #1e293b
     App.refreshSidebar();
     const c = document.getElementById('page-content');
     this.renderReturns(c, returnType);
+  },
+
+  /* ═══════════════════════════════════════════════════════════════
+     QUOTATIONS & ESTIMATES MODULE
+  ═══════════════════════════════════════════════════════════════ */
+  renderQuotations(container, filterStatus = 'all') {
+    const quotes = DB.getQuotations();
+    const today = new Date().toISOString().split('T')[0];
+
+    const totalQuotes = quotes.length;
+    const sentQuotes = quotes.filter(q => q.status === 'sent' && (!q.validUntil || q.validUntil >= today)).length;
+    const convertedQuotes = quotes.filter(q => q.status === 'converted').length;
+    const totalQuotedVal = quotes.reduce((s, q) => s + (q.total || 0), 0);
+
+    const counts = {
+      all: quotes.length,
+      sent: quotes.filter(q => q.status === 'sent' && (!q.validUntil || q.validUntil >= today)).length,
+      converted: quotes.filter(q => q.status === 'converted').length,
+      draft: quotes.filter(q => q.status === 'draft').length,
+      expired: quotes.filter(q => q.status !== 'converted' && q.validUntil && q.validUntil < today).length
+    };
+
+    window._quoteFilter = filterStatus;
+    window._quoteSearch = window._quoteSearch || '';
+
+    const filterList = () => {
+      let list = quotes;
+      const f = window._quoteFilter;
+      const s = (window._quoteSearch || '').toLowerCase().trim();
+
+      if (f === 'sent') {
+        list = list.filter(q => q.status === 'sent' && (!q.validUntil || q.validUntil >= today));
+      } else if (f === 'converted') {
+        list = list.filter(q => q.status === 'converted');
+      } else if (f === 'draft') {
+        list = list.filter(q => q.status === 'draft');
+      } else if (f === 'expired') {
+        list = list.filter(q => q.status !== 'converted' && q.validUntil && q.validUntil < today);
+      }
+
+      if (s) {
+        list = list.filter(q =>
+          (q.quotationNo || '').toLowerCase().includes(s) ||
+          (q.customerName || '').toLowerCase().includes(s) ||
+          (q.customerGstin || '').toLowerCase().includes(s) ||
+          (q.convertedToInvoiceNo || '').toLowerCase().includes(s)
+        );
+      }
+      return list;
+    };
+
+    const renderTableBody = () => {
+      const tbody = document.getElementById('quotes-tbody');
+      if (!tbody) return;
+      const filtered = filterList();
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="8">
+              <div class="table-empty">
+                <span class="material-icons">request_quote</span>
+                <p>No quotations found</p>
+                <button class="btn btn-primary btn-sm" onclick="Billing.openQuotationForm()">
+                  <span class="material-icons">add</span> Create Quotation
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(q => {
+        const isConverted = q.status === 'converted';
+        const isExpired = !isConverted && q.validUntil && q.validUntil < today;
+        
+        let badgeHtml = '';
+        if (isConverted) {
+          badgeHtml = `<span class="badge badge-paid"><span class="material-icons" style="font-size:12px;vertical-align:middle;margin-right:2px">check_circle</span> Converted</span>`;
+        } else if (isExpired) {
+          badgeHtml = `<span class="badge badge-overdue"><span class="material-icons" style="font-size:12px;vertical-align:middle;margin-right:2px">schedule</span> Expired</span>`;
+        } else if (q.status === 'draft') {
+          badgeHtml = `<span class="badge badge-draft">Draft</span>`;
+        } else {
+          badgeHtml = `<span class="badge badge-sent"><span class="material-icons" style="font-size:12px;vertical-align:middle;margin-right:2px">send</span> Active / Sent</span>`;
+        }
+
+        const itemsCount = (q.items || []).length;
+
+        return `
+          <tr>
+            <td>
+              <div style="font-weight:700;cursor:pointer;color:var(--primary)" onclick="Billing.viewQuotation('${q.id}')">
+                ${q.quotationNo}
+              </div>
+              ${isConverted && q.convertedToInvoiceNo ? `
+                <div style="font-size:.72rem;color:var(--text-secondary);margin-top:2px">
+                  Inv: <a href="javascript:void(0)" onclick="Billing._viewConvertedInvoice('${q.convertedToInvoiceId || ''}','${q.convertedToInvoiceNo}')" style="font-weight:600;color:var(--primary);text-decoration:underline">${q.convertedToInvoiceNo}</a>
+                </div>
+              ` : ''}
+            </td>
+            <td>${fmtDate(q.date)}</td>
+            <td>
+              <div style="font-weight:600">${q.customerName}</div>
+              <div style="font-size:.73rem;color:var(--text-secondary)">${q.customerGstin || (q.customerCity ? q.customerCity + ', ' + (q.customerState || '') : 'Consumer / B2C')}</div>
+            </td>
+            <td>
+              <span style="${isExpired ? 'color:var(--danger);font-weight:600' : ''}">${q.validUntil ? fmtDate(q.validUntil) : (q.validDays ? q.validDays + ' Days' : '—')}</span>
+            </td>
+            <td>
+              <span class="badge" style="background:var(--bg);border:1px solid var(--border);color:var(--text-secondary);font-size:.75rem">
+                ${itemsCount} ${itemsCount === 1 ? 'item' : 'items'}
+              </span>
+            </td>
+            <td class="text-right font-bold amount-cell" style="font-size:.95rem">
+              ${fmtCurrency(q.total)}
+            </td>
+            <td>${badgeHtml}</td>
+            <td class="action-col" style="white-space:nowrap">
+              ${!isConverted ? `
+                <button class="btn btn-xs btn-primary" onclick="Billing.openConvertQuotationModal('${q.id}')" title="Convert to Tax Invoice" style="font-weight:700;display:inline-flex;align-items:center;gap:3px;padding:3px 8px">
+                  <span class="material-icons" style="font-size:13px">shopping_cart_checkout</span> Convert
+                </button>
+              ` : `
+                <button class="btn btn-xs btn-secondary" onclick="Billing.openConvertQuotationModal('${q.id}')" title="View or Re-bill Quotation Items" style="display:inline-flex;align-items:center;gap:3px;padding:3px 7px">
+                  <span class="material-icons" style="font-size:13px">repeat</span> Re-bill
+                </button>
+              `}
+              <button class="btn btn-xs btn-secondary" onclick="Billing.viewQuotation('${q.id}')" title="View Details"><span class="material-icons" style="font-size:14px">visibility</span></button>
+              <button class="btn btn-xs btn-secondary" onclick="Billing.printQuotation('${q.id}')" title="Print Quotation"><span class="material-icons" style="font-size:14px">print</span></button>
+              <button class="btn btn-xs btn-secondary" onclick="Billing.shareQuotationWhatsApp('${q.id}')" title="Share via WhatsApp"><span class="material-icons" style="font-size:14px;color:#25d366">chat</span></button>
+              ${!isConverted ? `
+                <button class="btn btn-xs btn-secondary" onclick="Billing.openQuotationForm('${q.id}')" title="Edit Quotation"><span class="material-icons" style="font-size:14px">edit</span></button>
+              ` : ''}
+              ${DB.getRole() !== 'staff' ? `
+                <button class="btn btn-xs btn-ghost text-danger" onclick="Billing.deleteQuotation('${q.id}')" title="Delete Quotation"><span class="material-icons" style="font-size:14px">delete</span></button>
+              ` : ''}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    };
+
+    container.innerHTML = `
+      <div class="page-header-row">
+        <div>
+          <h2>Quotations &amp; Estimates</h2>
+          <p style="font-size:.85rem;color:var(--text-secondary);margin-top:2px">
+            Issue commercial price estimates for customers. Select confirmed items to generate GST Tax Invoices.
+          </p>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" onclick="Billing.openQuotationForm()">
+            <span class="material-icons">add</span> New Quotation
+          </button>
+        </div>
+      </div>
+
+      <!-- KPI Summary Cards -->
+      <div class="kpi-grid" style="margin-bottom:20px">
+        <div class="kpi-card kpi-primary">
+          <div class="kpi-label">Total Quotations</div>
+          <div class="kpi-value">${totalQuotes}</div>
+          <div class="kpi-sub">Lifetime issued estimates</div>
+        </div>
+        <div class="kpi-card kpi-warning">
+          <div class="kpi-label">Active / Sent</div>
+          <div class="kpi-value">${sentQuotes}</div>
+          <div class="kpi-sub">Awaiting customer order</div>
+        </div>
+        <div class="kpi-card kpi-success">
+          <div class="kpi-label">Converted to Invoices</div>
+          <div class="kpi-value">${convertedQuotes}</div>
+          <div class="kpi-sub">${totalQuotes ? Math.round((convertedQuotes / totalQuotes) * 100) : 0}% conversion rate</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Total Quoted Value</div>
+          <div class="kpi-value" style="font-size:1.45rem">${fmtCurrency(totalQuotedVal)}</div>
+          <div class="kpi-sub">Estimated pipeline value</div>
+        </div>
+      </div>
+
+      <!-- Filter Tabs and Search Bar -->
+      <div class="invoice-list-header">
+        <div class="tabs" id="quote-tabs">
+          ${[
+            { id: 'all', label: 'All Quotations', count: counts.all },
+            { id: 'sent', label: 'Active / Sent', count: counts.sent },
+            { id: 'converted', label: 'Converted', count: counts.converted },
+            { id: 'draft', label: 'Drafts', count: counts.draft },
+            { id: 'expired', label: 'Expired', count: counts.expired }
+          ].map(t => `
+            <button class="tab-btn ${window._quoteFilter === t.id ? 'active' : ''}" onclick="window._quoteFilter='${t.id}';document.querySelectorAll('#quote-tabs .tab-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active');window._renderQuoteTable()">
+              ${t.label} <span class="tab-count">${t.count}</span>
+            </button>
+          `).join('')}
+        </div>
+        <div class="search-input-wrap" style="width:280px">
+          <span class="material-icons">search</span>
+          <input type="text" id="quote-search-input" placeholder="Search quote #, customer, GSTIN..." value="${window._quoteSearch}" oninput="window._quoteSearch=this.value;window._renderQuoteTable()">
+        </div>
+      </div>
+
+      <!-- Quotations Table -->
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Quote No</th>
+              <th>Date</th>
+              <th>Customer</th>
+              <th>Valid Until</th>
+              <th>Items</th>
+              <th class="text-right">Total Amount</th>
+              <th>Status</th>
+              <th class="text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="quotes-tbody"></tbody>
+        </table>
+      </div>
+    `;
+
+    window._renderQuoteTable = renderTableBody;
+    renderTableBody();
+  },
+
+  _viewConvertedInvoice(invoiceId, invoiceNo) {
+    let sale = null;
+    if (invoiceId) sale = DB.getSaleById(invoiceId);
+    if (!sale && invoiceNo) {
+      sale = DB.getSales().find(s => s.invoiceNo === invoiceNo);
+    }
+    if (sale) {
+      this.viewDoc(sale.id, 'sales');
+    } else {
+      App.toast(`Invoice ${invoiceNo} could not be located.`, 'warning');
+    }
+  },
+
+  /* ─── Create / Edit Quotation Form ─── */
+  openQuotationForm(editId = null) {
+    const biz = DB.getBiz();
+    const customers = DB.getCustomers();
+    const products = DB.getProducts();
+    const today = new Date().toISOString().split('T')[0];
+
+    const quote = editId ? DB.getQuotationById(editId) : null;
+    const defaultValidDays = 15;
+    const validUntilDate = quote ? (quote.validUntil || today) : new Date(Date.now() + defaultValidDays * 86400000).toISOString().split('T')[0];
+
+    const stateOpts = INDIAN_STATES.map(s => `<option value="${s.code}" ${(quote ? quote.customerStateCode : biz.stateCode) === s.code ? 'selected' : ''}>${s.name}</option>`).join('');
+    const customerOpts = customers.map(c => `
+      <option value="${c.id}" ${quote && quote.customerId === c.id ? 'selected' : ''}>
+        ${c.name}${c.gstin ? ' — ' + c.gstin : ''}
+      </option>
+    `).join('');
+
+    const initialItems = quote ? quote.items : [
+      { productId: '', name: '', hsn: '', unit: 'Nos', qty: 1, rate: 0, discount: 0, gstRate: 18 }
+    ];
+
+    App.modal(quote ? `Edit Quotation: ${quote.quotationNo}` : 'New Quotation / Estimate', `
+      <div id="quotation-form">
+        <!-- Header Details -->
+        <div class="invoice-section-title"><span class="material-icons">request_quote</span> Quotation Information</div>
+        <div class="form-grid" style="margin-bottom:16px">
+          <div class="form-group">
+            <label>Quotation No <span class="required">*</span></label>
+            <input id="qf-no" value="${quote ? quote.quotationNo : '(Auto-generated on save)'}" readonly style="background:var(--bg);color:var(--text-secondary);font-weight:700">
+          </div>
+          <div class="form-group">
+            <label>Date <span class="required">*</span></label>
+            <input id="qf-date" type="date" value="${quote ? quote.date : today}" onchange="Billing._updateQuoteValidUntil()">
+          </div>
+          <div class="form-group">
+            <label>Validity (Days)</label>
+            <select id="qf-validdays" onchange="Billing._updateQuoteValidUntil()">
+              <option value="7" ${quote && quote.validDays == 7 ? 'selected' : ''}>7 Days</option>
+              <option value="15" ${!quote || quote.validDays == 15 ? 'selected' : ''}>15 Days (Recommended)</option>
+              <option value="30" ${quote && quote.validDays == 30 ? 'selected' : ''}>30 Days</option>
+              <option value="45" ${quote && quote.validDays == 45 ? 'selected' : ''}>45 Days</option>
+              <option value="60" ${quote && quote.validDays == 60 ? 'selected' : ''}>60 Days</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Valid Until Date</label>
+            <input id="qf-validuntil" type="date" value="${validUntilDate}" style="background:var(--bg);font-weight:600">
+          </div>
+        </div>
+
+        <!-- Customer Selection -->
+        <div class="invoice-section-title" style="display:flex;justify-content:space-between;align-items:center">
+          <span><span class="material-icons">person</span> Customer / Client</span>
+          <button type="button" class="btn btn-xs btn-secondary" onclick="Billing.toggleQuickParty(true)" style="display:inline-flex;align-items:center;gap:4px">
+            <span class="material-icons" style="font-size:14px">person_add</span> + New Customer
+          </button>
+        </div>
+        <div class="form-grid" style="margin-bottom:14px">
+          <div class="form-group form-full autocomplete-wrap">
+            <label>Select Customer <span class="required">*</span></label>
+            <input id="qf-party-search" type="text" placeholder="Type customer name, phone, or GSTIN to select..." autocomplete="off">
+            <input id="qf-party" type="hidden" value="${quote ? quote.customerId : ''}">
+            <div id="qf-party-results" class="autocomplete-dropdown" style="display:none"></div>
+          </div>
+          <div class="form-group">
+            <label>Customer Name <span class="required">*</span></label>
+            <input id="qf-party-name" value="${quote ? quote.customerName : ''}" placeholder="Customer or Company Name">
+          </div>
+          <div class="form-group">
+            <label>GSTIN (Optional for B2C)</label>
+            <input id="qf-party-gstin" value="${quote ? (quote.customerGstin || '') : ''}" placeholder="e.g. 27AABCT5432R1ZP" maxlength="15" style="text-transform:uppercase" onblur="Billing._handleQuoteGstinBlur()">
+          </div>
+          <div class="form-group">
+            <label>Place of Supply (State)</label>
+            <select id="qf-pos" onchange="Billing._recalcQuoteTotals()">${stateOpts}</select>
+          </div>
+          <div class="form-group">
+            <label>Phone / WhatsApp</label>
+            <input id="qf-party-phone" value="${quote ? (quote.customerPhone || '') : ''}" placeholder="Phone number for quotation WhatsApp">
+          </div>
+          <div class="form-group form-full">
+            <label>Address / Site Location</label>
+            <input id="qf-party-addr" value="${quote ? (quote.customerAddress || '') : ''}" placeholder="Customer billing or project site address">
+          </div>
+        </div>
+
+        <!-- Line Items Section -->
+        <div class="invoice-section-title"><span class="material-icons">list_alt</span> Quoted Products &amp; Services</div>
+        <div class="items-table-wrap" style="overflow-x:auto;margin-bottom:12px">
+          <table class="items-table" style="width:100%;min-width:680px">
+            <thead>
+              <tr>
+                <th style="width:34%">Product / Service <span class="required">*</span></th>
+                <th style="width:11%">HSN/SAC</th>
+                <th style="width:9%">Unit</th>
+                <th style="width:9%">Qty</th>
+                <th style="width:12%">Rate (₹)</th>
+                <th style="width:7%">Disc%</th>
+                <th style="width:8%">GST%</th>
+                <th style="width:10%" class="text-right">Total (₹)</th>
+                <th style="width:4%"></th>
+              </tr>
+            </thead>
+            <tbody id="qf-items-tbody"></tbody>
+          </table>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="Billing._addQuoteItemRow()" style="margin-bottom:16px">
+          <span class="material-icons">add</span> Add Item / Service
+        </button>
+
+        <!-- Fulfillment & Delivery Options -->
+        <div class="card" style="margin-bottom:16px;background:var(--bg);border:1px solid var(--border)">
+          <div class="card-body" style="padding:12px 16px">
+            <div style="font-weight:700;font-size:.88rem;margin-bottom:8px;display:flex;align-items:center;gap:6px">
+              <span class="material-icons" style="font-size:18px;color:var(--primary)">local_shipping</span> Delivery &amp; Site Shipment Option
+            </div>
+            <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:500">
+                <input type="radio" name="qf-delivery-mode" value="instore" ${!quote || quote.deliveryMode !== 'shipment' ? 'checked' : ''} onchange="Billing._toggleQuoteDeliveryMode('instore')">
+                🏬 Store Pickup / Counter Quote
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:500">
+                <input type="radio" name="qf-delivery-mode" value="shipment" ${quote && quote.deliveryMode === 'shipment' ? 'checked' : ''} onchange="Billing._toggleQuoteDeliveryMode('shipment')">
+                🚚 Ship / Deliver to Client Site
+              </label>
+            </div>
+            <div id="qf-shipping-wrap" style="display:${quote && quote.deliveryMode === 'shipment' ? 'flex' : 'none'};gap:14px;align-items:center;padding-top:8px;border-top:1px dashed var(--border)">
+              <div style="width:200px">
+                <label style="font-size:.8rem;font-weight:600">Estimated Freight / Shipping (₹)</label>
+                <input id="qf-shipping-charges" type="number" step="0.01" min="0" value="${quote?.shippingCharges || ''}" placeholder="e.g. 250" oninput="Billing._recalcQuoteTotals()">
+              </div>
+              <div style="font-size:.8rem;color:var(--text-secondary);padding-top:14px">
+                (Will be billed with 18% GST on conversion)
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Notes & Quotation Terms -->
+        <div class="form-grid" style="margin-bottom:16px">
+          <div class="form-group form-full">
+            <label>Quotation Terms &amp; Conditions / Notes</label>
+            <textarea id="qf-notes" rows="3" placeholder="Payment terms, delivery timeline, warranty, validity note...">${quote ? (quote.notes || '') : `1. Prices are valid for 15 days from quotation date.\n2. 50% advance along with confirmed purchase order.\n3. Warranty as per manufacturer terms.\n4. GST included as per applicable rates.`}</textarea>
+          </div>
+        </div>
+
+        <!-- Totals Card -->
+        <div class="totals-card" id="qf-totals" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px">
+          <!-- Populated live by Billing._recalcQuoteTotals() -->
+        </div>
+      </div>
+    `, `
+      <button class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="Billing.saveQuotation('${editId || ''}')">
+        <span class="material-icons">save</span> Save Quotation
+      </button>
+    `, 'modal-xl');
+
+    // Populate autocomplete and rows
+    Billing._initQuotePartySearch();
+    Billing._quoteItems = initialItems.map(it => ({ ...it }));
+    Billing._renderQuoteItemRows();
+    Billing._recalcQuoteTotals();
+  },
+
+  _updateQuoteValidUntil() {
+    const dateInput = document.getElementById('qf-date');
+    const daysSelect = document.getElementById('qf-validdays');
+    const validUntilInput = document.getElementById('qf-validuntil');
+    if (!dateInput || !daysSelect || !validUntilInput) return;
+
+    const baseDate = new Date(dateInput.value || new Date());
+    const days = parseInt(daysSelect.value) || 15;
+    const future = new Date(baseDate.getTime() + days * 86400000);
+    validUntilInput.value = future.toISOString().split('T')[0];
+  },
+
+  _toggleQuoteDeliveryMode(mode) {
+    const wrap = document.getElementById('qf-shipping-wrap');
+    if (wrap) wrap.style.display = mode === 'shipment' ? 'flex' : 'none';
+    Billing._recalcQuoteTotals();
+  },
+
+  _handleQuoteGstinBlur() {
+    const gstinEl = document.getElementById('qf-party-gstin');
+    const posEl = document.getElementById('qf-pos');
+    if (!gstinEl || !posEl) return;
+    const gstin = gstinEl.value.toUpperCase().trim();
+    if (gstin.length >= 2) {
+      const code = gstin.slice(0, 2);
+      if (INDIAN_STATES.some(s => s.code === code)) {
+        posEl.value = code;
+        Billing._recalcQuoteTotals();
+      }
+    }
+  },
+
+  _initQuotePartySearch() {
+    const searchInput = document.getElementById('qf-party-search');
+    const resultsDiv = document.getElementById('qf-party-results');
+    if (!searchInput || !resultsDiv) return;
+
+    const customers = DB.getCustomers();
+
+    searchInput.addEventListener('input', () => {
+      const q = searchInput.value.toLowerCase().trim();
+      if (!q) { resultsDiv.style.display = 'none'; return; }
+
+      const matches = customers.filter(c =>
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.phone || '').includes(q) ||
+        (c.gstin || '').toLowerCase().includes(q)
+      );
+
+      if (matches.length === 0) {
+        resultsDiv.innerHTML = `<div class="autocomplete-item text-muted">No matching customer found</div>`;
+      } else {
+        resultsDiv.innerHTML = matches.map(c => `
+          <div class="autocomplete-item" onclick="Billing._selectQuoteParty('${c.id}')">
+            <strong>${c.name}</strong>
+            <span style="font-size:0.75rem;color:var(--text-secondary);display:block">
+              ${c.phone ? '📞 ' + c.phone : ''} ${c.gstin ? '• GST: ' + c.gstin : ''}
+            </span>
+          </div>
+        `).join('');
+      }
+      resultsDiv.style.display = 'block';
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!searchInput.contains(e.target) && !resultsDiv.contains(e.target)) {
+        resultsDiv.style.display = 'none';
+      }
+    }, { once: true });
+  },
+
+  _selectQuoteParty(customerId) {
+    const c = DB.getCustomerById(customerId);
+    if (!c) return;
+    document.getElementById('qf-party').value = c.id;
+    document.getElementById('qf-party-name').value = c.name || '';
+    document.getElementById('qf-party-gstin').value = c.gstin || '';
+    document.getElementById('qf-party-phone').value = c.phone || '';
+    document.getElementById('qf-party-addr').value = `${c.address || ''}${c.city ? ', ' + c.city : ''}`;
+    if (c.stateCode) {
+      const pos = document.getElementById('qf-pos');
+      if (pos) pos.value = c.stateCode;
+    }
+    document.getElementById('qf-party-search').value = c.name;
+    document.getElementById('qf-party-results').style.display = 'none';
+    Billing._recalcQuoteTotals();
+  },
+
+  _renderQuoteItemRows() {
+    const tbody = document.getElementById('qf-items-tbody');
+    if (!tbody) return;
+    const products = DB.getProducts();
+
+    tbody.innerHTML = Billing._quoteItems.map((item, idx) => `
+      <tr data-idx="${idx}">
+        <td>
+          <input type="text" list="qf-prods-list" value="${item.name || ''}" placeholder="Search or type product..." onchange="Billing._handleQuoteProductPick(${idx}, this.value)" style="font-weight:600">
+        </td>
+        <td><input type="text" value="${item.hsn || ''}" oninput="Billing._updateQuoteItem(${idx}, 'hsn', this.value)" style="font-family:var(--font-mono);font-size:.8rem"></td>
+        <td>
+          <select onchange="Billing._updateQuoteItem(${idx}, 'unit', this.value)">
+            ${UNITS.map(u => `<option value="${u}" ${item.unit === u ? 'selected' : ''}>${u}</option>`).join('')}
+          </select>
+        </td>
+        <td><input type="number" min="0.01" step="any" value="${item.qty || 1}" oninput="Billing._updateQuoteItem(${idx}, 'qty', parseFloat(this.value)||0)" style="font-weight:700"></td>
+        <td><input type="number" min="0" step="0.01" value="${item.rate || 0}" oninput="Billing._updateQuoteItem(${idx}, 'rate', parseFloat(this.value)||0)" style="font-weight:700"></td>
+        <td><input type="number" min="0" max="100" step="0.5" value="${item.discount || 0}" oninput="Billing._updateQuoteItem(${idx}, 'discount', parseFloat(this.value)||0)"></td>
+        <td>
+          <select onchange="Billing._updateQuoteItem(${idx}, 'gstRate', parseFloat(this.value)||0)">
+            ${GST_RATES.map(r => `<option value="${r}" ${item.gstRate === r ? 'selected' : ''}>${r}%</option>`).join('')}
+          </select>
+        </td>
+        <td class="text-right font-bold" id="qf-row-total-${idx}">
+          ${fmtCurrency(((item.qty || 1) * (item.rate || 0)) * (1 - (item.discount || 0) / 100) * (1 + (item.gstRate || 0) / 100))}
+        </td>
+        <td class="text-center">
+          <button type="button" class="icon-btn text-danger" onclick="Billing._removeQuoteItemRow(${idx})" title="Remove item"><span class="material-icons" style="font-size:16px">close</span></button>
+        </td>
+      </tr>
+    `).join('');
+
+    // Ensure datalist exists
+    let dl = document.getElementById('qf-prods-list');
+    if (!dl) {
+      dl = document.createElement('datalist');
+      dl.id = 'qf-prods-list';
+      document.body.appendChild(dl);
+    }
+    dl.innerHTML = products.map(p => `<option value="${p.name}">${p.sku ? '[' + p.sku + '] ' : ''}₹${p.sellingPrice} (${p.stock} in stock)</option>`).join('');
+  },
+
+  _handleQuoteProductPick(idx, val) {
+    const products = DB.getProducts();
+    const p = products.find(prod => prod.name.toLowerCase() === val.toLowerCase());
+    if (p) {
+      Billing._quoteItems[idx].productId = p.id;
+      Billing._quoteItems[idx].name = p.name;
+      Billing._quoteItems[idx].hsn = p.hsn || '';
+      Billing._quoteItems[idx].unit = p.unit || 'Nos';
+      Billing._quoteItems[idx].rate = p.sellingPrice || 0;
+      Billing._quoteItems[idx].gstRate = p.gstRate !== undefined ? p.gstRate : 18;
+    } else {
+      Billing._quoteItems[idx].name = val;
+    }
+    Billing._renderQuoteItemRows();
+    Billing._recalcQuoteTotals();
+  },
+
+  _updateQuoteItem(idx, field, val) {
+    if (Billing._quoteItems[idx]) {
+      Billing._quoteItems[idx][field] = val;
+      const it = Billing._quoteItems[idx];
+      const base = ((it.qty || 0) * (it.rate || 0)) * (1 - (it.discount || 0) / 100);
+      const rowTot = base * (1 + (it.gstRate || 0) / 100);
+      const el = document.getElementById(`qf-row-total-${idx}`);
+      if (el) el.textContent = fmtCurrency(rowTot);
+      Billing._recalcQuoteTotals();
+    }
+  },
+
+  _addQuoteItemRow() {
+    Billing._quoteItems.push({
+      productId: '', name: '', hsn: '', unit: 'Nos', qty: 1, rate: 0, discount: 0, gstRate: 18
+    });
+    Billing._renderQuoteItemRows();
+    Billing._recalcQuoteTotals();
+  },
+
+  _removeQuoteItemRow(idx) {
+    if (Billing._quoteItems.length <= 1) {
+      App.toast('Quotation must have at least one line item.', 'info');
+      return;
+    }
+    Billing._quoteItems.splice(idx, 1);
+    Billing._renderQuoteItemRows();
+    Billing._recalcQuoteTotals();
+  },
+
+  _recalcQuoteTotals() {
+    const biz = DB.getBiz();
+    const pos = document.getElementById('qf-pos')?.value || biz.stateCode;
+    const totalsDiv = document.getElementById('qf-totals');
+    if (!totalsDiv) return;
+
+    const calc = calcTotals(Billing._quoteItems, biz.stateCode, pos);
+
+    // Shipping calculations
+    const isShipment = document.querySelector('input[name="qf-delivery-mode"]:checked')?.value === 'shipment';
+    const shippingBase = isShipment ? (parseFloat(document.getElementById('qf-shipping-charges')?.value) || 0) : 0;
+    const shippingGst = shippingBase * 0.18;
+    const shippingTotal = shippingBase + shippingGst;
+
+    const grandTotal = calc.total + shippingTotal;
+
+    totalsDiv.innerHTML = `
+      <div style="display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap">
+        <div style="font-size:.82rem;color:var(--text-secondary);line-height:1.6">
+          <div>Supply: <strong>${calc.isIntra ? 'Intra-State (CGST + SGST)' : 'Inter-State (IGST)'}</strong></div>
+          <div>Items Subtotal: <strong>${fmtCurrency(calc.subtotal)}</strong></div>
+          ${isShipment && shippingBase > 0 ? `<div>Freight / Delivery: <strong>${fmtCurrency(shippingBase)}</strong> (+18% GST: ${fmtCurrency(shippingGst)})</div>` : ''}
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:.88rem;color:var(--text-secondary)">Total Tax: <strong>${fmtCurrency(calc.totalTax + (isShipment ? shippingGst : 0))}</strong></div>
+          <div style="font-size:1.35rem;font-weight:800;color:var(--primary);margin-top:2px">
+            ${fmtCurrency(grandTotal)}
+          </div>
+          <div style="font-size:.75rem;color:var(--text-secondary)">${numberToWords(grandTotal)}</div>
+        </div>
+      </div>
+    `;
+  },
+
+  saveQuotation(editId = null) {
+    const biz = DB.getBiz();
+    const customerName = document.getElementById('qf-party-name')?.value.trim();
+    if (!customerName) {
+      App.toast('Please enter or select a Customer Name.', 'error');
+      document.getElementById('qf-party-name')?.focus();
+      return;
+    }
+
+    const validItems = Billing._quoteItems.filter(it => it.name && it.name.trim() && (it.qty || 0) > 0);
+    if (validItems.length === 0) {
+      App.toast('Please add at least one product or service with quantity > 0.', 'error');
+      return;
+    }
+
+    const pos = document.getElementById('qf-pos')?.value || biz.stateCode;
+    const calc = calcTotals(validItems, biz.stateCode, pos);
+
+    const isShipment = document.querySelector('input[name="qf-delivery-mode"]:checked')?.value === 'shipment';
+    const shippingCharges = isShipment ? (parseFloat(document.getElementById('qf-shipping-charges')?.value) || 0) : 0;
+    const shippingGst = shippingCharges * 0.18;
+    const grandTotal = calc.total + shippingCharges + shippingGst;
+
+    const existing = editId ? DB.getQuotationById(editId) : null;
+    const quotationNo = existing ? existing.quotationNo : DB.nextQuotationNo();
+
+    const quoteData = {
+      ...(existing || {}),
+      quotationNo,
+      date: document.getElementById('qf-date')?.value || new Date().toISOString().split('T')[0],
+      validDays: parseInt(document.getElementById('qf-validdays')?.value) || 15,
+      validUntil: document.getElementById('qf-validuntil')?.value,
+      customerId: document.getElementById('qf-party')?.value || '',
+      customerName,
+      customerGstin: document.getElementById('qf-party-gstin')?.value.toUpperCase().trim() || '',
+      customerPhone: document.getElementById('qf-party-phone')?.value.trim() || '',
+      customerAddress: document.getElementById('qf-party-addr')?.value.trim() || '',
+      customerStateCode: pos,
+      customerState: INDIAN_STATES.find(s => s.code === pos)?.name || '',
+      deliveryMode: isShipment ? 'shipment' : 'instore',
+      shippingCharges,
+      notes: document.getElementById('qf-notes')?.value.trim() || '',
+      status: existing ? existing.status : 'sent',
+      items: calc.items,
+      subtotal: calc.subtotal,
+      totalCgst: calc.totalCgst + (isShipment && calc.isIntra ? shippingGst / 2 : 0),
+      totalSgst: calc.totalSgst + (isShipment && calc.isIntra ? shippingGst / 2 : 0),
+      totalIgst: calc.totalIgst + (isShipment && !calc.isIntra ? shippingGst : 0),
+      totalTax: calc.totalTax + shippingGst,
+      total: grandTotal,
+      isIntra: calc.isIntra
+    };
+
+    DB.saveQuotation(quoteData, !existing);
+    App.toast(`Quotation ${quotationNo} saved successfully!`, 'success');
+    App.closeModal();
+
+    const c = document.getElementById('page-content');
+    this.renderQuotations(c, window._quoteFilter || 'all');
+  },
+
+  /* ─── View Quotation Details ─── */
+  viewQuotation(id) {
+    const quote = DB.getQuotationById(id);
+    if (!quote) return;
+    const biz = DB.getBiz();
+    const today = new Date().toISOString().split('T')[0];
+    const isConverted = quote.status === 'converted';
+    const isExpired = !isConverted && quote.validUntil && quote.validUntil < today;
+
+    let statusBadge = '';
+    if (isConverted) {
+      statusBadge = `<span class="badge badge-paid" style="font-size:.85rem"><span class="material-icons" style="font-size:14px;vertical-align:middle">check_circle</span> Converted to Invoice</span>`;
+    } else if (isExpired) {
+      statusBadge = `<span class="badge badge-overdue" style="font-size:.85rem"><span class="material-icons" style="font-size:14px;vertical-align:middle">schedule</span> Expired</span>`;
+    } else if (quote.status === 'draft') {
+      statusBadge = `<span class="badge badge-draft" style="font-size:.85rem">Draft</span>`;
+    } else {
+      statusBadge = `<span class="badge badge-sent" style="font-size:.85rem"><span class="material-icons" style="font-size:14px;vertical-align:middle">send</span> Active Quote</span>`;
+    }
+
+    App.modal(`Quotation Details: ${quote.quotationNo}`, `
+      <div style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+        <div>
+          <div style="font-size:1.25rem;font-weight:800">${quote.quotationNo}</div>
+          <div style="font-size:.85rem;color:var(--text-secondary);margin-top:2px">
+            Dated: <strong>${fmtDate(quote.date)}</strong> • Valid Until: <strong>${quote.validUntil ? fmtDate(quote.validUntil) : (quote.validDays + ' Days')}</strong>
+          </div>
+        </div>
+        <div style="text-align:right">
+          ${statusBadge}
+          <div style="font-size:1.45rem;font-weight:800;color:var(--primary);margin-top:4px">${fmtCurrency(quote.total)}</div>
+        </div>
+      </div>
+
+      ${isConverted && quote.convertedToInvoiceNo ? `
+        <div style="margin-bottom:14px;padding:12px 16px;background:hsl(142,76%,96%);border:1px solid hsl(142,70%,80%);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <div>
+            <strong style="color:hsl(142,76%,25%)">🎉 Order Confirmed &amp; Invoiced</strong>
+            <div style="font-size:.82rem;color:var(--text-secondary);margin-top:2px">
+              This quotation was converted into <strong>Tax Invoice #${quote.convertedToInvoiceNo}</strong> on ${quote.convertedAt ? fmtDate(quote.convertedAt) : 'file'}.
+            </div>
+          </div>
+          <button class="btn btn-xs btn-primary" onclick="App.closeModal();Billing._viewConvertedInvoice('${quote.convertedToInvoiceId || ''}','${quote.convertedToInvoiceNo}')">
+            <span class="material-icons" style="font-size:14px">receipt</span> View Tax Invoice
+          </button>
+        </div>
+      ` : ''}
+
+      <!-- Customer Details Card -->
+      <div class="card" style="margin-bottom:16px;background:var(--bg)">
+        <div class="card-body" style="padding:12px 16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;font-size:.86rem">
+          <div>
+            <div style="color:var(--text-secondary);font-size:.78rem">QUOTED TO (CUSTOMER)</div>
+            <div style="font-weight:700;font-size:.95rem">${quote.customerName}</div>
+            <div>${quote.customerAddress || 'Local Address'}</div>
+          </div>
+          <div>
+            <div style="color:var(--text-secondary);font-size:.78rem">GSTIN &amp; TAX DETAILS</div>
+            <div>GSTIN: <strong>${quote.customerGstin || 'Unregistered / B2C'}</strong></div>
+            <div>Place of Supply: <strong>${quote.customerState || 'Maharashtra'} (${quote.customerStateCode || '27'})</strong></div>
+          </div>
+          <div>
+            <div style="color:var(--text-secondary);font-size:.78rem">CONTACT &amp; FULFILLMENT</div>
+            <div>Phone: <strong>${quote.customerPhone || 'Not provided'}</strong></div>
+            <div>Fulfillment: <strong>${quote.deliveryMode === 'shipment' ? '🚚 Deliver to Customer Location' : '🏬 In-Store Counter'}</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Itemized Table -->
+      <div class="table-wrap" style="margin-bottom:16px">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Product / Service</th>
+              <th>HSN</th>
+              <th class="text-right">Qty</th>
+              <th class="text-right">Rate</th>
+              <th class="text-right">Disc%</th>
+              <th class="text-right">GST%</th>
+              <th class="text-right">Taxable</th>
+              <th class="text-right">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(quote.items || []).map((it, idx) => `
+              <tr>
+                <td>${idx + 1}</td>
+                <td><strong>${it.name}</strong></td>
+                <td class="mono">${it.hsn || '—'}</td>
+                <td class="text-right font-bold">${it.qty} ${it.unit || ''}</td>
+                <td class="text-right">${fmtCurrency(it.rate)}</td>
+                <td class="text-right">${it.discount ? it.discount + '%' : '—'}</td>
+                <td class="text-right">${it.gstRate}%</td>
+                <td class="text-right">${fmtCurrency(it.taxableValue || (it.qty * it.rate * (1 - (it.discount||0)/100)))}</td>
+                <td class="text-right font-bold">${fmtCurrency(it.totalAmt || (it.qty * it.rate * (1 - (it.discount||0)/100) * (1 + (it.gstRate||0)/100)))}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="7" class="text-right font-bold">Subtotal (Taxable)</td>
+              <td colspan="2" class="text-right font-bold">${fmtCurrency(quote.subtotal)}</td>
+            </tr>
+            ${quote.isIntra ? `
+              <tr>
+                <td colspan="7" class="text-right">CGST</td>
+                <td colspan="2" class="text-right">${fmtCurrency(quote.totalCgst)}</td>
+              </tr>
+              <tr>
+                <td colspan="7" class="text-right">SGST</td>
+                <td colspan="2" class="text-right">${fmtCurrency(quote.totalSgst)}</td>
+              </tr>
+            ` : `
+              <tr>
+                <td colspan="7" class="text-right">IGST</td>
+                <td colspan="2" class="text-right">${fmtCurrency(quote.totalIgst)}</td>
+              </tr>
+            `}
+            ${quote.shippingCharges ? `
+              <tr>
+                <td colspan="7" class="text-right">Estimated Freight / Shipping Charges</td>
+                <td colspan="2" class="text-right">${fmtCurrency(quote.shippingCharges * 1.18)}</td>
+              </tr>
+            ` : ''}
+            <tr style="font-size:1.05rem;background:var(--bg)">
+              <td colspan="7" class="text-right font-bold">Quotation Grand Total</td>
+              <td colspan="2" class="text-right font-bold" style="color:var(--primary)">${fmtCurrency(quote.total)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      ${quote.notes ? `
+        <div style="font-size:.82rem;color:var(--text-secondary);background:var(--bg);padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:12px;white-space:pre-line">
+          <strong>Terms &amp; Notes:</strong>\n${quote.notes}
+        </div>
+      ` : ''}
+    `, `
+      <button class="btn btn-ghost" onclick="App.closeModal()">Close</button>
+      <button class="btn btn-secondary" onclick="Billing.printQuotation('${quote.id}')">
+        <span class="material-icons">print</span> Print Quotation
+      </button>
+      <button class="btn btn-secondary" onclick="Billing.shareQuotationWhatsApp('${quote.id}')">
+        <span class="material-icons" style="color:#25d366">chat</span> WhatsApp
+      </button>
+      ${!isConverted ? `
+        <button class="btn btn-primary" onclick="App.closeModal();Billing.openConvertQuotationModal('${quote.id}')">
+          <span class="material-icons">shopping_cart_checkout</span> Convert to Invoice
+        </button>
+      ` : `
+        <button class="btn btn-secondary" onclick="App.closeModal();Billing.openConvertQuotationModal('${quote.id}')">
+          <span class="material-icons">repeat</span> Re-bill / New Order
+        </button>
+      `}
+    `, 'modal-lg');
+  },
+
+  /* ═══════════════════════════════════════════════════════════════
+     CONVERT QUOTATION TO TAX INVOICE WITH ITEM-BY-ITEM SELECTION
+     (The requested feature: Customer confirms which items to buy)
+  ═══════════════════════════════════════════════════════════════ */
+  openConvertQuotationModal(id) {
+    const quote = DB.getQuotationById(id);
+    if (!quote) return;
+    const biz = DB.getBiz();
+    const today = new Date().toISOString().split('T')[0];
+    const dueDate = new Date(Date.now() + (biz.defaultPaymentTerms || 30) * 86400000).toISOString().split('T')[0];
+
+    // Store state for interactive item conversion
+    Billing._conversionItems = (quote.items || []).map((it, idx) => ({
+      idx,
+      selected: true,
+      productId: it.productId || '',
+      name: it.name,
+      hsn: it.hsn || '',
+      unit: it.unit || 'Nos',
+      quotedQty: it.qty,
+      billQty: it.qty,
+      rate: it.rate,
+      discount: it.discount || 0,
+      gstRate: it.gstRate || 0
+    }));
+
+    App.modal(`Confirm Order: Convert Quotation #${quote.quotationNo}`, `
+      <div id="convert-quote-container">
+        <!-- Customer and Quote Info Banner -->
+        <div style="margin-bottom:14px;padding:12px 16px;background:hsl(217,91%,97%);border:1px solid hsl(217,91%,88%);border-radius:var(--radius-sm);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <div>
+            <div style="font-weight:700;color:hsl(217,91%,30%);font-size:.95rem">
+              Customer: ${quote.customerName}
+            </div>
+            <div style="font-size:.8rem;color:var(--text-secondary);margin-top:2px">
+              Quotation #${quote.quotationNo} • Issued on ${fmtDate(quote.date)} • GSTIN: ${quote.customerGstin || 'B2C / Consumer'}
+            </div>
+          </div>
+          <div>
+            <span class="badge badge-info" style="font-size:.8rem">Step: Choose Items to Purchase</span>
+          </div>
+        </div>
+
+        <div style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:.88rem;font-weight:700;color:var(--text-primary)">
+            Select which quoted items the customer wants to purchase:
+          </div>
+          <div style="display:flex;gap:8px">
+            <button type="button" class="btn btn-xs btn-secondary" onclick="Billing._toggleAllConversionItems(true)">Select All</button>
+            <button type="button" class="btn btn-xs btn-secondary" onclick="Billing._toggleAllConversionItems(false)">Deselect All</button>
+          </div>
+        </div>
+
+        <!-- Interactive Item Picker Table -->
+        <div class="table-wrap" style="margin-bottom:16px;max-height:360px;overflow-y:auto">
+          <table class="table">
+            <thead>
+              <tr>
+                <th style="width:40px;text-align:center">
+                  <input type="checkbox" id="conv-select-all" checked onchange="Billing._toggleAllConversionItems(this.checked)">
+                </th>
+                <th>Item / Description</th>
+                <th style="width:90px">Quoted</th>
+                <th style="width:110px">Bill Qty</th>
+                <th class="text-right" style="width:110px">Rate (₹)</th>
+                <th class="text-right" style="width:70px">GST%</th>
+                <th class="text-right" style="width:120px">Total (₹)</th>
+              </tr>
+            </thead>
+            <tbody id="conv-items-tbody">
+              <!-- Rendered by Billing._renderConversionRows() -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Invoice Details & Payment Form -->
+        <div class="card" style="margin-bottom:16px;background:var(--bg);border:1px solid var(--border)">
+          <div class="card-body" style="padding:14px 16px">
+            <div style="font-weight:700;font-size:.88rem;margin-bottom:10px;display:flex;align-items:center;gap:6px">
+              <span class="material-icons" style="font-size:18px;color:var(--primary)">receipt</span>
+              Generated Tax Invoice Details
+            </div>
+            <div class="form-grid" style="margin-bottom:10px">
+              <div class="form-group">
+                <label>Invoice Date</label>
+                <input id="conv-inv-date" type="date" value="${today}">
+              </div>
+              <div class="form-group">
+                <label>Payment Due Date</label>
+                <input id="conv-inv-due" type="date" value="${dueDate}">
+              </div>
+              <div class="form-group">
+                <label>Fulfillment &amp; Delivery</label>
+                <select id="conv-delivery-mode" onchange="Billing._recalcQuotationConversion()">
+                  <option value="instore" ${quote.deliveryMode !== 'shipment' ? 'selected' : ''}>🏬 In-Store Counter Purchase</option>
+                  <option value="shipment" ${quote.deliveryMode === 'shipment' ? 'selected' : ''}>🚚 Deliver / Ship to Customer Site</option>
+                </select>
+              </div>
+              <div class="form-group" id="conv-shipping-charges-wrap" style="display:${quote.deliveryMode === 'shipment' ? 'block' : 'none'}">
+                <label>Shipping / Freight (₹)</label>
+                <input id="conv-shipping-charges" type="number" step="0.01" min="0" value="${quote.shippingCharges || ''}" placeholder="0.00" oninput="Billing._recalcQuotationConversion()">
+              </div>
+              <div class="form-group">
+                <label>Payment Status</label>
+                <select id="conv-payment-status" onchange="Billing._toggleConvPaymentMethod(this.value)">
+                  <option value="paid">✅ Paid (Immediate Settlement)</option>
+                  <option value="unpaid">⏳ Unpaid / Credit (Add to Receivables)</option>
+                </select>
+              </div>
+              <div class="form-group" id="conv-payment-method-wrap">
+                <label>Payment Mode</label>
+                <select id="conv-payment-method">
+                  ${PAYMENT_METHODS.map(m => `<option value="${m}" ${m === 'UPI' ? 'selected' : ''}>${m}</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-group form-full">
+                <label>Invoice Notes</label>
+                <input id="conv-inv-notes" value="Order confirmed against Quotation #${quote.quotationNo}">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Conversion Calculation Summary -->
+        <div id="conv-summary-box" style="padding:14px;background:hsl(217,91%,98%);border:1px solid hsl(217,91%,85%);border-radius:var(--radius);margin-bottom:12px">
+          <!-- Populated by Billing._recalcQuotationConversion() -->
+        </div>
+      </div>
+    `, `
+      <button class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="conv-confirm-btn" onclick="Billing._doConvertQuotation('${quote.id}')" style="font-weight:700">
+        <span class="material-icons">receipt_long</span> Confirm &amp; Generate Tax Invoice
+      </button>
+    `, 'modal-lg');
+
+    Billing._renderConversionRows(quote);
+    Billing._recalcQuotationConversion();
+  },
+
+  _renderConversionRows(quote) {
+    const tbody = document.getElementById('conv-items-tbody');
+    if (!tbody) return;
+
+    tbody.innerHTML = Billing._conversionItems.map((item, idx) => {
+      const lineBase = (item.billQty * item.rate) * (1 - (item.discount || 0) / 100);
+      const lineTotal = lineBase * (1 + (item.gstRate || 0) / 100);
+
+      return `
+        <tr style="${item.selected ? '' : 'opacity:0.4;background:var(--bg)'}">
+          <td style="text-align:center">
+            <input type="checkbox" ${item.selected ? 'checked' : ''} onchange="Billing._toggleConversionItem(${idx}, this.checked)">
+          </td>
+          <td>
+            <div style="font-weight:600">${item.name}</div>
+            <div style="font-size:.74rem;color:var(--text-secondary)">
+              ${item.hsn ? 'HSN: ' + item.hsn : ''} ${item.discount ? '• Disc: ' + item.discount + '%' : ''}
+            </div>
+          </td>
+          <td>
+            <span class="badge" style="background:var(--bg);border:1px solid var(--border);color:var(--text-secondary)">
+              ${item.quotedQty} ${item.unit}
+            </span>
+          </td>
+          <td>
+            <input type="number" min="0.01" step="any" value="${item.billQty}" 
+              ${!item.selected ? 'disabled' : ''} 
+              oninput="Billing._updateConversionQty(${idx}, parseFloat(this.value)||0)"
+              style="width:90px;font-weight:700;padding:4px 6px">
+          </td>
+          <td class="text-right">${fmtCurrency(item.rate)}</td>
+          <td class="text-right">${item.gstRate}%</td>
+          <td class="text-right font-bold" id="conv-row-tot-${idx}">
+            ${fmtCurrency(lineTotal)}
+          </td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  _toggleConversionItem(idx, checked) {
+    if (Billing._conversionItems[idx]) {
+      Billing._conversionItems[idx].selected = checked;
+      const quote = DB.getQuotationById(window._activeQuoteId);
+      Billing._renderConversionRows(quote);
+      Billing._recalcQuotationConversion();
+    }
+  },
+
+  _toggleAllConversionItems(selectAll) {
+    Billing._conversionItems.forEach(it => { it.selected = selectAll; });
+    const selectAllCheckbox = document.getElementById('conv-select-all');
+    if (selectAllCheckbox) selectAllCheckbox.checked = selectAll;
+    Billing._renderConversionRows();
+    Billing._recalcQuotationConversion();
+  },
+
+  _updateConversionQty(idx, qty) {
+    if (Billing._conversionItems[idx]) {
+      Billing._conversionItems[idx].billQty = qty;
+      const item = Billing._conversionItems[idx];
+      const lineBase = (item.billQty * item.rate) * (1 - (item.discount || 0) / 100);
+      const lineTotal = lineBase * (1 + (item.gstRate || 0) / 100);
+      const el = document.getElementById(`conv-row-tot-${idx}`);
+      if (el) el.textContent = fmtCurrency(lineTotal);
+      Billing._recalcQuotationConversion();
+    }
+  },
+
+  _toggleConvPaymentMethod(status) {
+    const wrap = document.getElementById('conv-payment-method-wrap');
+    if (wrap) wrap.style.display = status === 'paid' ? 'block' : 'none';
+  },
+
+  _recalcQuotationConversion() {
+    const summaryBox = document.getElementById('conv-summary-box');
+    const confirmBtn = document.getElementById('conv-confirm-btn');
+    if (!summaryBox) return;
+
+    const biz = DB.getBiz();
+    const selected = Billing._conversionItems.filter(it => it.selected && (it.billQty || 0) > 0);
+    const delModeSelect = document.getElementById('conv-delivery-mode');
+    const isShipment = delModeSelect ? delModeSelect.value === 'shipment' : false;
+    const shippingWrap = document.getElementById('conv-shipping-charges-wrap');
+    if (shippingWrap) shippingWrap.style.display = isShipment ? 'block' : 'none';
+
+    if (selected.length === 0) {
+      summaryBox.innerHTML = `
+        <div style="text-align:center;color:var(--danger);font-weight:600;padding:8px">
+          ⚠️ No items selected. Please check at least one item to include in this invoice.
+        </div>
+      `;
+      if (confirmBtn) confirmBtn.disabled = true;
+      return;
+    }
+
+    if (confirmBtn) confirmBtn.disabled = false;
+
+    // Build raw items for calcTotals
+    const calcItems = selected.map(it => ({
+      productId: it.productId,
+      name: it.name,
+      hsn: it.hsn,
+      unit: it.unit,
+      qty: it.billQty,
+      rate: it.rate,
+      discount: it.discount,
+      gstRate: it.gstRate
+    }));
+
+    const calc = calcTotals(calcItems, biz.stateCode, biz.stateCode);
+
+    const shippingCharges = isShipment ? (parseFloat(document.getElementById('conv-shipping-charges')?.value) || 0) : 0;
+    const shippingGst = shippingCharges * 0.18;
+    const grandTotal = calc.total + shippingCharges + shippingGst;
+
+    summaryBox.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+        <div>
+          <div style="font-weight:700;color:var(--text-primary);font-size:.95rem">
+            ${selected.length} of ${Billing._conversionItems.length} Quoted Items Selected
+          </div>
+          <div style="font-size:.82rem;color:var(--text-secondary);margin-top:2px">
+            Taxable: <strong>${fmtCurrency(calc.subtotal)}</strong> • Tax: <strong>${fmtCurrency(calc.totalTax + shippingGst)}</strong>
+            ${isShipment && shippingCharges > 0 ? ` • Freight: ${fmtCurrency(shippingCharges)}` : ''}
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:.78rem;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.04em">Confirmed Invoice Total</div>
+          <div style="font-size:1.45rem;font-weight:800;color:var(--primary)">
+            ${fmtCurrency(grandTotal)}
+          </div>
+          <div style="font-size:.72rem;color:var(--text-secondary)">${numberToWords(grandTotal)}</div>
+        </div>
+      </div>
+    `;
+  },
+
+  _doConvertQuotation(id) {
+    const quote = DB.getQuotationById(id);
+    if (!quote) return;
+    const biz = DB.getBiz();
+
+    const selected = Billing._conversionItems.filter(it => it.selected && (it.billQty || 0) > 0);
+    if (selected.length === 0) {
+      App.toast('Please check at least one item to include in the invoice.', 'error');
+      return;
+    }
+
+    // Prepare items with calcTotals
+    const calcItems = selected.map(it => ({
+      productId: it.productId,
+      name: it.name,
+      hsn: it.hsn,
+      unit: it.unit,
+      qty: it.billQty,
+      rate: it.rate,
+      discount: it.discount,
+      gstRate: it.gstRate
+    }));
+
+    const pos = quote.customerStateCode || biz.stateCode;
+    const calc = calcTotals(calcItems, biz.stateCode, pos);
+
+    const isShipment = document.getElementById('conv-delivery-mode')?.value === 'shipment';
+    const shippingCharges = isShipment ? (parseFloat(document.getElementById('conv-shipping-charges')?.value) || 0) : 0;
+    const shippingGst = shippingCharges * 0.18;
+    const grandTotal = calc.total + shippingCharges + shippingGst;
+
+    const paymentStatus = document.getElementById('conv-payment-status')?.value || 'paid';
+    const paymentMethod = document.getElementById('conv-payment-method')?.value || 'UPI';
+    const invDate = document.getElementById('conv-inv-date')?.value || new Date().toISOString().split('T')[0];
+    const dueDate = document.getElementById('conv-inv-due')?.value || invDate;
+    const invNotes = document.getElementById('conv-inv-notes')?.value || `Generated from Quotation #${quote.quotationNo}`;
+
+    const newInvoiceNo = DB.nextInvoiceNo();
+
+    const saleDoc = {
+      invoiceNo: newInvoiceNo,
+      date: invDate,
+      dueDate,
+      placeOfSupply: pos,
+      customerId: quote.customerId || '',
+      customerName: quote.customerName,
+      customerGstin: quote.customerGstin || '',
+      customerPhone: quote.customerPhone || '',
+      customerAddress: quote.customerAddress || '',
+      customerState: quote.customerState || '',
+      customerStateCode: pos,
+      deliveryMode: isShipment ? 'shipment' : 'instore',
+      shippingCharges,
+      status: paymentStatus,
+      paymentMethod: paymentStatus === 'paid' ? paymentMethod : '',
+      paidAmount: paymentStatus === 'paid' ? grandTotal : 0,
+      notes: invNotes,
+      originalQuotationNo: quote.quotationNo,
+      originalQuotationId: quote.id,
+      items: calc.items,
+      subtotal: calc.subtotal,
+      totalCgst: calc.totalCgst + (isShipment && calc.isIntra ? shippingGst / 2 : 0),
+      totalSgst: calc.totalSgst + (isShipment && calc.isIntra ? shippingGst / 2 : 0),
+      totalIgst: calc.totalIgst + (isShipment && !calc.isIntra ? shippingGst : 0),
+      totalTax: calc.totalTax + shippingGst,
+      total: grandTotal,
+      isIntra: calc.isIntra
+    };
+
+    // Save newly created sales invoice (which auto-assigns id and deducts stock)
+    const savedSale = DB.saveSale(saleDoc, true);
+
+    // Update quotation status
+    quote.status = 'converted';
+    quote.convertedToInvoiceId = savedSale.id;
+    quote.convertedToInvoiceNo = savedSale.invoiceNo;
+    quote.convertedAt = new Date().toISOString();
+    DB.saveQuotation(quote, false);
+
+    App.closeModal();
+    App.toast(`🎉 Tax Invoice ${newInvoiceNo} generated successfully! Inventory stock deducted for purchased items.`, 'success');
+
+    // Refresh sidebar & open the generated invoice view
+    App.refreshSidebar();
+    this.viewDoc(savedSale.id, 'sales');
+  },
+
+  /* ─── Print Quotation Document ─── */
+  printQuotation(id) {
+    const quote = DB.getQuotationById(id);
+    if (!quote) return;
+    const biz = DB.getBiz();
+    const today = new Date().toISOString().split('T')[0];
+    const isExpired = quote.status !== 'converted' && quote.validUntil && quote.validUntil < today;
+
+    let taxRows = '';
+    if (quote.isIntra) {
+      taxRows = `
+        <tr><td>CGST Output</td><td class="text-right">${fmtCurrency(quote.totalCgst)}</td></tr>
+        <tr><td>SGST Output</td><td class="text-right">${fmtCurrency(quote.totalSgst)}</td></tr>
+      `;
+    } else {
+      taxRows = `
+        <tr><td>IGST Output</td><td class="text-right">${fmtCurrency(quote.totalIgst)}</td></tr>
+      `;
+    }
+
+    const html = `
+      <div class="print-doc quotation-doc">
+        <!-- Header -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0f172a;padding-bottom:14px;margin-bottom:14px">
+          <div>
+            ${biz.logo ? `<img src="${biz.logo}" style="max-height:48px;max-width:180px;margin-bottom:6px">` : ''}
+            <div style="font-size:1.35rem;font-weight:800;color:#0f172a">${biz.name}</div>
+            <div style="font-size:.82rem;color:#475569;margin-top:2px">${biz.tagline || 'IT & CCTV Business Solutions'}</div>
+            <div style="font-size:.8rem;color:#475569;margin-top:2px">${biz.address || ''}, ${biz.city || ''} - ${biz.pincode || ''}</div>
+            <div style="font-size:.8rem;color:#475569">GSTIN: <strong>${biz.gstin}</strong> • Phone: ${biz.phone || ''}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:1.35rem;font-weight:900;color:var(--primary,#2563eb);letter-spacing:0.04em">ESTIMATE / QUOTATION</div>
+            <div style="font-size:.75rem;color:#64748b;font-style:italic;margin-top:1px">Commercial Price Quotation</div>
+            <div style="font-size:1.05rem;font-weight:800;margin-top:6px">${quote.quotationNo}</div>
+            <div style="font-size:.82rem;color:#475569">Date: <strong>${fmtDate(quote.date)}</strong></div>
+            <div style="font-size:.82rem;color:#475569">Valid Until: <strong>${quote.validUntil ? fmtDate(quote.validUntil) : (quote.validDays + ' Days')}</strong></div>
+            ${quote.status === 'converted' ? `<div style="display:inline-block;margin-top:4px;padding:2px 8px;background:#dcfce7;color:#166534;font-size:.72rem;font-weight:700;border-radius:4px">ORDER CONVERTED TO INVOICE #${quote.convertedToInvoiceNo}</div>` : ''}
+          </div>
+        </div>
+
+        <!-- Parties Box -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:16px;padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;font-size:.83rem">
+          <div>
+            <div style="font-size:.72rem;font-weight:700;color:#64748b;text-transform:uppercase">QUOTATION ISSUED TO:</div>
+            <div style="font-size:.95rem;font-weight:700;color:#0f172a;margin-top:2px">${quote.customerName}</div>
+            <div style="color:#475569;margin-top:2px">${quote.customerAddress || 'Local Address'}</div>
+            <div style="color:#475569">Phone: ${quote.customerPhone || '—'}</div>
+            <div style="color:#475569">GSTIN: <strong>${quote.customerGstin || 'Unregistered / B2C'}</strong></div>
+          </div>
+          <div>
+            <div style="font-size:.72rem;font-weight:700;color:#64748b;text-transform:uppercase">SUPPLY &amp; VALIDITY DETAILS:</div>
+            <div style="color:#475569;margin-top:2px">Place of Supply: <strong>${quote.customerState || 'Maharashtra'} (${quote.customerStateCode || '27'})</strong></div>
+            <div style="color:#475569">Tax Pattern: <strong>${quote.isIntra ? 'Intra-State (CGST + SGST)' : 'Inter-State (IGST)'}</strong></div>
+            <div style="color:#475569">Fulfillment: <strong>${quote.deliveryMode === 'shipment' ? '🚚 Deliver / Ship to Site' : '🏬 In-Store Counter'}</strong></div>
+            <div style="color:#475569">Validity Status: <strong>${isExpired ? '⚠️ Expired' : 'Active for Confirmation'}</strong></div>
+          </div>
+        </div>
+
+        <!-- Items Table -->
+        <table style="width:100%;border-collapse:collapse;margin-bottom:14px;font-size:.83rem">
+          <thead>
+            <tr style="background:#0f172a;color:#fff">
+              <th style="padding:6px 8px;text-align:center;width:30px">#</th>
+              <th style="padding:6px 8px;text-align:left">Item &amp; Description</th>
+              <th style="padding:6px 8px;text-align:center;width:60px">HSN</th>
+              <th style="padding:6px 8px;text-align:right;width:65px">Qty</th>
+              <th style="padding:6px 8px;text-align:right;width:75px">Rate (₹)</th>
+              <th style="padding:6px 8px;text-align:right;width:55px">Disc</th>
+              <th style="padding:6px 8px;text-align:right;width:55px">GST%</th>
+              <th style="padding:6px 8px;text-align:right;width:85px">Taxable</th>
+              <th style="padding:6px 8px;text-align:right;width:95px">Amount (₹)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(quote.items || []).map((it, idx) => `
+              <tr style="border-bottom:1px solid #e2e8f0;background:${idx % 2 === 0 ? '#fff' : '#f8fafc'}">
+                <td style="padding:6px 8px;text-align:center">${idx + 1}</td>
+                <td style="padding:6px 8px"><strong>${it.name}</strong></td>
+                <td style="padding:6px 8px;text-align:center;font-family:monospace">${it.hsn || '—'}</td>
+                <td style="padding:6px 8px;text-align:right;font-weight:700">${it.qty} ${it.unit || ''}</td>
+                <td style="padding:6px 8px;text-align:right">${fmtCurrency(it.rate)}</td>
+                <td style="padding:6px 8px;text-align:right">${it.discount ? it.discount + '%' : '—'}</td>
+                <td style="padding:6px 8px;text-align:right">${it.gstRate}%</td>
+                <td style="padding:6px 8px;text-align:right">${fmtCurrency(it.taxableValue || (it.qty * it.rate * (1 - (it.discount||0)/100)))}</td>
+                <td style="padding:6px 8px;text-align:right;font-weight:700">${fmtCurrency(it.totalAmt || (it.qty * it.rate * (1 - (it.discount||0)/100) * (1 + (it.gstRate||0)/100)))}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <!-- Totals & Bank Section -->
+        <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:20px;margin-bottom:14px;font-size:.83rem">
+          <div>
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 14px;margin-bottom:8px">
+              <div style="font-weight:700;color:#0f172a;margin-bottom:4px">Bank &amp; Advance Payment Details:</div>
+              <div>Bank: <strong>${biz.bankName || 'HDFC Bank'}</strong> • A/c: <strong>${biz.bankAccount || ''}</strong></div>
+              <div>IFSC: <strong>${biz.bankIFSC || ''}</strong> • Branch: ${biz.bankBranch || ''}</div>
+              ${biz.upiId ? `<div>UPI ID: <strong>${biz.upiId}</strong></div>` : ''}
+            </div>
+            ${quote.notes ? `
+              <div style="font-size:.78rem;color:#475569;padding:6px 8px;border:1px dashed #cbd5e1;border-radius:4px;white-space:pre-line">
+                <strong>Terms of Quotation:</strong>\n${quote.notes}
+              </div>
+            ` : ''}
+          </div>
+          <div>
+            <table style="width:100%;border-collapse:collapse;font-size:.85rem">
+              <tr style="border-bottom:1px solid #e2e8f0"><td style="padding:4px 6px">Subtotal (Taxable)</td><td style="padding:4px 6px;text-align:right;font-weight:600">${fmtCurrency(quote.subtotal)}</td></tr>
+              ${taxRows}
+              ${quote.shippingCharges ? `<tr style="border-bottom:1px solid #e2e8f0"><td style="padding:4px 6px">Estimated Freight / Shipping</td><td style="padding:4px 6px;text-align:right">${fmtCurrency(quote.shippingCharges * 1.18)}</td></tr>` : ''}
+              <tr style="font-size:1.1rem;font-weight:900;border-top:2px solid #0f172a;background:#f8fafc">
+                <td style="padding:6px">Estimated Total:</td>
+                <td style="padding:6px;text-align:right;color:var(--primary,#2563eb)">${fmtCurrency(quote.total)}</td>
+              </tr>
+            </table>
+            <div style="font-size:.73rem;color:#64748b;text-align:right;margin-top:4px">${numberToWords(quote.total)}</div>
+          </div>
+        </div>
+
+        <!-- Signatures & Notice -->
+        <div style="margin-top:24px;display:flex;justify-content:space-between;align-items:flex-end;font-size:.8rem;padding-top:10px;border-top:1px solid #e2e8f0">
+          <div style="font-size:.72rem;color:#64748b;max-width:320px">
+            * This is an estimate/quotation and does not constitute a tax invoice. GST Invoice will be issued upon order confirmation and delivery.
+          </div>
+          <div style="text-align:center">
+            <div style="font-weight:700;margin-bottom:36px">For ${biz.name}</div>
+            <div style="border-top:1px solid #475569;padding-top:3px;font-size:.75rem">Authorized Signatory</div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    this._executePrint(html);
+  },
+
+  /* ─── Share Quotation via WhatsApp ─── */
+  shareQuotationWhatsApp(id) {
+    const quote = DB.getQuotationById(id);
+    if (!quote) return;
+    const biz = DB.getBiz();
+
+    let text = `📄 *QUOTATION / ESTIMATE — ${biz.name}*\n\n`;
+    text += `*Quotation No:* ${quote.quotationNo}\n`;
+    text += `*Date:* ${fmtDate(quote.date)}\n`;
+    text += `*Valid Until:* ${quote.validUntil ? fmtDate(quote.validUntil) : (quote.validDays + ' Days')}\n`;
+    text += `*Customer:* ${quote.customerName}\n\n`;
+    text += `*Quoted Items:*\n`;
+
+    (quote.items || []).forEach((it, idx) => {
+      text += `${idx + 1}. ${it.name} — ${it.qty} ${it.unit} @ ₹${it.rate} (+${it.gstRate}% GST)\n`;
+    });
+
+    text += `\n*Subtotal:* ${fmtCurrency(quote.subtotal)}\n`;
+    text += `*Total GST:* ${fmtCurrency(quote.totalTax)}\n`;
+    text += `*Grand Total:* *${fmtCurrency(quote.total)}*\n\n`;
+
+    if (biz.bankAccount || biz.upiId) {
+      text += `*Payment Details:*\n`;
+      if (biz.upiId) text += `• UPI ID: ${biz.upiId}\n`;
+      if (biz.bankAccount) text += `• Bank: ${biz.bankName}, A/c: ${biz.bankAccount}, IFSC: ${biz.bankIFSC}\n\n`;
+    }
+
+    text += `To confirm your order or customize items, please reply to this message. Thank you for your business!`;
+
+    const phone = (quote.customerPhone || '').replace(/[^0-9]/g, '');
+    const cleanPhone = phone.length === 10 ? '91' + phone : phone;
+    const url = cleanPhone ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}` : `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+  },
+
+  /* ─── Delete Quotation ─── */
+  deleteQuotation(id) {
+    if (DB.getRole() === 'staff') {
+      App.toast('Staff cannot delete quotations. Owner Mode required.', 'error');
+      App.toggleRoleModal();
+      return;
+    }
+    const quote = DB.getQuotationById(id);
+    if (!quote) return;
+
+    App.modal('Delete Quotation', `
+      <div class="confirm-body">
+        <span class="material-icons" style="color:var(--danger)">delete_forever</span>
+        <h3>Delete Quotation "${quote.quotationNo}"?</h3>
+        <p style="margin-top:6px;line-height:1.5">
+          Are you sure you want to permanently delete this quotation for <strong>${quote.customerName}</strong>?
+          ${quote.status === 'converted' ? '<br><span style="color:var(--warning);font-weight:600">Note: The converted Tax Invoice will remain intact in your sales records.</span>' : ''}
+        </p>
+      </div>
+    `, `
+      <button class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="Billing._doDeleteQuotation('${id}')">Delete Quotation</button>
+    `, 'modal-sm');
+  },
+
+  _doDeleteQuotation(id) {
+    DB.deleteQuotation(id);
+    App.toast('Quotation deleted successfully.', 'info');
+    App.closeModal();
+    const c = document.getElementById('page-content');
+    this.renderQuotations(c, window._quoteFilter || 'all');
   }
 };

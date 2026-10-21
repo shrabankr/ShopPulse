@@ -68,6 +68,7 @@ const App = {
         <div class="nav-section">
           <span class="nav-section-label">Transactions</span>
           <a href="#billing-sales" class="nav-item" data-r="billing-sales"><span class="material-icons">receipt_long</span><span>Sales Invoices</span></a>
+          <a href="#quotations" class="nav-item" data-r="quotations"><span class="material-icons">request_quote</span><span>Quotations / Estimates</span></a>
           ${isStaff ? '' : `<a href="#billing-purchases" class="nav-item" data-r="billing-purchases"><span class="material-icons">shopping_bag</span><span>Purchase Bills</span></a>`}
           <a href="#returns" class="nav-item" data-r="returns"><span class="material-icons">assignment_return</span><span>Returns &amp; Notes</span></a>
           ${isStaff ? '' : `<a href="#expenses" class="nav-item" data-r="expenses"><span class="material-icons">receipt</span><span>Expenses</span></a>`}
@@ -181,6 +182,7 @@ const App = {
 
     const titles = {
       dashboard: 'Dashboard', 'billing-sales': 'Sales Invoices',
+      quotations: 'Quotations & Estimates',
       'billing-purchases': 'Purchase Bills',
       returns: 'Returns & Notes', 'returns-sales': 'Customer Returns (Credit Notes)', 'returns-purchases': 'Supplier Returns (Debit Notes)',
       expenses: 'Operating Expenses',
@@ -222,6 +224,7 @@ const App = {
     switch (r) {
       case 'dashboard': this.renderDashboard(c); break;
       case 'billing-sales': Billing.render(c, 'sales'); break;
+      case 'quotations': Billing.renderQuotations(c); break;
       case 'billing-purchases': Billing.render(c, 'purchases'); break;
       case 'returns': Billing.renderReturns(c); break;
       case 'returns-sales': Billing.renderReturns(c, 'sales'); break;
@@ -1989,6 +1992,7 @@ ${JSON.stringify(data, null, 2)}
           <div class="card-body">
             <div class="form-grid">
               <div class="form-group"><label>Sales Invoice Prefix</label><input id="s-invpfx" value="${b.invoicePrefix || 'SCS'}" maxlength="6"></div>
+              <div class="form-group"><label>Quotation / Estimate Prefix</label><input id="s-qtnpfx" value="${b.quotationPrefix || 'QTN'}" maxlength="6"></div>
               <div class="form-group"><label>Purchase Bill Prefix</label><input id="s-billpfx" value="${b.billPrefix || 'SCS-PO'}" maxlength="6"></div>
               <div class="form-group"><label>Credit Note Prefix (Customer Return)</label><input id="s-cnpfx" value="${b.creditNotePrefix || 'CN'}" maxlength="6"></div>
               <div class="form-group"><label>Debit Note Prefix (Supplier Return)</label><input id="s-dnpfx" value="${b.debitNotePrefix || 'DN'}" maxlength="6"></div>
@@ -2353,6 +2357,7 @@ ${JSON.stringify(data, null, 2)}
       pdfSaveDir: document.getElementById('s-pdf-dir')?.value.trim() || DB.getBiz().pdfSaveDir || '',
       backupDir: document.getElementById('s-backup-dir')?.value.trim() || DB.getBiz().backupDir || '',
       invoicePrefix: document.getElementById('s-invpfx').value.trim() || 'INV',
+      quotationPrefix: document.getElementById('s-qtnpfx')?.value.trim() || 'QTN',
       billPrefix: document.getElementById('s-billpfx').value.trim() || 'PO',
       creditNotePrefix: document.getElementById('s-cnpfx')?.value.trim() || 'CN',
       debitNotePrefix: document.getElementById('s-dnpfx')?.value.trim() || 'DN',
