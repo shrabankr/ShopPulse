@@ -6,7 +6,7 @@
 
 ---
 
-## 🌟 What's New in v1.1.0 — Computer & Electronics Store Edition
+## 🌟 What's New in v1.2.0 — Specialized Computer & Electronics Store Edition
 - 🛡️ **Hardware Serial Number (S/N) & IMEI Tracking**: Record line-item serial numbers across Sales Invoices, Purchase Bills, and print them on all receipts.
 - ⏳ **Warranty Engine & Expiry Tracking**: Supports Testing Warranty, 3M, 6M, 1–5 Years, and Lifetime coverage with live active/expired badges.
 - 🔍 **Hardware Serial & Warranty Lookup Hub**: 1-click topbar search (`Warranty S/N`) to instantly look up any S/N, view customer invoice, remaining warranty, and distributor RMA records.

@@ -45,7 +45,7 @@ const GST_RATES = [0, 0.1, 0.25, 1, 1.5, 3, 5, 7.5, 12, 18, 28];
 const PAYMENT_METHODS = ['Cash', 'Bank Transfer', 'UPI', 'Cheque', 'NEFT', 'RTGS', 'Credit Card', 'Other'];
 const UNITS = ['Nos', 'Pcs', 'Box', 'Pack', 'Set', 'Roll', 'Mtr', 'Job', 'Visit', 'License', 'Year', 'Month'];
 const DECIMAL_UNITS = ['Mtr', 'Roll'];
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 
 function isDecimalUnit(unit) {
   return DECIMAL_UNITS.includes(unit);
