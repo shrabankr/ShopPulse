@@ -983,6 +983,9 @@ const DB = {
       ownerPin: '1234',
       devKey: 'andropcsoft',
       lastBackupDate: null,
+      lastAutoBackupDate: null,
+      autoBackupEnabled: true,
+      autoBackupRetentionDays: 7,
     };
   },
   setAuth(a) { this._set(this.K.AUTH, a); },
@@ -1449,6 +1452,7 @@ const DB = {
         quotationsCount: this.getQuotations().length,
         creditNotesCount: this.getCreditNotes().length,
         debitNotesCount: this.getDebitNotes().length,
+        servicesCount: this.getJobs ? this.getJobs().length : 0,
         expensesCount: this.getExpenses().length,
         productsCount: this.getProducts().length,
         customersCount: this.getCustomers().length,
@@ -1465,6 +1469,7 @@ const DB = {
         quotations: this.getQuotations(),
         creditNotes: this.getCreditNotes(),
         debitNotes: this.getDebitNotes(),
+        services: this.getJobs ? this.getJobs() : [],
         expenses: this.getExpenses(),
         movements: this.getMovements(),
         auth: this.getAuth()
@@ -1532,6 +1537,7 @@ const DB = {
     if (d.quotations) this._set(this.K.QUOTATIONS, d.quotations);
     if (d.creditNotes) this._set(this.K.CREDIT_NOTES, d.creditNotes);
     if (d.debitNotes) this._set(this.K.DEBIT_NOTES, d.debitNotes);
+    if (d.services) this._set(this.K.SERVICES, d.services);
     if (d.expenses) this._set(this.K.EXPENSES, d.expenses);
     if (d.movements) this._set(this.K.MOVEMENTS, d.movements);
     if (d.auth) this.setAuth(d.auth);

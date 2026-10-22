@@ -251,6 +251,123 @@ ipcMain.handle('select-directory', async (event, defaultPath) => {
   return { canceled: false, path: result.filePaths[0] };
 });
 
+// ── Automated & Rolling Local Backup Engine (Keeps 7 daily copies) ──
+ipcMain.handle('get-backup-dir', async (event, customDir) => {
+  const fs = require('fs');
+  const path = require('path');
+  const backupDir = customDir && customDir.trim() ? customDir.trim() : path.join(app.getPath('documents'), 'ShopPulse_Backups');
+  if (!fs.existsSync(backupDir)) {
+    try { fs.mkdirSync(backupDir, { recursive: true }); } catch (e) {}
+  }
+  return backupDir;
+});
+
+ipcMain.handle('auto-save-backup', async (event, { data, customDir, isManual = false }) => {
+  const fs = require('fs');
+  const path = require('path');
+  const backupDir = customDir && customDir.trim() ? customDir.trim() : path.join(app.getPath('documents'), 'ShopPulse_Backups');
+  if (!fs.existsSync(backupDir)) {
+    try { fs.mkdirSync(backupDir, { recursive: true }); } catch (e) {
+      return { success: false, error: e.message };
+    }
+  }
+
+  const now = new Date();
+  const dateStr = now.toISOString().split('T')[0];
+  let filename = '';
+  if (isManual) {
+    const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '');
+    filename = `ShopPulse_ManualBackup_${dateStr}_${timeStr}.json`;
+  } else {
+    filename = `ShopPulse_AutoBackup_${dateStr}.json`;
+  }
+
+  const filePath = path.join(backupDir, filename);
+  const jsonContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+  fs.writeFileSync(filePath, jsonContent, 'utf8');
+
+  // Rolling retention: keep latest 7 daily automated backups
+  try {
+    const files = fs.readdirSync(backupDir);
+    const autoBackups = files
+      .filter(f => f.startsWith('ShopPulse_AutoBackup_') && f.endsWith('.json'))
+      .map(f => {
+        const full = path.join(backupDir, f);
+        const stat = fs.statSync(full);
+        return { name: f, full, mtime: stat.mtimeMs };
+      })
+      .sort((a, b) => b.mtime - a.mtime); // Newest first
+
+    if (autoBackups.length > 7) {
+      const toRemove = autoBackups.slice(7);
+      toRemove.forEach(item => {
+        try { fs.unlinkSync(item.full); } catch (err) {}
+      });
+    }
+  } catch (cleanErr) {
+    console.warn('Backup retention cleanup warning:', cleanErr);
+  }
+
+  return { success: true, filePath, filename, dir: backupDir };
+});
+
+ipcMain.handle('list-backups', async (event, customDir) => {
+  const fs = require('fs');
+  const path = require('path');
+  const backupDir = customDir && customDir.trim() ? customDir.trim() : path.join(app.getPath('documents'), 'ShopPulse_Backups');
+  if (!fs.existsSync(backupDir)) return [];
+
+  try {
+    const files = fs.readdirSync(backupDir);
+    const backups = [];
+    for (const file of files) {
+      if (!file.endsWith('.json')) continue;
+      const fullPath = path.join(backupDir, file);
+      try {
+        const stat = fs.statSync(fullPath);
+        const isAuto = file.includes('AutoBackup');
+        backups.push({
+          filename: file,
+          filePath: fullPath,
+          sizeBytes: stat.size,
+          sizeFormatted: (stat.size / 1024).toFixed(1) + ' KB',
+          mtime: stat.mtime.toISOString(),
+          type: isAuto ? 'Automated Daily' : 'Manual Backup'
+        });
+      } catch (e) {}
+    }
+    backups.sort((a, b) => new Date(b.mtime) - new Date(a.mtime));
+    return backups;
+  } catch (err) {
+    return [];
+  }
+});
+
+ipcMain.handle('open-backup-folder', async (event, customDir) => {
+  const fs = require('fs');
+  const path = require('path');
+  const backupDir = customDir && customDir.trim() ? customDir.trim() : path.join(app.getPath('documents'), 'ShopPulse_Backups');
+  if (!fs.existsSync(backupDir)) {
+    try { fs.mkdirSync(backupDir, { recursive: true }); } catch (e) {}
+  }
+  shell.openPath(backupDir);
+  return { success: true, path: backupDir };
+});
+
+ipcMain.handle('read-backup-file', async (event, filePath) => {
+  const fs = require('fs');
+  if (!filePath || !fs.existsSync(filePath)) {
+    return { success: false, error: 'File not found' };
+  }
+  try {
+    const content = fs.readFileSync(filePath, 'utf8');
+    const parsed = JSON.parse(content);
+    return { success: true, data: parsed };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
 ipcMain.handle('save-backup', async (event, { data, defaultDir, filename }) => {
   const fs = require('fs');
   const path = require('path');

@@ -9,6 +9,7 @@
 ## 🌟 What's New in v1.2.0 — Specialized Computer & Electronics Store Edition
 - 🛠️ **Service & Repair Job Sheet System**: Complete intake workflow for customer laptops, desktops, DVRs, CCTV cameras, and printers with 3" thermal claim tokens, technician diagnostics, and 1-click conversion to GST Tax Invoices (SAC 998731).
 - 📖 **Party Ledger & Statement of Account (Khata)**: Complete account statement for Customers and Suppliers with opening balances, running Dr/Cr debit-credit calculations, A4 PDF printable statement, 1-click CSV export, and WhatsApp khata reminder dispatch.
+- 🛡️ **Automated Local Backup & Data Safety (Desktop)**: Background daily rolling backup saved silently to your local Documents folder with automated 7-day retention cleanup, detected backups list with 1-click restore, and File Explorer folder access.
 - 🛡️ **Hardware Serial Number (S/N) & IMEI Tracking**: Record line-item serial numbers across Sales Invoices, Purchase Bills, and print them on all receipts.
 - ⏳ **Warranty Engine & Expiry Tracking**: Supports Testing Warranty, 3M, 6M, 1–5 Years, and Lifetime coverage with live active/expired badges.
 - 🔍 **Hardware Serial & Warranty Lookup Hub**: 1-click topbar search (`Warranty S/N`) to instantly look up any S/N, view customer invoice, remaining warranty, and distributor RMA records.
@@ -51,7 +52,7 @@ ShopPulse/
     ├── crm.js              ← Customers, suppliers & Khata ledger statements
     ├── expenses.js         ← Operating expenses, GST ITC tracking, category breakdown
     ├── reports.js          ← P&L, GSTR-1, GSTR-3B, HSN summary, CSV export
-    ├── repairs.js          ← Job Sheet system for computer/CCTV repairs & service tokens
+    ├── services.js         ← Job Sheet system for computer/CCTV repairs & service tokens
     └── ai.js               ← AI assistant (business insights, forecasting, reorder)
 ```
 

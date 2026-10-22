@@ -34,6 +34,9 @@ const App = {
         }
       }).catch(() => {});
     }, 2000);
+
+    // Automated Local Daily Backup (Silent background save with 7-day retention)
+    setTimeout(() => this.triggerAutoBackup(), 3500);
   },
 
   /* ─── Sidebar ─── */
@@ -628,6 +631,178 @@ const App = {
   },
 
   /* ─── Backup & Restore Functions ─── */
+  async triggerAutoBackup(isManual = false) {
+    const auth = DB.getAuth();
+    if (!isManual && auth.autoBackupEnabled === false) return;
+
+    const today = new Date().toISOString().split('T')[0];
+    if (!isManual && auth.lastAutoBackupDate === today) return;
+
+    const backupObj = DB.createBackupObject();
+
+    if (window.desktopApp && window.desktopApp.autoSaveBackup) {
+      try {
+        const biz = DB.getBiz();
+        const res = await window.desktopApp.autoSaveBackup({
+          data: backupObj,
+          customDir: biz.backupDir || '',
+          isManual: isManual
+        });
+        if (res && res.success) {
+          auth.lastAutoBackupDate = today;
+          if (isManual) auth.lastBackupDate = new Date().toISOString();
+          DB.setAuth(auth);
+          DB.saveSnapshot(isManual ? `Manual Backup (${res.filename})` : `Daily Auto Backup (${today})`);
+          if (isManual) {
+            this.toast(`✅ Backup saved safely to disk: ${res.filename}`, 'success');
+            if (location.hash === '#settings') {
+              this.renderSettings(document.getElementById('page-content'));
+            }
+          } else {
+            console.log('[AutoBackup] Daily backup saved to disk:', res.filePath);
+          }
+        }
+      } catch (err) {
+        console.warn('Desktop auto-backup error:', err);
+      }
+    } else {
+      // Browser fallback
+      DB.saveSnapshot(isManual ? 'Manual Snapshot' : `Daily Auto Snapshot (${today})`);
+      auth.lastAutoBackupDate = today;
+      DB.setAuth(auth);
+      if (isManual) {
+        const fn = DB.downloadBackup();
+        this.toast(`Backup downloaded: ${fn}`, 'success');
+        if (location.hash === '#settings') {
+          this.renderSettings(document.getElementById('page-content'));
+        }
+      }
+    }
+  },
+
+  async openBackupFolder() {
+    if (window.desktopApp && window.desktopApp.openBackupFolder) {
+      const biz = DB.getBiz();
+      await window.desktopApp.openBackupFolder(biz.backupDir || '');
+      this.toast('📂 Opened backup folder in Explorer', 'info');
+    } else {
+      this.toast('📁 Backup folder is managed automatically in the Desktop App edition.', 'info');
+    }
+  },
+
+  async restoreFromLocalDisk(filePath) {
+    if (DB.getRole() === 'staff') {
+      this.toast('🔒 Staff cannot restore databases. Owner Mode required.', 'error');
+      this.toggleRoleModal();
+      return;
+    }
+    if (!window.desktopApp || !window.desktopApp.readBackupFile) {
+      this.toast('Desktop disk restore is available in the Desktop App.', 'warning');
+      return;
+    }
+
+    try {
+      const res = await window.desktopApp.readBackupFile(filePath);
+      if (!res || !res.success || !res.data) {
+        this.toast('Failed to read backup file: ' + (res?.error || 'Unknown error'), 'error');
+        return;
+      }
+      const parsed = res.data;
+      if (!parsed.data) throw new Error('File is missing ShopPulse database payload.');
+
+      const stats = parsed.stats || {};
+      App.modal('Confirm Database Restore',
+        `
+        <div style="text-align:center;padding:10px 0 14px">
+          <div style="width:54px;height:54px;border-radius:50%;background:var(--danger-light);color:var(--danger);display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px">
+            <span class="material-icons" style="font-size:28px">warning</span>
+          </div>
+          <h3>Restore from Disk Backup?</h3>
+          <p style="font-size:.85rem;color:var(--text-secondary)">This will overwrite current records with backup from <strong>${fmtDate(parsed.exportedAt || new Date().toISOString())}</strong>.</p>
+        </div>
+        <div style="background:var(--bg);padding:12px;border-radius:var(--radius-sm);font-size:.84rem;margin-bottom:12px">
+          <div><strong>Business:</strong> ${parsed.businessName || '—'} (${parsed.gstin || 'No GSTIN'})</div>
+          <div style="margin-top:6px;color:var(--text-secondary)">
+            Invoices: <strong>${stats.salesCount ?? (parsed.data.sales || []).length}</strong> &nbsp;|&nbsp;
+            Jobs: <strong>${stats.servicesCount ?? (parsed.data.services || []).length}</strong> &nbsp;|&nbsp;
+            Products: <strong>${stats.productsCount ?? (parsed.data.products || []).length}</strong> &nbsp;|&nbsp;
+            Customers: <strong>${stats.customersCount ?? (parsed.data.customers || []).length}</strong>
+          </div>
+        </div>
+        `,
+        `
+        <button class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
+        <button class="btn btn-danger" onclick="App._executeRestore(${JSON.stringify(parsed).replace(/"/g, '&quot;')})"><span class="material-icons">restore</span> Proceed Restore</button>
+        `,
+        'modal-sm'
+      );
+    } catch (err) {
+      this.toast('Error reading backup: ' + err.message, 'error');
+    }
+  },
+
+  async _loadDesktopBackupsUI() {
+    const el = document.getElementById('detected-backups-container');
+    if (!el) return;
+
+    if (window.desktopApp && window.desktopApp.listBackups) {
+      try {
+        const biz = DB.getBiz();
+        const backups = await window.desktopApp.listBackups(biz.backupDir || '');
+        if (!backups || backups.length === 0) {
+          el.innerHTML = `
+            <div style="padding:14px;text-align:center;color:var(--text-secondary);font-size:.85rem;background:var(--bg);border-radius:var(--radius-sm)">
+              No local backup files found in destination folder yet. Click <strong>"Backup Now"</strong> above to create your first copy!
+            </div>`;
+          return;
+        }
+
+        el.innerHTML = `
+          <div class="table-wrap" style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm)">
+            <table class="table" style="font-size:.82rem;margin-bottom:0">
+              <thead>
+                <tr>
+                  <th>Backup File</th>
+                  <th>Type</th>
+                  <th>Created / Modified</th>
+                  <th>Size</th>
+                  <th class="action-col" style="text-align:right">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${backups.map(b => `
+                  <tr>
+                    <td>
+                      <span class="mono" style="font-weight:600;color:var(--text-primary)">${b.filename}</span>
+                    </td>
+                    <td>
+                      <span class="badge ${b.type.includes('Auto') ? 'badge-paid' : 'badge-info'}" style="font-size:.72rem">
+                        ${b.type}
+                      </span>
+                    </td>
+                    <td style="color:var(--text-secondary)">${fmtDate(b.mtime)} ${new Date(b.mtime).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}</td>
+                    <td class="mono" style="color:var(--text-secondary)">${b.sizeFormatted}</td>
+                    <td class="action-col" style="text-align:right">
+                      <button class="btn btn-xs btn-secondary" onclick="App.restoreFromLocalDisk('${b.filePath.replace(/\\/g, '\\\\')}')" title="Restore this backup">
+                        <span class="material-icons" style="font-size:14px;color:var(--primary)">restore</span> Restore
+                      </button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:.75rem;color:var(--text-secondary)">
+            <span>Rolling Retention Policy: Keeping up to 7 latest automated daily copies.</span>
+            <span>${backups.length} backup file(s) found on disk</span>
+          </div>
+        `;
+      } catch (err) {
+        console.warn('Failed to list desktop backups:', err);
+      }
+    }
+  },
+
   async downloadBackup() {
     if (DB.getRole() === 'staff') {
       this.toast('🔒 Staff cannot download database backups. Owner Mode required.', 'error');
@@ -1857,36 +2032,67 @@ ${JSON.stringify(data, null, 2)}
           </div>
         </div>
         ` : `
-        <div class="card" style="border-left:4px solid var(--primary)">
-          <div class="card-header">
-            <h3><span class="material-icons" style="vertical-align:middle;font-size:20px;color:var(--primary)">cloud_sync</span> Data Backup &amp; Restore Hub</h3>
-            <span class="badge badge-paid">Offline &amp; Safe</span>
+        <div class="card" style="border-left:4px solid #10b981">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+            <h3 style="display:flex;align-items:center;gap:8px">
+              <span class="material-icons" style="vertical-align:middle;font-size:22px;color:#10b981">verified_user</span>
+              Automated Local Backup &amp; Data Safety
+            </h3>
+            <span class="badge badge-paid" style="display:inline-flex;align-items:center;gap:4px">
+              <span class="material-icons" style="font-size:14px">check_circle</span> Daily Auto-Backup Active
+            </span>
           </div>
           <div class="card-body">
-            <p style="font-size:.85rem;color:var(--text-secondary);margin-bottom:14px">
-              Your business data is stored safely on your computer. Download a <strong>JSON backup file</strong> regularly to protect against computer hardware failure.
-            </p>
-            <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px">
-              <button class="btn btn-primary" onclick="App.downloadBackup()"><span class="material-icons">cloud_download</span> Download Backup (.json)</button>
-              <button class="btn btn-secondary" onclick="App.triggerRestore()"><span class="material-icons">cloud_upload</span> Restore from File (.json)</button>
-            </div>
-            <div style="font-size:.8rem;color:var(--text-secondary)">
-              Last Backup Exported: <strong>${auth.lastBackupDate ? fmtDate(auth.lastBackupDate) : 'Never exported'}</strong>
-            </div>
-
-            ${snapshots.length ? `
-            <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
-              <h4 style="font-size:.85rem;margin-bottom:8px">Recent Local Rolling Snapshots</h4>
-              <div style="display:flex;flex-direction:column;gap:6px">
-                ${snapshots.map(s => `
-                  <div style="display:flex;justify-content:space-between;align-items:center;font-size:.8rem;padding:6px 10px;background:var(--bg);border-radius:var(--radius-sm)">
-                    <span>${s.label} (${fmtDate(s.date)})</span>
-                    <button class="btn btn-xs btn-ghost text-danger" onclick="App.restoreSnapshot('${s.id}')">Rollback</button>
+            <div style="background:var(--bg);padding:14px;border-radius:var(--radius-sm);margin-bottom:16px;border:1px solid var(--border)">
+              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+                <div>
+                  <div style="font-weight:700;font-size:.92rem;color:var(--text-primary);display:flex;align-items:center;gap:6px">
+                    <span class="material-icons" style="font-size:18px;color:#10b981">auto_mode</span>
+                    Background Daily Rolling Backup (Last 7 Days)
                   </div>
-                `).join('')}
+                  <div style="font-size:.8rem;color:var(--text-secondary);margin-top:3px">
+                    ShopPulse automatically backs up your billing database every day in the background to your local Documents folder. Old copies beyond 7 days are cleaned up automatically.
+                  </div>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <button class="btn btn-sm btn-primary" onclick="App.triggerAutoBackup(true)"><span class="material-icons">bolt</span> Backup Now</button>
+                  <button class="btn btn-sm btn-secondary" onclick="App.openBackupFolder()"><span class="material-icons">folder_open</span> Open Backup Folder</button>
+                </div>
+              </div>
+              <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px dashed var(--border);font-size:.8rem;color:var(--text-secondary)">
+                <span>Last Automated Run: <strong style="color:var(--text-primary)">${auth.lastAutoBackupDate ? fmtDate(auth.lastAutoBackupDate) : 'Pending today'}</strong></span>
+                <span>Last Manual Export: <strong style="color:var(--text-primary)">${auth.lastBackupDate ? fmtDate(auth.lastBackupDate) : 'Never exported'}</strong></span>
+                <span>Retention: <strong style="color:var(--text-primary)">7 Rolling Daily Copies</strong></span>
               </div>
             </div>
-            ` : ''}
+
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+              <h4 style="font-size:.88rem;margin:0;display:flex;align-items:center;gap:6px">
+                <span class="material-icons" style="font-size:18px;color:var(--primary)">history</span>
+                Detected Local Disk Backups
+              </h4>
+              <div style="display:flex;gap:8px">
+                <button class="btn btn-xs btn-secondary" onclick="App.downloadBackup()" title="Download a standalone JSON file copy"><span class="material-icons" style="font-size:14px">cloud_download</span> Export File (.json)</button>
+                <button class="btn btn-xs btn-secondary" onclick="App.triggerRestore()" title="Restore from any JSON backup file"><span class="material-icons" style="font-size:14px">cloud_upload</span> Choose File to Restore</button>
+              </div>
+            </div>
+
+            <div id="detected-backups-container">
+              ${snapshots.length ? `
+                <div style="display:flex;flex-direction:column;gap:6px">
+                  ${snapshots.map(s => `
+                    <div style="display:flex;justify-content:space-between;align-items:center;font-size:.8rem;padding:6px 10px;background:var(--bg);border-radius:var(--radius-sm)">
+                      <span>${s.label} (${fmtDate(s.date)})</span>
+                      <button class="btn btn-xs btn-ghost text-danger" onclick="App.restoreSnapshot('${s.id}')">Rollback</button>
+                    </div>
+                  `).join('')}
+                </div>
+              ` : `
+                <div style="padding:14px;text-align:center;color:var(--text-secondary);font-size:.84rem;background:var(--bg);border-radius:var(--radius-sm)">
+                  Searching local backups...
+                </div>
+              `}
+            </div>
           </div>
         </div>
         `}
@@ -2026,6 +2232,7 @@ ${JSON.stringify(data, null, 2)}
         </div>
       </div>
     `;
+    setTimeout(() => this._loadDesktopBackupsUI(), 100);
   },
 
   _onFormatSelectChange(sel) {
