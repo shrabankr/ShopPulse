@@ -150,7 +150,7 @@ const Billing = {
   /* ═══════════════════════════════════════════
      NEW / EDIT INVOICE FORM
   ═══════════════════════════════════════════ */
-  openNew(type = 'sales') {
+  openNew(type = 'sales', initialDoc = null) {
     const limits = DB.getTrialLimits();
     if (limits.isTrial && !limits.canCreateBill) {
       if (limits.isExpired) {
@@ -161,7 +161,11 @@ const Billing = {
       App.openLicenseModal();
       return;
     }
-    this._openForm(null, type);
+    this._openForm(initialDoc, type);
+  },
+
+  openForm(type = 'sales', initialDoc = null) {
+    this.openNew(type, initialDoc);
   },
 
   _openForm(existingDoc, type) {
@@ -3805,13 +3809,15 @@ body { font-family: 'Inter', Arial, sans-serif; font-size: 8.5pt; color: #1e293b
   },
 
   /* ─── Create / Edit Quotation Form ─── */
-  openQuotationForm(editId = null) {
+  openQuotationForm(editId = null, preloaded = null) {
+    const preData = (typeof editId === 'object' && editId) ? editId : preloaded;
+    const realEditId = (typeof editId === 'string' && editId) ? editId : null;
     const biz = DB.getBiz();
     const customers = DB.getCustomers();
     const products = DB.getProducts();
     const today = new Date().toISOString().split('T')[0];
 
-    const quote = editId ? DB.getQuotationById(editId) : null;
+    const quote = realEditId ? DB.getQuotationById(realEditId) : null;
     const defaultValidDays = 15;
     const validUntilDate = quote ? (quote.validUntil || today) : new Date(Date.now() + defaultValidDays * 86400000).toISOString().split('T')[0];
 
@@ -3822,9 +3828,9 @@ body { font-family: 'Inter', Arial, sans-serif; font-size: 8.5pt; color: #1e293b
       </option>
     `).join('');
 
-    const initialItems = quote ? quote.items : [
+    const initialItems = (preData && preData.items) ? preData.items : (quote ? quote.items : [
       { productId: '', name: '', hsn: '', unit: 'Nos', qty: 1, rate: 0, discount: 0, gstRate: 18 }
-    ];
+    ]);
 
     App.modal(quote ? `Edit Quotation: ${quote.quotationNo}` : 'New Quotation / Estimate', `
       <div id="quotation-form">
@@ -3947,7 +3953,7 @@ body { font-family: 'Inter', Arial, sans-serif; font-size: 8.5pt; color: #1e293b
         <div class="form-grid" style="margin-bottom:16px">
           <div class="form-group form-full">
             <label>Quotation Terms &amp; Conditions / Notes</label>
-            <textarea id="qf-notes" rows="3" placeholder="Payment terms, delivery timeline, warranty, validity note...">${quote ? (quote.notes || '') : `1. Prices are valid for 15 days from quotation date.\n2. 50% advance along with confirmed purchase order.\n3. Warranty as per manufacturer terms.\n4. GST included as per applicable rates.`}</textarea>
+            <textarea id="qf-notes" rows="3" placeholder="Payment terms, delivery timeline, warranty, validity note...">${quote ? (quote.notes || '') : (preData?.notes || `1. Prices are valid for 15 days from quotation date.\n2. 50% advance along with confirmed purchase order.\n3. Warranty as per manufacturer terms.\n4. GST included as per applicable rates.`)}</textarea>
           </div>
         </div>
 
@@ -3958,7 +3964,7 @@ body { font-family: 'Inter', Arial, sans-serif; font-size: 8.5pt; color: #1e293b
       </div>
     `, `
       <button class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="Billing.saveQuotation('${editId || ''}')">
+      <button class="btn btn-primary" onclick="Billing.saveQuotation('${realEditId || ''}')">
         <span class="material-icons">save</span> Save Quotation
       </button>
     `, 'modal-xl');

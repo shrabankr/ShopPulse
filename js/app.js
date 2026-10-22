@@ -83,6 +83,7 @@ const App = {
         <div class="nav-section">
           <span class="nav-section-label">Management</span>
           <a href="#inventory" class="nav-item" data-r="inventory"><span class="material-icons">inventory_2</span><span>Inventory</span>${lowStock ? `<span class="nav-badge warn">${lowStock}</span>` : ''}</a>
+          <a href="#configurator" class="nav-item" data-r="configurator"><span class="material-icons">memory</span><span>PC &amp; CCTV Builder</span></a>
           <a href="#customers" class="nav-item" data-r="customers"><span class="material-icons">people</span><span>Customers</span></a>
           ${isStaff ? '' : `<a href="#suppliers" class="nav-item" data-r="suppliers"><span class="material-icons">local_shipping</span><span>Suppliers</span></a>`}
         </div>
@@ -235,6 +236,8 @@ const App = {
       case 'billing-sales': Billing.render(c, 'sales'); break;
       case 'quotations': Billing.renderQuotations(c); break;
       case 'services': Services.render(c); break;
+      case 'configurator': Configurator.render(c); break;
+      case 'pc-builder': Configurator.render(c); break;
       case 'billing-purchases': Billing.render(c, 'purchases'); break;
       case 'returns': Billing.renderReturns(c); break;
       case 'returns-sales': Billing.renderReturns(c, 'sales'); break;

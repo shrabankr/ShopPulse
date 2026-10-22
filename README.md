@@ -11,6 +11,7 @@
 - 📖 **Party Ledger & Statement of Account (Khata)**: Complete account statement for Customers and Suppliers with opening balances, running Dr/Cr debit-credit calculations, A4 PDF printable statement, 1-click CSV export, and WhatsApp khata reminder dispatch.
 - 🛡️ **Automated Local Backup & Data Safety (Desktop)**: Background daily rolling backup saved silently to your local Documents folder with automated 7-day retention cleanup, detected backups list with 1-click restore, and File Explorer folder access.
 - 📦 **Bulk Excel / CSV Product & Opening Stock Import**: Download ready sample template, import hundreds of products in 1 click, visual verification preview grid with error detection, smart upsert (update existing & add new), and 1-click catalog export.
+- 🖥️ **Custom PC Configurator & 📹 CCTV Package Bundler**: Guided component-by-component PC builder with real-time socket (LGA1700, AM4, AM5) and DDR4/DDR5 memory compatibility checks, live system wattage estimation, strict inventory stock guard, GST-inclusive on-road rates display, reusable package templates library, and 1-click conversion to GST Tax Invoices or Quotations.
 - ⭐ **Customer Loyalty Points & Referral Rewards Engine**: Earn reward points per ₹ spent on every invoice, 1-click points redemption discount at checkout, customer-to-customer referral tracking with bonus point payouts, manual balance adjustments with audit reason trail, and loyalty ledger breakdown in CRM.
 - 🛡️ **Hardware Serial Number (S/N) & IMEI Tracking**: Record line-item serial numbers across Sales Invoices, Purchase Bills, and print them on all receipts.
 - ⏳ **Warranty Engine & Expiry Tracking**: Supports Testing Warranty, 3M, 6M, 1–5 Years, and Lifetime coverage with live active/expired badges.
@@ -55,6 +56,7 @@ ShopPulse/
     ├── expenses.js         ← Operating expenses, GST ITC tracking, category breakdown
     ├── reports.js          ← P&L, GSTR-1, GSTR-3B, HSN summary, CSV export
     ├── services.js         ← Job Sheet system for computer/CCTV repairs & service tokens
+    ├── configurator.js     ← Custom PC Builder & CCTV Package Kit Configurator
     └── ai.js               ← AI assistant (business insights, forecasting, reorder)
 ```
 

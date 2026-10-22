@@ -282,6 +282,7 @@ const DB = {
     DEBIT_NOTES: 'sp_debit_notes',
     QUOTATIONS: 'sp_quotations',
     SERVICES: 'sp_service_jobs',
+    BUNDLES: 'sp_bundles',
     EXPENSES: 'sp_expenses',
     MOVEMENTS: 'sp_movements',
     AUTH: 'sp_auth',
@@ -767,6 +768,258 @@ const DB = {
     const no = `${b.jobPrefix || 'JOB'}/${getFY()}/${String(b.jobCounter || 1).padStart(4, '0')}`;
     this.setBiz({ ...b, jobCounter: (b.jobCounter || 1) + 1 });
     return no;
+  },
+
+  /* ─── Package Bundles & Custom PC Configurator ─── */
+  getBundles() { return this._get(this.K.BUNDLES) || []; },
+  getBundleById(id) { return this.getBundles().find(b => b.id === id); },
+  saveBundle(data) {
+    const list = this.getBundles();
+    if (data.id) {
+      const idx = list.findIndex(b => b.id === data.id);
+      data.updatedAt = new Date().toISOString();
+      if (idx > -1) list[idx] = { ...list[idx], ...data };
+      else list.unshift(data);
+    } else {
+      data.id = genId('BDL');
+      data.createdAt = new Date().toISOString();
+      data.updatedAt = data.createdAt;
+      list.unshift(data);
+    }
+    this._set(this.K.BUNDLES, list);
+    return data;
+  },
+  deleteBundle(id) {
+    this._set(this.K.BUNDLES, this.getBundles().filter(b => b.id !== id));
+  },
+
+  ensureConfiguratorSeed() {
+    const prods = this.getProducts();
+    const skuMap = new Map(prods.map(p => [(p.sku || '').toUpperCase(), p]));
+    let addedCount = 0;
+
+    const catalog = [
+      // CPUs
+      { name: 'Intel Core i3-12100 Processor (LGA1700, 3.3GHz, UHD 730)', sku: 'CPU-I3-12100', barcode: '890100200001', hsn: '8471', category: 'Processors', brand: 'Intel', socket: 'LGA1700', series: 'Core i3', tdp: 60, unit: 'Nos', purchasePrice: 6900, sellingPrice: 8200, dealerPrice: 7500, warranty: '3 Years', gstRate: 18, stock: 14, reorderLevel: 3 },
+      { name: 'Intel Core i5-12400F Desktop Processor (LGA1700, 6 Cores)', sku: 'CPU-I5-12400F', barcode: '890100200002', hsn: '8471', category: 'Processors', brand: 'Intel', socket: 'LGA1700', series: 'Core i5', tdp: 65, unit: 'Nos', purchasePrice: 8400, sellingPrice: 9800, dealerPrice: 9100, warranty: '3 Years', gstRate: 18, stock: 12, reorderLevel: 3 },
+      { name: 'Intel Core i5-13400 Desktop Processor (LGA1700, 10 Cores, UHD 730)', sku: 'CPU-I5-13400', barcode: '890100200003', hsn: '8471', category: 'Processors', brand: 'Intel', socket: 'LGA1700', series: 'Core i5', tdp: 65, unit: 'Nos', purchasePrice: 15800, sellingPrice: 18500, dealerPrice: 16900, warranty: '3 Years', gstRate: 18, stock: 8, reorderLevel: 2 },
+      { name: 'Intel Core i7-14700 Desktop Processor (LGA1700, 20 Cores)', sku: 'CPU-I7-14700', barcode: '890100200004', hsn: '8471', category: 'Processors', brand: 'Intel', socket: 'LGA1700', series: 'Core i7', tdp: 65, unit: 'Nos', purchasePrice: 29500, sellingPrice: 34000, dealerPrice: 31500, warranty: '3 Years', gstRate: 18, stock: 5, reorderLevel: 2 },
+      { name: 'AMD Ryzen 5 5600 Processor with Wraith Stealth Cooler (AM4)', sku: 'CPU-RYZ-5600', barcode: '890100200005', hsn: '8471', category: 'Processors', brand: 'AMD', socket: 'AM4', series: 'Ryzen 5', tdp: 65, unit: 'Nos', purchasePrice: 8900, sellingPrice: 10500, dealerPrice: 9600, warranty: '3 Years', gstRate: 18, stock: 10, reorderLevel: 2 },
+      { name: 'AMD Ryzen 7 5700X Desktop Processor (AM4, 8 Cores 16 Threads)', sku: 'CPU-RYZ-5700X', barcode: '890100200006', hsn: '8471', category: 'Processors', brand: 'AMD', socket: 'AM4', series: 'Ryzen 7', tdp: 65, unit: 'Nos', purchasePrice: 14200, sellingPrice: 16500, dealerPrice: 15100, warranty: '3 Years', gstRate: 18, stock: 6, reorderLevel: 2 },
+      { name: 'AMD Ryzen 5 7600 Processor (AM5, 6 Cores, Radeon Graphics)', sku: 'CPU-RYZ-7600', barcode: '890100200007', hsn: '8471', category: 'Processors', brand: 'AMD', socket: 'AM5', series: 'Ryzen 5', tdp: 65, unit: 'Nos', purchasePrice: 15600, sellingPrice: 18200, dealerPrice: 16800, warranty: '3 Years', gstRate: 18, stock: 7, reorderLevel: 2 },
+
+      // Motherboards
+      { name: 'ASRock H610M-H2/M.2 M-ATX Motherboard (LGA1700, DDR4)', sku: 'MB-ASR-H610', barcode: '890100200010', hsn: '8473', category: 'Motherboards', brand: 'ASROCK', socket: 'LGA1700', chipset: 'H610', memoryType: 'DDR4', unit: 'Nos', purchasePrice: 4750, sellingPrice: 5610, dealerPrice: 5100, warranty: '3 Years', gstRate: 18, stock: 15, reorderLevel: 3 },
+      { name: 'ASRock B760M PG Lightning Motherboard (LGA1700, DDR5, PCIe 5.0)', sku: 'MB-ASR-B760', barcode: '890100200011', hsn: '8473', category: 'Motherboards', brand: 'ASROCK', socket: 'LGA1700', chipset: 'B760', memoryType: 'DDR5', unit: 'Nos', purchasePrice: 9100, sellingPrice: 10678, dealerPrice: 9800, warranty: '3 Years', gstRate: 18, stock: 9, reorderLevel: 2 },
+      { name: 'Asus B760M-AYW WIFI DDR5 Motherboard (LGA1700, WiFi 6, 2.5G LAN)', sku: 'MB-ASU-B760', barcode: '890100200012', hsn: '8473', category: 'Motherboards', brand: 'ASUS', socket: 'LGA1700', chipset: 'B760', memoryType: 'DDR5', unit: 'Nos', purchasePrice: 8200, sellingPrice: 9491, dealerPrice: 8800, warranty: '3 Years', gstRate: 18, stock: 7, reorderLevel: 2 },
+      { name: 'MSI PRO B760M-E DDR4 Motherboard (LGA1700, HDMI/VGA)', sku: 'MB-MSI-B760-D4', barcode: '890100200013', hsn: '8473', category: 'Motherboards', brand: 'MSI', socket: 'LGA1700', chipset: 'B760', memoryType: 'DDR4', unit: 'Nos', purchasePrice: 6100, sellingPrice: 7200, dealerPrice: 6600, warranty: '3 Years', gstRate: 18, stock: 11, reorderLevel: 2 },
+      { name: 'Gigabyte B550M DS3H Motherboard (AM4, Dual M.2, DDR4)', sku: 'MB-GIG-B550', barcode: '890100200014', hsn: '8473', category: 'Motherboards', brand: 'GIGABYTE', socket: 'AM4', chipset: 'B550', memoryType: 'DDR4', unit: 'Nos', purchasePrice: 6600, sellingPrice: 7800, dealerPrice: 7100, warranty: '3 Years', gstRate: 18, stock: 8, reorderLevel: 2 },
+      { name: 'MSI PRO A620M-E Motherboard (AM5, DDR5, mATX)', sku: 'MB-MSI-A620', barcode: '890100200015', hsn: '8473', category: 'Motherboards', brand: 'MSI', socket: 'AM5', chipset: 'A620', memoryType: 'DDR5', unit: 'Nos', purchasePrice: 5800, sellingPrice: 6900, dealerPrice: 6300, warranty: '3 Years', gstRate: 18, stock: 6, reorderLevel: 2 },
+
+      // Memory (RAM)
+      { name: 'Corsair Vengeance LPX 8GB DDR4 3200MHz RAM', sku: 'RAM-COR-8-D4', barcode: '890100200020', hsn: '8473', category: 'Memory (RAM)', brand: 'Corsair', memoryType: 'DDR4', unit: 'Nos', purchasePrice: 1450, sellingPrice: 1800, dealerPrice: 1600, warranty: 'Lifetime', gstRate: 18, stock: 25, reorderLevel: 5 },
+      { name: 'Corsair Vengeance LPX 16GB DDR4 3200MHz RAM', sku: 'RAM-COR-16-D4', barcode: '890100200021', hsn: '8473', category: 'Memory (RAM)', brand: 'Corsair', memoryType: 'DDR4', unit: 'Nos', purchasePrice: 2600, sellingPrice: 3200, dealerPrice: 2850, warranty: 'Lifetime', gstRate: 18, stock: 35, reorderLevel: 5 },
+      { name: 'Crucial 16GB DDR5 4800MHz Desktop Memory (UDIMM)', sku: 'RAM-CRU-16-D5', barcode: '890100200022', hsn: '8473', category: 'Memory (RAM)', brand: 'Crucial', memoryType: 'DDR5', unit: 'Nos', purchasePrice: 3100, sellingPrice: 3800, dealerPrice: 3400, warranty: 'Lifetime', gstRate: 18, stock: 18, reorderLevel: 3 },
+      { name: 'G.Skill Ripjaws S5 32GB (2x16GB) DDR5 6000MHz RAM', sku: 'RAM-GSK-32-D5', barcode: '890100200023', hsn: '8473', category: 'Memory (RAM)', brand: 'G.Skill', memoryType: 'DDR5', unit: 'Kit', purchasePrice: 7400, sellingPrice: 8900, dealerPrice: 8100, warranty: 'Lifetime', gstRate: 18, stock: 8, reorderLevel: 2 },
+
+      // Storage
+      { name: 'Crucial P3 500GB PCIe M.2 2280 NVMe SSD (Up to 3500MB/s)', sku: 'SSD-CRU-P3-500', barcode: '890100200030', hsn: '8471', category: 'Solid State Drive (M.2 SSD)', brand: 'Crucial', unit: 'Nos', purchasePrice: 2350, sellingPrice: 2900, dealerPrice: 2600, warranty: '3 Years', gstRate: 18, stock: 22, reorderLevel: 4 },
+      { name: 'Samsung 980 1TB PCIe 3.0 NVMe M.2 Internal SSD', sku: 'SSD-SAM-980-1TB', barcode: '890100200031', hsn: '8471', category: 'Solid State Drive (M.2 SSD)', brand: 'Samsung', unit: 'Nos', purchasePrice: 5100, sellingPrice: 6200, dealerPrice: 5600, warranty: '5 Years', gstRate: 18, stock: 14, reorderLevel: 3 },
+      { name: 'Kingston A400 240GB 2.5" SATA III Internal SSD', sku: 'SSD-KNG-A400-240', barcode: '890100200032', hsn: '8471', category: 'Solid State Drive (SATA SSD)', brand: 'Kingston', unit: 'Nos', purchasePrice: 1250, sellingPrice: 1600, dealerPrice: 1400, warranty: '3 Years', gstRate: 18, stock: 20, reorderLevel: 4 },
+      { name: 'Western Digital Blue 1TB 7200 RPM 3.5" Desktop Hard Drive', sku: 'HDD-WD-1TB-BLU', barcode: '890100200033', hsn: '8471', category: 'Hard Disk Drive (Internal HDD)', brand: 'Western Digital', unit: 'Nos', purchasePrice: 3100, sellingPrice: 3800, dealerPrice: 3400, warranty: '2 Years', gstRate: 18, stock: 16, reorderLevel: 3 },
+      { name: 'Western Digital Purple 4TB Surveillance Hard Drive', sku: 'HDD-WD-4TB-PUR', barcode: '890100200034', hsn: '8471', category: 'Hard Disk Drive (Internal HDD)', brand: 'Western Digital', unit: 'Nos', purchasePrice: 6400, sellingPrice: 7800, dealerPrice: 7000, warranty: '3 Years', gstRate: 18, stock: 12, reorderLevel: 2 },
+
+      // Graphics Cards
+      { name: 'Asus Phoenix GeForce GTX 1650 4GB GDDR6 Graphics Card', sku: 'GPU-ASU-1650', barcode: '890100200040', hsn: '8473', category: 'Graphics Card (GPU/VGA)', brand: 'ASUS', tdp: 75, unit: 'Nos', purchasePrice: 9800, sellingPrice: 11500, dealerPrice: 10600, warranty: '3 Years', gstRate: 18, stock: 8, reorderLevel: 2 },
+      { name: 'ZOTAC Gaming GeForce RTX 3060 Twin Edge 12GB GDDR6', sku: 'GPU-ZOT-3060', barcode: '890100200041', hsn: '8473', category: 'Graphics Card (GPU/VGA)', brand: 'Zotac', tdp: 170, unit: 'Nos', purchasePrice: 19500, sellingPrice: 22800, dealerPrice: 21000, warranty: '3 Years', gstRate: 18, stock: 6, reorderLevel: 2 },
+      { name: 'MSI GeForce RTX 4060 Ventus 2X Black 8GB OC GDDR6', sku: 'GPU-MSI-4060', barcode: '890100200042', hsn: '8473', category: 'Graphics Card (GPU/VGA)', brand: 'MSI', tdp: 115, unit: 'Nos', purchasePrice: 23800, sellingPrice: 27500, dealerPrice: 25400, warranty: '3 Years', gstRate: 18, stock: 5, reorderLevel: 2 },
+
+      // Power Supplies
+      { name: 'Ant Esports VS450L 450W Continuous Power Supply', sku: 'PSU-ANT-450', barcode: '890100200050', hsn: '8504', category: 'Power Supply Unit (SMPS/PSU)', brand: 'Ant Esports', wattage: 450, unit: 'Nos', purchasePrice: 1200, sellingPrice: 1550, dealerPrice: 1350, warranty: '2 Years', gstRate: 18, stock: 20, reorderLevel: 4 },
+      { name: 'Cooler Master MWE 550W 80 Plus Bronze V2 Power Supply', sku: 'PSU-CM-550', barcode: '890100200051', hsn: '8504', category: 'Power Supply Unit (SMPS/PSU)', brand: 'Cooler Master', wattage: 550, unit: 'Nos', purchasePrice: 3100, sellingPrice: 3800, dealerPrice: 3450, warranty: '5 Years', gstRate: 18, stock: 15, reorderLevel: 3 },
+      { name: 'Corsair CV650 650 Watt 80 Plus Bronze Certified PSU', sku: 'PSU-COR-650', barcode: '890100200052', hsn: '8504', category: 'Power Supply Unit (SMPS/PSU)', brand: 'Corsair', wattage: 650, unit: 'Nos', purchasePrice: 3950, sellingPrice: 4800, dealerPrice: 4350, warranty: '3 Years', gstRate: 18, stock: 10, reorderLevel: 2 },
+
+      // Cabinets & Coolers
+      { name: 'Zebronics ZEB-FEEL Office Micro-ATX Cabinet with 450W SMPS', sku: 'CAB-ZEB-OFFICE', barcode: '890100200060', hsn: '8473', category: 'Cabinet / Case', brand: 'Zebronics', unit: 'Nos', purchasePrice: 1050, sellingPrice: 1350, dealerPrice: 1180, warranty: '1 Year', gstRate: 18, stock: 18, reorderLevel: 3 },
+      { name: 'Ant Esports ICE-100 Auto RGB Mid-Tower Gaming Cabinet', sku: 'CAB-ANT-ICE100', barcode: '890100200061', hsn: '8473', category: 'Cabinet / Case', brand: 'Ant Esports', unit: 'Nos', purchasePrice: 2050, sellingPrice: 2600, dealerPrice: 2300, warranty: '1 Year', gstRate: 18, stock: 12, reorderLevel: 2 },
+      { name: 'Deepcool AG400 ARGB Single-Tower 120mm CPU Air Cooler', sku: 'CLR-DPC-AG400', barcode: '890100200062', hsn: '8473', category: 'Cooling System (CPU Cooler)', brand: 'Deepcool', unit: 'Nos', purchasePrice: 1350, sellingPrice: 1750, dealerPrice: 1520, warranty: '1 Year', gstRate: 18, stock: 14, reorderLevel: 3 },
+      { name: 'Intel / AMD Stock Air Cooler (Standard Box Pack)', sku: 'CLR-STK-BOX', barcode: '890100200063', hsn: '8473', category: 'Cooling System (CPU Cooler)', brand: 'Standard', unit: 'Nos', purchasePrice: 0, sellingPrice: 0, dealerPrice: 0, warranty: '3 Years', gstRate: 18, stock: 999, reorderLevel: 0 },
+
+      // Peripherals
+      { name: 'Dell 24" SE2422H Full HD 75Hz ComfortView Monitor', sku: 'MON-DEL-24', barcode: '890100200070', hsn: '8528', category: 'Monitor (Display)', brand: 'Dell', unit: 'Nos', purchasePrice: 6400, sellingPrice: 7800, dealerPrice: 7000, warranty: '3 Years', gstRate: 18, stock: 10, reorderLevel: 2 },
+      { name: 'Logitech MK215 Wireless Keyboard and Mouse Combo', sku: 'KBD-LOG-MK215', barcode: '890100200071', hsn: '8471', category: 'Keyboard & Mouse', brand: 'Logitech', unit: 'Set', purchasePrice: 980, sellingPrice: 1250, dealerPrice: 1100, warranty: '1 Year', gstRate: 18, stock: 25, reorderLevel: 5 },
+
+      // CCTV Components
+      { name: 'CP PLUS 2.4MP Cosmic HD Dome Camera (20m IR, Plastic Body)', sku: 'CCTV-CP-DOM', barcode: '890100200080', hsn: '8525', category: 'CCTV', brand: 'CP PLUS', unit: 'Nos', purchasePrice: 850, sellingPrice: 1100, dealerPrice: 950, warranty: '2 Years', gstRate: 18, stock: 40, reorderLevel: 10 },
+      { name: 'CP PLUS 2.4MP Cosmic HD Bullet Camera (20m IR, Weatherproof)', sku: 'CCTV-CP-BUL', barcode: '890100200081', hsn: '8525', category: 'CCTV', brand: 'CP PLUS', unit: 'Nos', purchasePrice: 980, sellingPrice: 1250, dealerPrice: 1100, warranty: '2 Years', gstRate: 18, stock: 35, reorderLevel: 10 },
+      { name: 'Hikvision 4-Channel HD 1080p Turbo HD DVR (AcuSense, 1 SATA)', sku: 'CCTV-HK-DVR4', barcode: '890100200082', hsn: '8521', category: 'CCTV', brand: 'Hikvision', unit: 'Nos', purchasePrice: 2200, sellingPrice: 2900, dealerPrice: 2500, warranty: '2 Years', gstRate: 18, stock: 12, reorderLevel: 3 },
+      { name: 'ERD 4-Channel 12V 5A CCTV SMPS Power Supply', sku: 'CCTV-PSU-4CH', barcode: '890100200083', hsn: '8504', category: 'CCTV Accessories', brand: 'ERD', unit: 'Nos', purchasePrice: 480, sellingPrice: 650, dealerPrice: 550, warranty: '1 Year', gstRate: 18, stock: 25, reorderLevel: 5 },
+      { name: 'BNC & DC Heavy Brass Connectors Set (4 Pairs)', sku: 'CCTV-BNC-DC', barcode: '890100200084', hsn: '8536', category: 'CCTV Accessories', brand: 'D-Link', unit: 'Pack', purchasePrice: 110, sellingPrice: 180, dealerPrice: 140, warranty: 'Testing Warranty', gstRate: 18, stock: 50, reorderLevel: 10 },
+      { name: '4U CCTV DVR / NVR Wall Mount Metal Rack with Lock & Glass Door', sku: 'CCTV-RCK-4U', barcode: '890100200085', hsn: '8529', category: 'CCTV Accessories', brand: 'SecureEye', unit: 'Nos', purchasePrice: 1050, sellingPrice: 1450, dealerPrice: 1250, warranty: '1 Year', gstRate: 18, stock: 15, reorderLevel: 3 }
+    ];
+
+    catalog.forEach(item => {
+      const existing = skuMap.get((item.sku || '').toUpperCase());
+      if (!existing) {
+        this.saveProduct(item);
+        addedCount++;
+      }
+    });
+
+    // Ensure Categories
+    const categories = this.getCategories();
+    const newCats = ['Processors', 'Motherboards', 'Memory (RAM)', 'Solid State Drive (M.2 SSD)', 'Solid State Drive (SATA SSD)', 'Hard Disk Drive (Internal HDD)', 'Graphics Card (GPU/VGA)', 'Power Supply Unit (SMPS/PSU)', 'Cabinet / Case', 'Cooling System (CPU Cooler)', 'Monitor (Display)', 'Keyboard & Mouse', 'CCTV Accessories'];
+    const mergedCats = Array.from(new Set([...categories, ...newCats]));
+    if (mergedCats.length > categories.length) {
+      this.saveCategories(mergedCats);
+    }
+
+    // Ensure Default Bundle Templates if none exist
+    if (this.getBundles().length === 0) {
+      const allProds = this.getProducts();
+      const findP = (sku) => allProds.find(p => p.sku === sku);
+
+      // 1. Office PC
+      const pCpuOffice = findP('CPU-I3-12100');
+      const pMbOffice  = findP('MB-ASR-H610');
+      const pRamOffice = findP('RAM-COR-8-D4');
+      const pSsdOffice = findP('SSD-CRU-P3-500');
+      const pCabOffice = findP('CAB-ZEB-OFFICE');
+      const pMonOffice = findP('MON-DEL-24');
+      const pKbdOffice = findP('KBD-LOG-MK215');
+
+      const officeItems = [];
+      [
+        { p: pCpuOffice, qty: 1 },
+        { p: pMbOffice, qty: 1 },
+        { p: pRamOffice, qty: 1 },
+        { p: pSsdOffice, qty: 1 },
+        { p: pCabOffice, qty: 1 },
+        { p: pMonOffice, qty: 1 },
+        { p: pKbdOffice, qty: 1 }
+      ].forEach(({ p, qty }) => {
+        if (p) {
+          officeItems.push({
+            productId: p.id,
+            name: p.name,
+            sku: p.sku,
+            hsn: p.hsn,
+            unit: p.unit || 'Nos',
+            qty,
+            rate: p.sellingPrice,
+            discount: 0,
+            gstRate: p.gstRate || 18,
+            warranty: p.warranty || '1 Year'
+          });
+        }
+      });
+
+      if (officeItems.length > 0) {
+        this.saveBundle({
+          name: 'Intel Core i3 12th Gen Office Desktop Kit',
+          type: 'pc',
+          description: 'Standard office & accounting workstation. 12th Gen Core i3, H610 Motherboard, 8GB DDR4, 500GB NVMe SSD, 24" Dell Monitor & Wireless Combo.',
+          estimatedWattage: 180,
+          items: officeItems
+        });
+      }
+
+      // 2. Gaming PC
+      const pCpuGame = findP('CPU-I5-12400F');
+      const pMbGame  = findP('MB-MSI-B760-D4');
+      const pClrGame = findP('CLR-DPC-AG400');
+      const pRamGame = findP('RAM-COR-16-D4');
+      const pSsdGame = findP('SSD-SAM-980-1TB');
+      const pGpuGame = findP('GPU-MSI-4060');
+      const pCabGame = findP('CAB-ANT-ICE100');
+      const pPsuGame = findP('PSU-CM-550');
+
+      const gameItems = [];
+      [
+        { p: pCpuGame, qty: 1 },
+        { p: pClrGame, qty: 1 },
+        { p: pMbGame, qty: 1 },
+        { p: pRamGame, qty: 1 },
+        { p: pSsdGame, qty: 1 },
+        { p: pGpuGame, qty: 1 },
+        { p: pCabGame, qty: 1 },
+        { p: pPsuGame, qty: 1 }
+      ].forEach(({ p, qty }) => {
+        if (p) {
+          gameItems.push({
+            productId: p.id,
+            name: p.name,
+            sku: p.sku,
+            hsn: p.hsn,
+            unit: p.unit || 'Nos',
+            qty,
+            rate: p.sellingPrice,
+            discount: 0,
+            gstRate: p.gstRate || 18,
+            warranty: p.warranty || '3 Years'
+          });
+        }
+      });
+
+      if (gameItems.length > 0) {
+        this.saveBundle({
+          name: 'Intel Core i5 & RTX 4060 Gaming Desktop Setup',
+          type: 'pc',
+          description: '1080p / 1440p High FPS Gaming Rig: Intel Core i5-12400F, MSI B760, RTX 4060 8GB, 16GB DDR4, 1TB NVMe SSD, 550W Bronze PSU.',
+          estimatedWattage: 330,
+          items: gameItems
+        });
+      }
+
+      // 3. CCTV Setup
+      const pCctvDvr  = findP('CCTV-HK-DVR4') || allProds.find(p => p.sku === 'HKV-DS-7608NI');
+      const pCctvDom  = findP('CCTV-CP-DOM') || allProds.find(p => p.sku === 'HKV-DS-2CD2121');
+      const pCctvBul  = findP('CCTV-CP-BUL') || allProds.find(p => p.sku === 'HKV-DS-2CD2T56');
+      const pCctvHdd  = allProds.find(p => p.sku === 'SEG-SK2TB') || findP('HDD-WD-4TB-PUR');
+      const pCctvPsu  = findP('CCTV-PSU-4CH');
+      const pCctvWire = allProds.find(p => p.sku === 'CAT6-305M');
+      const pCctvBnc  = findP('CCTV-BNC-DC');
+      const pCctvRck  = findP('CCTV-RCK-4U');
+      const pCctvInst = allProds.find(p => p.sku === 'SVC-INST-CCTV');
+
+      const cctvItems = [];
+      [
+        { p: pCctvDvr, qty: 1 },
+        { p: pCctvDom, qty: 2 },
+        { p: pCctvBul, qty: 2 },
+        { p: pCctvHdd, qty: 1 },
+        { p: pCctvPsu, qty: 1 },
+        { p: pCctvWire, qty: 1 },
+        { p: pCctvBnc, qty: 1 },
+        { p: pCctvRck, qty: 1 },
+        { p: pCctvInst, qty: 1 }
+      ].forEach(({ p, qty }) => {
+        if (p) {
+          cctvItems.push({
+            productId: p.id,
+            name: p.name,
+            sku: p.sku,
+            hsn: p.hsn,
+            unit: p.unit || 'Nos',
+            qty,
+            rate: p.sellingPrice,
+            discount: 0,
+            gstRate: p.gstRate || 18,
+            warranty: p.warranty || '2 Years'
+          });
+        }
+      });
+
+      if (cctvItems.length > 0) {
+        this.saveBundle({
+          name: 'Hikvision / CP PLUS 4-Camera HD CCTV Surveillance Package',
+          type: 'cctv',
+          description: 'Complete 4-Camera Surveillance Setup: 2 Indoor Domes, 2 Outdoor Bullet IP66, 4-Ch DVR, 2TB HDD, 4-Ch SMPS, Cable, Connectors, 4U Rack & Installation.',
+          estimatedWattage: 65,
+          items: cctvItems
+        });
+      }
+    }
   },
 
   /* ─── Hardware Serial Number & Warranty Engine ─── */
@@ -1565,6 +1818,7 @@ const DB = {
         creditNotesCount: this.getCreditNotes().length,
         debitNotesCount: this.getDebitNotes().length,
         servicesCount: this.getJobs ? this.getJobs().length : 0,
+        bundlesCount: this.getBundles ? this.getBundles().length : 0,
         expensesCount: this.getExpenses().length,
         productsCount: this.getProducts().length,
         customersCount: this.getCustomers().length,
@@ -1582,6 +1836,7 @@ const DB = {
         creditNotes: this.getCreditNotes(),
         debitNotes: this.getDebitNotes(),
         services: this.getJobs ? this.getJobs() : [],
+        bundles: this.getBundles ? this.getBundles() : [],
         expenses: this.getExpenses(),
         movements: this.getMovements(),
         auth: this.getAuth()
@@ -1650,6 +1905,7 @@ const DB = {
     if (d.creditNotes) this._set(this.K.CREDIT_NOTES, d.creditNotes);
     if (d.debitNotes) this._set(this.K.DEBIT_NOTES, d.debitNotes);
     if (d.services) this._set(this.K.SERVICES, d.services);
+    if (d.bundles) this._set(this.K.BUNDLES, d.bundles);
     if (d.expenses) this._set(this.K.EXPENSES, d.expenses);
     if (d.movements) this._set(this.K.MOVEMENTS, d.movements);
     if (d.auth) this.setAuth(d.auth);
@@ -2064,6 +2320,7 @@ const DB = {
       notes: 'Ordered replacement PSU from Redington distributor. Expected arrival tomorrow morning.'
     }, true);
 
+    this.ensureConfiguratorSeed();
     this._set(this.K.SEEDED, true);
   }
 };

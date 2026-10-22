@@ -949,3 +949,29 @@
 }
 
 .payment-summary-box p { font-size: 0.82rem; color: var(--text-secondary); margin-top: 2px; }
+
+/* ─── CUSTOM PC & CCTV CONFIGURATOR ─── */
+.configurator-wrap {
+  display: block;
+}
+
+@media (max-width: 1024px) {
+  .configurator-wrap > div[style*="grid-template-columns: 1fr 340px"],
+  .configurator-wrap > div[style*="grid-template-columns:1fr 340px"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  .pc-summary-panel {
+    position: static !important;
+  }
+
+  .cfg-filter-bar {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .cfg-filter-bar {
+    grid-template-columns: 1fr !important;
+  }
+}
