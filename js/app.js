@@ -2227,6 +2227,46 @@ ${JSON.stringify(data, null, 2)}
             </div>
           </div>
         </div>
+
+        <div class="card" style="border-left:4px solid #f59e0b">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+            <h3><span class="material-icons" style="vertical-align:middle;font-size:20px;color:#f59e0b">stars</span> Customer Loyalty &amp; Referral Program</h3>
+            <span class="badge badge-paid">Customer Retention</span>
+          </div>
+          <div class="card-body">
+            <p style="font-size:.85rem;color:var(--text-secondary);margin-bottom:14px">
+              Reward repeat clients with reward points on every purchase and incentivize customer referrals with bonus points.
+            </p>
+            <div class="form-grid">
+              <div class="form-group form-full">
+                <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-weight:700">
+                  <input type="checkbox" id="s-loyalty-enable" ${b.enableLoyalty !== false ? 'checked' : ''}>
+                  Enable Loyalty Points &amp; Referral Program
+                </label>
+              </div>
+              <div class="form-group">
+                <label>Spend per 1 Point (₹)</label>
+                <input id="s-loyalty-spend" type="number" min="1" step="1" value="${b.loyaltySpendRate || 100}">
+                <div class="form-hint">e.g. ₹100 spend = 1 loyalty point earned</div>
+              </div>
+              <div class="form-group">
+                <label>Point Redemption Value (₹ per pt)</label>
+                <input id="s-loyalty-val" type="number" min="0.1" step="0.1" value="${b.loyaltyPointValue || 1}">
+                <div class="form-hint">e.g. 1 point = ₹1 discount on invoice</div>
+              </div>
+              <div class="form-group">
+                <label>Minimum Points to Redeem</label>
+                <input id="s-loyalty-min" type="number" min="1" step="1" value="${b.loyaltyMinRedeem || 10}">
+                <div class="form-hint">Minimum points balance required for customer to redeem</div>
+              </div>
+              <div class="form-group">
+                <label>Referral Bonus Points</label>
+                <input id="s-loyalty-ref" type="number" min="0" step="1" value="${b.referralBonusPoints || 50}">
+                <div class="form-hint">Bonus points given to referrer on referred client's 1st purchase</div>
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="settings-footer">
           <button class="btn btn-primary" onclick="App.saveSettings()"><span class="material-icons">save</span> Save All Settings</button>
         </div>
@@ -2588,6 +2628,11 @@ ${JSON.stringify(data, null, 2)}
       billPrefix: document.getElementById('s-billpfx').value.trim() || 'PO',
       creditNotePrefix: document.getElementById('s-cnpfx')?.value.trim() || 'CN',
       debitNotePrefix: document.getElementById('s-dnpfx')?.value.trim() || 'DN',
+      enableLoyalty: document.getElementById('s-loyalty-enable')?.checked !== false,
+      loyaltySpendRate: parseFloat(document.getElementById('s-loyalty-spend')?.value) || 100,
+      loyaltyPointValue: parseFloat(document.getElementById('s-loyalty-val')?.value) || 1,
+      loyaltyMinRedeem: parseInt(document.getElementById('s-loyalty-min')?.value, 10) || 10,
+      referralBonusPoints: parseInt(document.getElementById('s-loyalty-ref')?.value, 10) || 50,
       defaultPaymentTerms: parseInt(document.getElementById('s-terms').value) || 30,
       termsAndConditions: document.getElementById('s-tnc').value.trim(),
     };

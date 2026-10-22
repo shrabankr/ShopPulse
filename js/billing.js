@@ -405,6 +405,24 @@ const Billing = {
               <label>Notes / Narration</label>
               <textarea id="if-notes" rows="3">${doc ? doc.notes || '' : ''}</textarea>
             </div>
+            ${isSales ? `
+            <!-- Loyalty Points Redemption Box -->
+            <div id="loyalty-box" style="display:none;margin-top:12px;padding:12px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:var(--radius-sm)">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                <strong style="color:#92400e;font-size:.85rem;display:flex;align-items:center;gap:5px">
+                  <span class="material-icons" style="font-size:17px;color:#d97706">stars</span> Customer Loyalty Rewards
+                </strong>
+                <span id="loyalty-cust-balance" style="font-size:.8rem;font-weight:700;color:#92400e">0 pts available</span>
+              </div>
+              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                <label style="font-size:.82rem;color:var(--text-secondary)">Redeem Points:</label>
+                <input type="number" id="if-points-redeem" min="0" step="1" value="${doc?.pointsRedeemed || 0}" style="width:90px;font-weight:700;padding:4px 8px;border:1px solid #d97706;border-radius:4px" oninput="Billing._recalc()">
+                <button type="button" class="btn btn-xs btn-secondary" onclick="Billing._redeemMaxPoints()" style="border-color:#d97706;color:#92400e;background:#fff">Redeem Max</button>
+                <button type="button" class="btn btn-xs btn-ghost" onclick="Billing._clearPointsRedeem()">Clear</button>
+                <span id="loyalty-discount-preview" style="font-size:.82rem;font-weight:700;color:#059669;margin-left:auto"></span>
+              </div>
+            </div>
+            ` : ''}
           </div>
           <div class="invoice-totals-table" id="inv-totals">
           </div>
@@ -915,8 +933,27 @@ const Billing = {
           });
         }
       }
+
+      // Check customer loyalty balance (Sales only)
+      if (isSales) {
+        const loyaltyBox = document.getElementById('loyalty-box');
+        const loyaltyBalEl = document.getElementById('loyalty-cust-balance');
+        const points = party.loyaltyPoints || 0;
+        const enableLoyalty = biz.enableLoyalty !== false;
+        if (loyaltyBox && loyaltyBalEl) {
+          if (enableLoyalty && points > 0) {
+            loyaltyBox.style.display = 'block';
+            loyaltyBalEl.textContent = `⭐ ${points} pts available (₹${(points * (biz.loyaltyPointValue || 1)).toFixed(2)} value)`;
+          } else {
+            loyaltyBox.style.display = 'none';
+          }
+        }
+      }
+
       this._recalc();
     } else {
+      const loyaltyBox = document.getElementById('loyalty-box');
+      if (loyaltyBox) loyaltyBox.style.display = 'none';
       preview.innerHTML = `<h4>${isSales ? 'To (Buyer / Recipient)' : 'From (Seller / Supplier)'}</h4><div class="party-detail-line text-muted">Select a ${isSales ? 'customer' : 'supplier'} above…</div>`;
     }
   },
@@ -1029,13 +1066,107 @@ const Billing = {
       shippingSummaryRow = `<div class="totals-row"><span class="totals-label">Shipping / Freight (${t.shippingGstRate}% GST)</span><span class="totals-value font-bold">${fmtCurrency(t.shippingCharges)}</span></div>`;
     }
 
+    // Loyalty Points Calculation (Sales only)
+    let loyaltyDiscount = 0;
+    let pointsRedeemed = 0;
+    let pointsEarned = 0;
+    let netTotal = t.total;
+
+    if (isSales && party && biz.enableLoyalty !== false) {
+      const custPoints = party.loyaltyPoints || 0;
+      const pointVal = biz.loyaltyPointValue || 1;
+      const spendRate = biz.loyaltySpendRate || 100;
+      const minRedeem = biz.loyaltyMinRedeem || 10;
+      const pointsInput = document.getElementById('if-points-redeem');
+
+      if (pointsInput) {
+        let entered = parseInt(pointsInput.value, 10) || 0;
+        const maxPointsForTotal = Math.floor(t.total / pointVal);
+        const maxAllowed = Math.min(custPoints, maxPointsForTotal);
+
+        if (entered > maxAllowed) {
+          entered = maxAllowed;
+          pointsInput.value = entered;
+        }
+
+        if (entered >= minRedeem && entered <= maxAllowed) {
+          pointsRedeemed = entered;
+          loyaltyDiscount = pointsRedeemed * pointVal;
+          netTotal = Math.max(0, t.total - loyaltyDiscount);
+        } else if (entered > 0 && entered < minRedeem) {
+          loyaltyDiscount = 0;
+          pointsRedeemed = 0;
+        }
+
+        const previewEl = document.getElementById('loyalty-discount-preview');
+        if (previewEl) {
+          if (pointsRedeemed > 0) {
+            previewEl.textContent = `Applied: -₹${loyaltyDiscount.toFixed(2)}`;
+          } else if (entered > 0 && entered < minRedeem) {
+            previewEl.textContent = `Min ${minRedeem} pts required`;
+          } else {
+            previewEl.textContent = '';
+          }
+        }
+      }
+
+      pointsEarned = Math.floor(netTotal / spendRate);
+    }
+
+    this._currentCalc = { ...t, loyaltyDiscount, pointsRedeemed, pointsEarned, netTotal };
+
     totalsEl.innerHTML = `
       <div class="totals-row"><span class="totals-label">Items Subtotal</span><span class="totals-value">${fmtCurrency(t.itemsSubtotal)}</span></div>
       ${shippingSummaryRow}
       <div class="totals-row"><span class="totals-label">Taxable Value ${taxBadge}</span><span class="totals-value font-bold">${fmtCurrency(t.subtotal)}</span></div>
       ${taxRows}
       <div class="totals-row"><span class="totals-label">Total Tax</span><span class="totals-value text-danger">${fmtCurrency(t.totalTax)}</span></div>
-      <div class="totals-row grand-total"><span class="totals-label">Grand Total</span><span class="totals-value">${fmtCurrency(t.total)}</span></div>`;
+      ${loyaltyDiscount > 0 ? `
+      <div class="totals-row" style="color:#d97706;font-weight:700">
+        <span class="totals-label">⭐ Loyalty Discount (${pointsRedeemed} pts)</span>
+        <span class="totals-value">-₹${loyaltyDiscount.toFixed(2)}</span>
+      </div>` : ''}
+      <div class="totals-row grand-total"><span class="totals-label">${loyaltyDiscount > 0 ? 'Net Payable' : 'Grand Total'}</span><span class="totals-value">${fmtCurrency(netTotal)}</span></div>
+      ${isSales && pointsEarned > 0 ? `
+      <div class="totals-row" style="color:#059669;font-size:.82rem;font-weight:600">
+        <span class="totals-label">⭐ Points to be Earned on this Bill</span>
+        <span class="totals-value">+${pointsEarned} pts</span>
+      </div>` : ''}`;
+  },
+
+  _redeemMaxPoints() {
+    const partyEl = document.getElementById('if-party');
+    if (!partyEl?.value) return;
+    const party = DB.getCustomerById(partyEl.value);
+    if (!party || !party.loyaltyPoints) {
+      App.toast('This customer has no available loyalty points.', 'info');
+      return;
+    }
+    const biz = DB.getBiz();
+    const pointVal = biz.loyaltyPointValue || 1;
+    const minRedeem = biz.loyaltyMinRedeem || 10;
+    if (party.loyaltyPoints < minRedeem) {
+      App.toast(`Minimum ${minRedeem} points required to redeem. Current balance: ${party.loyaltyPoints} pts.`, 'warning');
+      return;
+    }
+    const rows = this._getRows();
+    const t = calcTotals(rows, biz.stateCode, party.stateCode || biz.stateCode, 0, 0);
+    const maxPointsForTotal = Math.floor(t.total / pointVal);
+    const maxAllowed = Math.min(party.loyaltyPoints, maxPointsForTotal);
+    const input = document.getElementById('if-points-redeem');
+    if (input) {
+      input.value = maxAllowed;
+      this._recalc();
+      App.toast(`Redeemed maximum ${maxAllowed} loyalty points! (₹${(maxAllowed * pointVal).toFixed(2)} discount)`, 'success');
+    }
+  },
+
+  _clearPointsRedeem() {
+    const input = document.getElementById('if-points-redeem');
+    if (input) {
+      input.value = 0;
+      this._recalc();
+    }
   },
 
   _saveDoc(type, isDraft = false) {
@@ -1095,6 +1226,12 @@ const Billing = {
     const status = isDraft ? 'draft' : 'sent';
 
     if (isSales) {
+      const calc = this._currentCalc || {};
+      const pointsRedeemed = calc.pointsRedeemed || 0;
+      const loyaltyDiscount = calc.loyaltyDiscount || 0;
+      const pointsEarned = calc.pointsEarned || 0;
+      const netTotal = calc.netTotal != null ? calc.netTotal : t.total;
+
       const data = {
         ...(existingDoc || {}),
         invoiceNo: existingDoc ? existingDoc.invoiceNo : DB.nextInvoiceNo(),
@@ -1116,7 +1253,11 @@ const Billing = {
         shippingStateCode,
         shippingPincode,
         shippingGstin,
+        pointsRedeemed,
+        loyaltyDiscount,
+        pointsEarned,
         ...t,
+        total: netTotal,
       };
       if (isDraft) data.status = 'draft';
       DB.saveSale(data, !existingDoc);
@@ -1900,7 +2041,9 @@ body { font-family: 'Courier New', Courier, monospace, sans-serif; font-size: 8.
   ${doc.shippingCharges > 0 ? `<tr><td>Shipping Charges:</td><td class="pos-right">${fmtCurrency(doc.shippingCharges)}</td></tr>` : ''}
   <tr><td>Taxable Value:</td><td class="pos-right">${fmtCurrency(doc.subtotal)}</td></tr>
   ${doc.isIntra ? `<tr><td>CGST + SGST:</td><td class="pos-right">${fmtCurrency(doc.totalCgst + doc.totalSgst)}</td></tr>` : `<tr><td>IGST:</td><td class="pos-right">${fmtCurrency(doc.totalIgst)}</td></tr>`}
-  <tr class="pos-grand"><td><strong>NET TOTAL:</strong></td><td class="pos-right"><strong>${fmtCurrency(doc.total)}</strong></td></tr>
+  ${doc.pointsRedeemed > 0 ? `<tr><td>Loyalty Discount (${doc.pointsRedeemed} pts):</td><td class="pos-right">-₹${(doc.loyaltyDiscount || doc.pointsRedeemed).toFixed(2)}</td></tr>` : ''}
+  <tr class="pos-grand"><td><strong>${doc.pointsRedeemed > 0 ? 'NET PAYABLE:' : 'NET TOTAL:'}</strong></td><td class="pos-right"><strong>${fmtCurrency(doc.total)}</strong></td></tr>
+  ${doc.pointsEarned > 0 ? `<tr><td style="font-size:7.5pt;padding-top:2px">⭐ Points Earned Today:</td><td class="pos-right" style="font-size:7.5pt;font-weight:700;padding-top:2px">+${doc.pointsEarned} pts</td></tr>` : ''}
 </table>
 ${isSales && (biz.bankName || biz.bankAccount || biz.upiId) ? `
 <div class="pos-divider"></div>
@@ -2184,7 +2327,13 @@ table.items .rate, table.items .amount { text-align: right; }
         <tr><td>Taxable Value</td><td>${fmtCurrency(doc.subtotal)}</td></tr>
         ${totalTaxRows}
         <tr><td><strong>Total Tax</strong></td><td>${fmtCurrency(doc.totalTax)}</td></tr>
-        <tr class="grand-total"><td>GRAND TOTAL</td><td>${fmtCurrency(doc.total)}</td></tr>
+        ${doc.pointsRedeemed > 0 ? `
+        <tr><td style="color:#d97706;font-weight:700">⭐ Loyalty Discount (${doc.pointsRedeemed} pts)</td><td style="color:#d97706;font-weight:700">-₹${(doc.loyaltyDiscount || doc.pointsRedeemed).toFixed(2)}</td></tr>
+        ` : ''}
+        <tr class="grand-total"><td>${doc.pointsRedeemed > 0 ? 'NET PAYABLE' : 'GRAND TOTAL'}</td><td>${fmtCurrency(doc.total)}</td></tr>
+        ${isSales && doc.pointsEarned > 0 ? `
+        <tr><td style="font-size:8pt;color:#059669;font-weight:600">⭐ Loyalty Points Earned</td><td style="font-size:8pt;font-weight:700;color:#059669">+${doc.pointsEarned} pts</td></tr>
+        ` : ''}
       </table>
     </div>
   </div>

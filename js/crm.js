@@ -77,6 +77,7 @@ const CRM = {
                           <div style="font-weight:600;display:flex;align-items:center;gap:6px">
                             ${c.name}
                             ${c.customerType === 'dealer' ? `<span class="badge" style="background:hsl(271,78%,92%);color:hsl(271,78%,35%);font-size:.65rem;padding:1px 6px;font-weight:700">DEALER / TECH</span>` : ''}
+                            ${type === 'customers' && (c.loyaltyPoints > 0) ? `<span class="badge" style="background:#fef3c7;color:#92400e;font-size:.68rem;padding:1px 6px;font-weight:700" title="${c.loyaltyPoints} Loyalty Points Available">⭐ ${c.loyaltyPoints} pts</span>` : ''}
                           </div>
                           ${c.city ? `<div style="font-size:.75rem;color:var(--text-secondary)">${c.city}</div>` : ''}
                         </div>
@@ -209,6 +210,16 @@ const CRM = {
             <option value="retail" ${!c || c.customerType !== 'dealer' ? 'selected' : ''}>Standard Retail Customer (Regular Prices)</option>
             <option value="dealer" ${c && c.customerType === 'dealer' ? 'selected' : ''}>Dealer / CCTV Installer / Technician (Auto-Applies Wholesale Rates)</option>
           </select>
+        </div>
+        <div class="form-group form-full">
+          <label>Referred By (Optional Referral Rewards)</label>
+          <select id="c-referrer">
+            <option value="">None / Direct Walk-In</option>
+            ${DB.getCustomers().filter(other => other.id !== contactId).map(other => `
+              <option value="${other.id}" ${c?.referredBy === other.id ? 'selected' : ''}>${other.name} (${other.phone || 'No phone'})</option>
+            `).join('')}
+          </select>
+          <div class="form-hint">When this customer makes their first purchase, the referring customer will receive bonus loyalty points!</div>
         </div>` : ''}
         <div class="form-group">
           <label>GSTIN</label>
@@ -262,6 +273,11 @@ const CRM = {
       id: existingId || null,
       name, gstin, pan: document.getElementById('c-pan')?.value?.toUpperCase().trim() || '',
       customerType: isCustomer ? (document.getElementById('c-type')?.value || 'retail') : undefined,
+      referredBy: isCustomer ? (document.getElementById('c-referrer')?.value || '') : undefined,
+      loyaltyPoints: isCustomer ? (c?.loyaltyPoints || 0) : undefined,
+      loyaltyHistory: isCustomer ? (c?.loyaltyHistory || []) : undefined,
+      referralCount: isCustomer ? (c?.referralCount || 0) : undefined,
+      _referralBonusGranted: isCustomer ? (c?._referralBonusGranted || false) : undefined,
       address: document.getElementById('c-addr')?.value?.trim() || '',
       city: document.getElementById('c-city')?.value?.trim() || '',
       state: state?.name || '', stateCode: stateEl?.value || '',
@@ -293,9 +309,14 @@ const CRM = {
     const totalBusiness = txList.reduce((s, t) => s + t.total, 0);
     const outstanding = txList.filter(t => t.status !== 'paid').reduce((s, t) => s + t.total, 0);
     const paid = txList.filter(t => t.status === 'paid').reduce((s, t) => s + t.total, 0);
+    const referrer = isCustomer && c.referredBy ? DB.getCustomerById(c.referredBy) : null;
+    const biz = DB.getBiz();
+    const pointVal = biz.loyaltyPointValue || 1;
+    const pointsBalance = c.loyaltyPoints || 0;
+    const history = c.loyaltyHistory || [];
 
     App.modal(`${c.name}`,
-      `<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
+      `<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
         <div>
           <div class="invoice-section-title"><span class="material-icons">business</span> Contact Details</div>
           <div class="detail-row"><span class="detail-label">GSTIN</span><span class="detail-value mono">${c.gstin || 'Unregistered'}</span></div>
@@ -313,6 +334,41 @@ const CRM = {
           <div class="stat-row"><span class="stat-label">Outstanding</span><span class="stat-value ${outstanding > 0 ? 'text-danger' : 'text-success'}">${fmtCurrency(outstanding)}</span></div>
         </div>
       </div>
+
+      ${isCustomer ? `
+      <!-- Customer Loyalty & Referral Hub -->
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="material-icons" style="font-size:20px;color:#d97706">stars</span>
+              <strong style="color:#92400e;font-size:.95rem">Loyalty Points &amp; Referral Program</strong>
+            </div>
+            <div style="font-size:.8rem;color:#78350f;margin-top:2px">
+              Available Balance: <strong style="font-size:.95rem;color:#b45309">${pointsBalance} pts</strong> (₹${(pointsBalance * pointVal).toFixed(2)} value)
+              ${referrer ? ` • Referred by: <strong>${referrer.name}</strong>` : ''}
+              ${c.referralCount ? ` • Successful Referrals: <strong>${c.referralCount}</strong>` : ''}
+            </div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-xs btn-secondary" onclick="CRM.openAdjustPointsModal('${id}')" style="border-color:#d97706;color:#92400e;background:#fff">
+              <span class="material-icons" style="font-size:14px">tune</span> Adjust Points
+            </button>
+          </div>
+        </div>
+        ${history.length ? `
+        <div style="margin-top:10px;padding-top:8px;border-top:1px dashed #fcd34d">
+          <div style="font-size:.75rem;font-weight:700;color:#92400e;margin-bottom:6px">Recent Loyalty Transactions:</div>
+          <div style="max-height:100px;overflow-y:auto;display:flex;flex-direction:column;gap:4px">
+            ${history.slice(0, 5).map(h => `
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:.74rem;background:#fff;padding:4px 8px;border-radius:4px;border:1px solid #fef3c7">
+                <span>${fmtDate(h.date)}: ${h.note || h.type}</span>
+                <strong style="color:${h.points > 0 ? '#059669' : '#dc2626'}">${h.points > 0 ? '+' : ''}${h.points} pts (Bal: ${h.balanceAfter})</strong>
+              </div>
+            `).join('')}
+          </div>
+        </div>` : ''}
+      </div>` : ''}
 
       <div class="invoice-section-title" style="margin-bottom:10px"><span class="material-icons">receipt_long</span> Transaction History (${txList.length})</div>
       ${txList.length ? `
@@ -356,6 +412,85 @@ const CRM = {
        <button class="btn btn-danger" onclick="${isCustomer ? 'DB.deleteCustomer' : 'DB.deleteSupplier'}('${id}');App.toast('Contact deleted');App.closeModal();CRM.render(document.getElementById('page-content'),'${type}')">Delete</button>`,
       'modal-sm'
     );
+  },
+
+  /* ═══════════════════════════════════════════
+     LOYALTY POINTS ADJUSTMENT
+  ═══════════════════════════════════════════ */
+  openAdjustPointsModal(customerId) {
+    const c = DB.getCustomerById(customerId);
+    if (!c) return;
+    const biz = DB.getBiz();
+    const curPoints = c.loyaltyPoints || 0;
+
+    App.modal(`Adjust Loyalty Points — ${c.name}`,
+      `
+      <div style="background:var(--bg);padding:14px;border-radius:var(--radius-sm);border:1px solid var(--border);margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:.78rem;color:var(--text-secondary)">Current Loyalty Balance</div>
+            <div style="font-size:1.4rem;font-weight:800;color:#b45309">⭐ ${curPoints} Points</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:.78rem;color:var(--text-secondary)">Monetary Value</div>
+            <div style="font-size:1.1rem;font-weight:700;color:var(--text-primary)">₹${(curPoints * (biz.loyaltyPointValue || 1)).toFixed(2)}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Action</label>
+          <select id="adj-pts-type">
+            <option value="add">Credit / Add Points (+)</option>
+            <option value="deduct">Debit / Deduct Points (−)</option>
+            <option value="set">Set Exact Balance (=)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Points Amount <span class="required">*</span></label>
+          <input type="number" id="adj-pts-amount" min="1" step="1" placeholder="e.g. 50">
+        </div>
+        <div class="form-group form-full">
+          <label>Reason / Note <span class="required">*</span></label>
+          <input id="adj-pts-note" placeholder="e.g. Festival bonus, Referral reward, Customer goodwill credit...">
+        </div>
+      </div>
+      `,
+      `
+      <button class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="CRM._doAdjustPoints('${customerId}')"><span class="material-icons">save</span> Apply Points</button>
+      `,
+      'modal-sm'
+    );
+  },
+
+  _doAdjustPoints(customerId) {
+    const type = document.getElementById('adj-pts-type')?.value;
+    const amount = parseInt(document.getElementById('adj-pts-amount')?.value, 10);
+    const note = document.getElementById('adj-pts-note')?.value?.trim();
+
+    if (!amount || amount < 0) {
+      App.toast('Please enter a valid points amount', 'error');
+      return;
+    }
+    if (!note) {
+      App.toast('Please enter a reason or note for this adjustment', 'error');
+      return;
+    }
+
+    const c = DB.getCustomerById(customerId);
+    if (!c) return;
+
+    let delta = 0;
+    if (type === 'add') delta = amount;
+    else if (type === 'deduct') delta = -amount;
+    else if (type === 'set') delta = amount - (c.loyaltyPoints || 0);
+
+    DB.adjustCustomerLoyalty(customerId, delta, 'manual', 'MANUAL-ADJUST', note);
+    App.toast(`Loyalty balance updated: ${c.name} → ${Math.max(0, (c.loyaltyPoints || 0) + delta)} pts!`, 'success');
+    App.closeModal();
+    CRM.render(document.getElementById('page-content'), 'customers');
   },
 
   /* ═══════════════════════════════════════════

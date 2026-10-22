@@ -309,6 +309,7 @@ const DB = {
       debitNotePrefix: 'DN', debitNoteCounter: 1,
       quotationPrefix: 'QTN', quotationCounter: 1,
       jobPrefix: 'JOB', jobCounter: 4,
+      enableLoyalty: true, loyaltySpendRate: 100, loyaltyPointValue: 1, loyaltyMinRedeem: 10, referralBonusPoints: 50,
       defaultPaymentTerms: 30, signatory: 'Shraban Kumar Mahato', termsAndConditions: 'Goods once sold will not be taken back.\nWarranty as per manufacturer terms.\nInterest @18% p.a. will be charged on delayed payments.',
     };
   },
@@ -361,6 +362,60 @@ const DB = {
     return data;
   },
   deleteCustomer(id) { this._set(this.K.CUSTOMERS, this.getCustomers().filter(c => c.id !== id)); },
+
+  /* Customer Loyalty & Referral Engine */
+  adjustCustomerLoyalty(customerId, pointsDelta, type = 'manual', refDoc = '', note = '') {
+    if (!customerId || !pointsDelta) return;
+    const c = this.getCustomerById(customerId);
+    if (!c) return;
+
+    const curPoints = c.loyaltyPoints || 0;
+    const newPoints = Math.max(0, curPoints + pointsDelta);
+    c.loyaltyPoints = newPoints;
+
+    const history = c.loyaltyHistory || [];
+    history.unshift({
+      id: genId('LP'),
+      date: new Date().toISOString().split('T')[0],
+      timestamp: new Date().toISOString(),
+      type, // 'earned' | 'redeemed' | 'referral_bonus' | 'manual'
+      points: pointsDelta,
+      balanceAfter: newPoints,
+      refDoc: refDoc || '',
+      note: note || (pointsDelta > 0 ? `+${pointsDelta} pts added` : `${pointsDelta} pts deducted`)
+    });
+    if (history.length > 50) history.length = 50;
+    c.loyaltyHistory = history;
+
+    this.saveCustomer(c);
+    return c;
+  },
+
+  grantReferralBonus(customerId, invoiceNo) {
+    if (!customerId) return;
+    const c = this.getCustomerById(customerId);
+    if (!c || !c.referredBy || c._referralBonusGranted) return;
+
+    const referrer = this.getCustomerById(c.referredBy);
+    if (!referrer) return;
+
+    const biz = this.getBiz();
+    const bonus = parseInt(biz.referralBonusPoints, 10) || 50;
+
+    this.adjustCustomerLoyalty(
+      referrer.id,
+      bonus,
+      'referral_bonus',
+      invoiceNo || '',
+      `Referral Reward: ${c.name} made their first purchase!`
+    );
+
+    referrer.referralCount = (referrer.referralCount || 0) + 1;
+    this.saveCustomer(referrer);
+
+    c._referralBonusGranted = true;
+    this.saveCustomer(c);
+  },
 
   /* Suppliers */
   getSuppliers() { return this._get(this.K.SUPPLIERS) || []; },
@@ -436,8 +491,24 @@ const DB = {
     const list = this.getSales();
     if (!isNew) {
       const i = list.findIndex(s => s.id === data.id);
+      const oldDoc = i > -1 ? list[i] : null;
       if (i > -1) list[i] = data; else list.push(data);
       this._set(this.K.SALES, list);
+
+      // Transition from draft to finalized
+      if (oldDoc && oldDoc.status === 'draft' && data.status !== 'draft' && data.customerId) {
+        if (data.pointsRedeemed > 0 && !data._pointsRedeemedApplied) {
+          this.adjustCustomerLoyalty(data.customerId, -data.pointsRedeemed, 'redeemed', data.invoiceNo, `Redeemed on Invoice #${data.invoiceNo}`);
+          data._pointsRedeemedApplied = true;
+        }
+        if (data.pointsEarned > 0 && !data._pointsEarnedApplied) {
+          this.adjustCustomerLoyalty(data.customerId, data.pointsEarned, 'earned', data.invoiceNo, `Earned on Invoice #${data.invoiceNo}`);
+          data._pointsEarnedApplied = true;
+        }
+        this.grantReferralBonus(data.customerId, data.invoiceNo);
+        list[i] = data;
+        this._set(this.K.SALES, list);
+      }
       return data;
     }
     data.id = genId('INV');
@@ -450,6 +521,20 @@ const DB = {
         }
       });
     }
+
+    // Apply loyalty points & referral bonus if finalized
+    if (data.customerId && data.status !== 'draft') {
+      if (data.pointsRedeemed > 0) {
+        this.adjustCustomerLoyalty(data.customerId, -data.pointsRedeemed, 'redeemed', data.invoiceNo, `Redeemed on Invoice #${data.invoiceNo}`);
+        data._pointsRedeemedApplied = true;
+      }
+      if (data.pointsEarned > 0) {
+        this.adjustCustomerLoyalty(data.customerId, data.pointsEarned, 'earned', data.invoiceNo, `Earned on Invoice #${data.invoiceNo}`);
+        data._pointsEarnedApplied = true;
+      }
+      this.grantReferralBonus(data.customerId, data.invoiceNo);
+    }
+
     list.push(data);
     this._set(this.K.SALES, list);
     return data;
@@ -1615,11 +1700,11 @@ const DB = {
 
     // ── Customers (Businesses & Organisations) ──
     const c1 = this.saveCustomer({ name: 'Zenith Infotech Pvt Ltd', customerType: 'dealer', gstin: '27AABCZ9321K1Z4', phone: '9823001122', whatsapp: '9823001122', email: 'accounts@zenithinfotech.com', address: 'Plot 15, Rajiv Gandhi IT Park', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411057', contactPerson: 'Suresh Patil' });
-    const c2 = this.saveCustomer({ name: 'St. Xavier School & College', customerType: 'retail', gstin: '27AABTS4218M1ZQ', phone: '9823003344', whatsapp: '9823003344', email: 'admin@stxaviers.edu.in', address: '5, MG Road, Camp', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411001', contactPerson: 'Fr. Thomas' });
-    const c3 = this.saveCustomer({ name: 'City Hospital & Research Centre', customerType: 'retail', gstin: '27AABCC7123H1ZR', phone: '9823005566', whatsapp: '9823005566', email: 'accounts@cityhospital.in', address: '88 Nagar Road, Yerawada', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411006', contactPerson: 'Mrs. Shinde' });
+    const c2 = this.saveCustomer({ name: 'St. Xavier School & College', customerType: 'retail', gstin: '27AABTS4218M1ZQ', phone: '9823003344', whatsapp: '9823003344', email: 'admin@stxaviers.edu.in', address: '5, MG Road, Camp', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411001', contactPerson: 'Fr. Thomas', loyaltyPoints: 150, referralCount: 1 });
+    const c3 = this.saveCustomer({ name: 'City Hospital & Research Centre', customerType: 'retail', gstin: '27AABCC7123H1ZR', phone: '9823005566', whatsapp: '9823005566', email: 'accounts@cityhospital.in', address: '88 Nagar Road, Yerawada', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411006', contactPerson: 'Mrs. Shinde', loyaltyPoints: 240 });
     const c4 = this.saveCustomer({ name: 'Nagpur Municipal Corporation', customerType: 'retail', gstin: '27AAANS8891P1ZX', phone: '0712-2567890', whatsapp: '9823007700', email: 'it.dept@nagpurcorp.gov.in', address: 'Mahapal Complex, Kasturchand Park', city: 'Nagpur', state: 'Maharashtra', stateCode: '27', pincode: '440001', contactPerson: 'Mr. Borse (IT Officer)' });
     const c5 = this.saveCustomer({ name: 'Alpha Manufacturing Ltd', customerType: 'retail', gstin: '24AABCA4512R1ZT', phone: '9712001234', whatsapp: '9712001234', email: 'it@alphamfg.com', address: 'GIDC Industrial Estate, Phase II', city: 'Surat', state: 'Gujarat', stateCode: '24', pincode: '394221', contactPerson: 'Rajesh Shah' });
-    const c6 = this.saveCustomer({ name: 'Kohinoor Group of Hotels', customerType: 'retail', gstin: '27AABCK3312L1ZV', phone: '9823007788', whatsapp: '9823007788', email: 'finance@kohinoorhotels.com', address: '42 FC Road', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411005', contactPerson: 'Deepa Kulkarni' });
+    const c6 = this.saveCustomer({ name: 'Kohinoor Group of Hotels', customerType: 'retail', gstin: '27AABCK3312L1ZV', phone: '9823007788', whatsapp: '9823007788', email: 'finance@kohinoorhotels.com', address: '42 FC Road', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411005', contactPerson: 'Deepa Kulkarni', loyaltyPoints: 80, referredBy: c2.id });
 
     // ── Suppliers (IT & CCTV Distributors) ──
     const s1 = this.saveSupplier({ name: 'Ingram Micro India Pvt Ltd', gstin: '27AAACI5892K1ZE', phone: '1800209800', email: 'orders@ingrammicro.in', address: 'Kalina, Santacruz East', city: 'Mumbai', state: 'Maharashtra', stateCode: '27', pincode: '400098' });
