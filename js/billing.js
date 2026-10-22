@@ -4897,8 +4897,9 @@ body { font-family: 'Inter', Arial, sans-serif; font-size: 8.5pt; color: #1e293b
 
     box.innerHTML = results.map(res => {
       const isSale = res.type === 'sale';
-      const badgeClass = res.isUnderWarranty ? 'badge-paid' : (res.statusText.includes('Expired') ? 'badge-danger' : 'badge-draft');
-      const badgeIcon = res.isUnderWarranty ? 'verified' : (res.statusText.includes('Expired') ? 'gpp_bad' : 'info');
+      const isService = res.type === 'service';
+      const badgeClass = isService ? 'badge-sent' : (res.isUnderWarranty ? 'badge-paid' : (res.statusText.includes('Expired') ? 'badge-danger' : 'badge-draft'));
+      const badgeIcon = isService ? 'build' : (res.isUnderWarranty ? 'verified' : (res.statusText.includes('Expired') ? 'gpp_bad' : 'info'));
 
       return `
         <div class="card" style="margin-bottom:12px;border:1px solid var(--border);box-shadow:none;background:#ffffff">
@@ -4920,7 +4921,22 @@ body { font-family: 'Inter', Arial, sans-serif; font-size: 8.5pt; color: #1e293b
             </div>
 
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;font-size:.83rem;margin-bottom:12px;padding:10px;background:var(--bg);border-radius:var(--radius-sm)">
-              ${isSale ? `
+              ${isService ? `
+                <div>
+                  <div style="color:var(--text-secondary);font-size:.74rem;text-transform:uppercase;font-weight:600">Customer (Hardware Owner)</div>
+                  <div style="font-weight:600">${res.customerName}</div>
+                  ${res.customerPhone ? `<div style="color:var(--text-secondary);font-size:.78rem">📞 ${res.customerPhone}</div>` : ''}
+                </div>
+                <div>
+                  <div style="color:var(--text-secondary);font-size:.74rem;text-transform:uppercase;font-weight:600">Service Job Sheet</div>
+                  <div><strong>#${res.docNo}</strong></div>
+                  <div style="color:var(--text-secondary);font-size:.78rem">Inward: ${fmtDate(res.docDate)}</div>
+                </div>
+                <div>
+                  <div style="color:var(--text-secondary);font-size:.74rem;text-transform:uppercase;font-weight:600">Reported Problem</div>
+                  <div style="font-weight:600;color:var(--danger)">${res.problemReported || 'Hardware Fault'}</div>
+                </div>
+              ` : isSale ? `
                 <div>
                   <div style="color:var(--text-secondary);font-size:.74rem;text-transform:uppercase;font-weight:600">Customer (Sold To)</div>
                   <div style="font-weight:600">${res.customerName}</div>
@@ -4967,7 +4983,17 @@ body { font-family: 'Inter', Arial, sans-serif; font-size: 8.5pt; color: #1e293b
             ` : ''}
 
             <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap">
-              ${isSale ? `
+              ${isService ? `
+                <button class="btn btn-xs btn-secondary" onclick="App.closeModal();Services.viewJob('${res.docId}')">
+                  <span class="material-icons" style="font-size:13px">visibility</span> View Job Sheet
+                </button>
+                <button class="btn btn-xs btn-primary" onclick="App.closeModal();Services.openStatusModal('${res.docId}')">
+                  <span class="material-icons" style="font-size:13px">tune</span> Update Status
+                </button>
+                <button class="btn btn-xs btn-secondary" onclick="App.closeModal();Services.printToken('${res.docId}','compact_pos')">
+                  <span class="material-icons" style="font-size:13px">print</span> Claim Token
+                </button>
+              ` : isSale ? `
                 <button class="btn btn-xs btn-secondary" onclick="App.closeModal();Billing.viewDoc('${res.docId}','sales')">
                   <span class="material-icons" style="font-size:13px">receipt</span> View Invoice
                 </button>

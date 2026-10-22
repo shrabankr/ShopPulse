@@ -281,6 +281,7 @@ const DB = {
     CREDIT_NOTES: 'sp_credit_notes',
     DEBIT_NOTES: 'sp_debit_notes',
     QUOTATIONS: 'sp_quotations',
+    SERVICES: 'sp_service_jobs',
     EXPENSES: 'sp_expenses',
     MOVEMENTS: 'sp_movements',
     AUTH: 'sp_auth',
@@ -307,6 +308,7 @@ const DB = {
       creditNotePrefix: 'CN', creditNoteCounter: 1,
       debitNotePrefix: 'DN', debitNoteCounter: 1,
       quotationPrefix: 'QTN', quotationCounter: 1,
+      jobPrefix: 'JOB', jobCounter: 4,
       defaultPaymentTerms: 30, signatory: 'Shraban Kumar Mahato', termsAndConditions: 'Goods once sold will not be taken back.\nWarranty as per manufacturer terms.\nInterest @18% p.a. will be charged on delayed payments.',
     };
   },
@@ -626,6 +628,35 @@ const DB = {
     return no;
   },
 
+  /* ─── Service Center & Repair Job Sheets ─── */
+  getJobs() { return this._get(this.K.SERVICES) || []; },
+  getJobById(id) { return this.getJobs().find(j => j.id === id); },
+  saveJob(data, isNew = true) {
+    const list = this.getJobs();
+    if (!isNew) {
+      const i = list.findIndex(j => j.id === data.id);
+      data.updatedAt = new Date().toISOString();
+      if (i > -1) list[i] = data; else list.unshift(data);
+      this._set(this.K.SERVICES, list);
+      return data;
+    }
+    data.id = genId('JOB');
+    data.createdAt = new Date().toISOString();
+    data.updatedAt = data.createdAt;
+    list.unshift(data);
+    this._set(this.K.SERVICES, list);
+    return data;
+  },
+  deleteJob(id) {
+    this._set(this.K.SERVICES, this.getJobs().filter(j => j.id !== id));
+  },
+  nextJobNo() {
+    const b = this.getBiz();
+    const no = `${b.jobPrefix || 'JOB'}/${getFY()}/${String(b.jobCounter || 1).padStart(4, '0')}`;
+    this.setBiz({ ...b, jobCounter: (b.jobCounter || 1) + 1 });
+    return no;
+  },
+
   /* ─── Hardware Serial Number & Warranty Engine ─── */
   searchSerial(query) {
     if (!query || typeof query !== 'string') return [];
@@ -728,6 +759,28 @@ const DB = {
           }
         }
       });
+    });
+
+    // 3. Search Service / Repair Job Sheets
+    const jobs = this.getJobs();
+    jobs.forEach(job => {
+      const serials = (job.serialNo || '').toLowerCase();
+      if (serials && serials.includes(q)) {
+        results.push({
+          type: 'service',
+          docId: job.id,
+          docNo: job.jobNo,
+          docDate: job.date,
+          customerName: job.customerName,
+          customerPhone: job.customerPhone || '',
+          productName: `${job.deviceType || 'Device'} — ${job.brandModel || 'Hardware'}`,
+          serialNo: job.serialNo,
+          warranty: 'Service Warranty (30 Days)',
+          statusText: `Service Center: ${job.status.toUpperCase()}`,
+          jobStatus: job.status,
+          problemReported: job.problemReported
+        });
+      }
     });
 
     return results;
@@ -1802,6 +1855,95 @@ const DB = {
       shippingCharges: 350,
       notes: 'Corporate office workstation quote. Converted to Invoice SCS/2024-25/0005.',
       ...q2Totals
+    }, true);
+
+    // ── Sample Service Center & Repair Job Sheets ──
+    this.saveJob({
+      jobNo: 'JOB/2024-25/0001',
+      date: daysAgo(3),
+      expectedDeliveryDate: daysAgo(-1),
+      customerId: c1.id,
+      customerName: c1.name,
+      customerPhone: c1.phone || '9822014589',
+      customerAddress: `${c1.address || ''}, ${c1.city || ''}`,
+      deviceType: 'Laptop',
+      brandModel: 'Dell Inspiron 15 3511',
+      serialNo: 'CN-08K92-12903',
+      passwordPin: 'Dell@2024',
+      accessories: 'Original 65W Charger, Laptop Bag',
+      physicalCondition: 'Minor scratches on back lid, screen intact',
+      problemReported: 'No display on boot, power LED blinks 3 amber & 5 white. Needs urgent RAM/display diagnosis.',
+      diagnosticsNotes: 'RAM socket cleaned, installed 8GB DDR4 module. Display working fine. Running 24hr burn-in test.',
+      assignedTechnician: 'Amit (Senior Hardware Tech)',
+      estimatedCost: 2800,
+      advancePaid: 500,
+      advancePaymentMethod: 'UPI',
+      status: 'ready',
+      finalCost: 2800,
+      itemsUsed: [
+        { name: 'Motherboard Display Rail Chip Repair', hsn: '998731', qty: 1, rate: 1200, gstRate: 18 },
+        { productId: p7.id, name: 'Kingston 240GB 2.5 SATA SSD Upgrade', hsn: '8471', qty: 1, rate: 1600, gstRate: 18 }
+      ],
+      notes: 'Customer requested data backup before reinstalling Windows. Backup confirmed in safe drive.'
+    }, true);
+
+    this.saveJob({
+      jobNo: 'JOB/2024-25/0002',
+      date: daysAgo(7),
+      expectedDeliveryDate: daysAgo(4),
+      customerId: null,
+      customerName: 'Rajesh Mehra',
+      customerPhone: '9823456789',
+      customerAddress: 'Kothrud, Pune',
+      deviceType: 'CCTV DVR',
+      brandModel: 'CP PLUS 8-Channel HD DVR (CP-UVR-0801E1)',
+      serialNo: 'CP-UVR-0801E-7781',
+      passwordPin: 'admin / blank',
+      accessories: '12V Power Adapter, USB Mouse',
+      physicalCondition: 'Dusty chassis, BNC port 3 loose',
+      problemReported: 'Administrator password forgotten, channel 3 showing black screen video loss.',
+      diagnosticsNotes: 'Board firmware reflashed with official CP Plus reset patch. Re-soldered loose BNC socket 3. All 8 channels recording ok.',
+      assignedTechnician: 'Sandeep (CCTV Tech)',
+      estimatedCost: 1200,
+      advancePaid: 0,
+      advancePaymentMethod: 'Cash',
+      status: 'delivered',
+      finalCost: 1200,
+      convertedToInvoiceNo: 'SCS/2024-25/0007',
+      deliveredAt: daysAgo(4),
+      itemsUsed: [
+        { name: 'DVR Firmware Reset & BNC Port Repair Service', hsn: '998714', qty: 1, rate: 1200, gstRate: 18 }
+      ],
+      notes: 'Handed over to customer with fresh admin credentials: admin / Pass@123'
+    }, true);
+
+    this.saveJob({
+      jobNo: 'JOB/2024-25/0003',
+      date: daysAgo(1),
+      expectedDeliveryDate: daysAgo(-3),
+      customerId: c3 ? c3.id : null,
+      customerName: c3 ? c3.name : 'Vikram Malhotra',
+      customerPhone: '9970112233',
+      customerAddress: 'Hadapsar, Pune',
+      deviceType: 'Desktop PC',
+      brandModel: 'Custom Assembled Intel Core i5 Tower',
+      serialNo: 'APC-PC-2023-4412',
+      passwordPin: 'None',
+      accessories: 'CPU Tower Cabinet Only (No cables)',
+      physicalCondition: 'Front USB port cracked, cabinet side panel thumb screws missing',
+      problemReported: 'PC restarting randomly under load, burning electronic smell from power supply fan.',
+      diagnosticsNotes: 'SMPS secondary capacitor leaking. Tested with shop test bench PSU, motherboard and GPU boot normal. Waiting for replacement 550W Bronze PSU.',
+      assignedTechnician: 'Amit (Senior Hardware Tech)',
+      estimatedCost: 3600,
+      advancePaid: 1000,
+      advancePaymentMethod: 'UPI',
+      status: 'waiting_parts',
+      finalCost: 3600,
+      itemsUsed: [
+        { name: 'Cabinet Diagnostic & Assembly Labor', hsn: '998731', qty: 1, rate: 600, gstRate: 18 },
+        { name: 'Cooler Master 550W 80+ Bronze Power Supply', hsn: '8504', qty: 1, rate: 3000, gstRate: 18 }
+      ],
+      notes: 'Ordered replacement PSU from Redington distributor. Expected arrival tomorrow morning.'
     }, true);
 
     this._set(this.K.SEEDED, true);

@@ -44,6 +44,7 @@ const App = {
     const unpaidSales = DB.getSales().filter(s => ['unpaid', 'overdue'].includes(s.status)).length;
     const unpaidBuys = DB.getPurchases().filter(p => ['unpaid', 'overdue'].includes(p.status)).length;
     const lowStock = DB.getProducts().filter(p => p.reorderLevel > 0 && p.stock <= p.reorderLevel).length;
+    const activeJobs = DB.getJobs ? DB.getJobs().filter(j => ['received', 'diagnosing', 'waiting_parts'].includes(j.status)).length : 0;
 
     const limits = DB.getTrialLimits();
     const hasBranding = limits.canSetBranding;
@@ -69,6 +70,7 @@ const App = {
           <span class="nav-section-label">Transactions</span>
           <a href="#billing-sales" class="nav-item" data-r="billing-sales"><span class="material-icons">receipt_long</span><span>Sales Invoices</span></a>
           <a href="#quotations" class="nav-item" data-r="quotations"><span class="material-icons">request_quote</span><span>Quotations / Estimates</span></a>
+          <a href="#services" class="nav-item" data-r="services"><span class="material-icons">build</span><span>Repairs &amp; Services</span>${activeJobs ? `<span class="nav-badge warn">${activeJobs}</span>` : ''}</a>
           ${isStaff ? '' : `<a href="#billing-purchases" class="nav-item" data-r="billing-purchases"><span class="material-icons">shopping_bag</span><span>Purchase Bills</span></a>`}
           <a href="#returns" class="nav-item" data-r="returns"><span class="material-icons">assignment_return</span><span>Returns &amp; Notes</span></a>
           ${isStaff ? '' : `<a href="#expenses" class="nav-item" data-r="expenses"><span class="material-icons">receipt</span><span>Expenses</span></a>`}
@@ -186,6 +188,7 @@ const App = {
     const titles = {
       dashboard: 'Dashboard', 'billing-sales': 'Sales Invoices',
       quotations: 'Quotations & Estimates',
+      services: 'Repairs & Services',
       'billing-purchases': 'Purchase Bills',
       returns: 'Returns & Notes', 'returns-sales': 'Customer Returns (Credit Notes)', 'returns-purchases': 'Supplier Returns (Debit Notes)',
       expenses: 'Operating Expenses',
@@ -228,6 +231,7 @@ const App = {
       case 'dashboard': this.renderDashboard(c); break;
       case 'billing-sales': Billing.render(c, 'sales'); break;
       case 'quotations': Billing.renderQuotations(c); break;
+      case 'services': Services.render(c); break;
       case 'billing-purchases': Billing.render(c, 'purchases'); break;
       case 'returns': Billing.renderReturns(c); break;
       case 'returns-sales': Billing.renderReturns(c, 'sales'); break;
@@ -261,6 +265,9 @@ const App = {
     const invValue = products.reduce((s, p) => s + p.stock * p.purchasePrice, 0);
     const lowStock = products.filter(p => p.reorderLevel > 0 && p.stock <= p.reorderLevel);
     const overdue = sales.filter(s => s.status === 'overdue');
+    const allJobs = DB.getJobs ? DB.getJobs() : [];
+    const activeJobsList = allJobs.filter(j => ['received', 'diagnosing', 'waiting_parts'].includes(j.status));
+    const readyJobsList = allJobs.filter(j => j.status === 'ready');
     const monthlyRevenue = this._monthly(sales);
     const topProds = this._topProducts(sales);
 
@@ -316,6 +323,16 @@ const App = {
           </div>
 
           <div class="dashboard-alerts">
+            ${(activeJobsList.length || readyJobsList.length) ? `
+              <div class="alert-card alert-warning" style="border-left:4px solid #f59e0b">
+                <span class="material-icons" style="color:#d97706">build</span>
+                <div>
+                  <strong>${activeJobsList.length} In-Shop Device Repair${activeJobsList.length === 1 ? '' : 's'}</strong>
+                  <p>${readyJobsList.length > 0 ? `<span style="color:var(--success);font-weight:700">${readyJobsList.length} ready for pickup</span>` : 'Diagnosis &amp; repair in progress'}</p>
+                </div>
+                <a href="#services" onclick="App.route('#services')" class="alert-action">Manage</a>
+              </div>
+            ` : ''}
             ${overdue.length ? `<div class="alert-card alert-danger">
               <span class="material-icons">warning</span>
               <div><strong>${overdue.length} Overdue Invoice${overdue.length > 1 ? 's' : ''}</strong>
