@@ -394,6 +394,33 @@ const DB = {
     this._set(this.K.PRODUCTS, list);
     return data;
   },
+  saveProductsBulk(items) {
+    const list = this.getProducts();
+    const map = new Map(list.map(p => [p.id, p]));
+    const nameMap = new Map(list.map(p => [p.name.trim().toLowerCase(), p]));
+    const skuMap = new Map(list.filter(p => p.sku).map(p => [p.sku.trim().toLowerCase(), p]));
+
+    items.forEach(data => {
+      let existing = null;
+      if (data.id && map.has(data.id)) existing = map.get(data.id);
+      else if (data.sku && skuMap.has(data.sku.trim().toLowerCase())) existing = skuMap.get(data.sku.trim().toLowerCase());
+      else if (data.name && nameMap.has(data.name.trim().toLowerCase())) existing = nameMap.get(data.name.trim().toLowerCase());
+
+      if (existing) {
+        Object.assign(existing, data);
+      } else {
+        if (!data.id) data.id = genId('P');
+        if (!data.createdAt) data.createdAt = new Date().toISOString();
+        list.push(data);
+        map.set(data.id, data);
+        if (data.name) nameMap.set(data.name.trim().toLowerCase(), data);
+        if (data.sku) skuMap.set(data.sku.trim().toLowerCase(), data);
+      }
+    });
+
+    this._set(this.K.PRODUCTS, list);
+    return list;
+  },
   deleteProduct(id) { this._set(this.K.PRODUCTS, this.getProducts().filter(p => p.id !== id)); },
   adjustStock(productId, delta) {
     const products = this.getProducts().map(p =>

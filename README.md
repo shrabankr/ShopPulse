@@ -10,6 +10,7 @@
 - 🛠️ **Service & Repair Job Sheet System**: Complete intake workflow for customer laptops, desktops, DVRs, CCTV cameras, and printers with 3" thermal claim tokens, technician diagnostics, and 1-click conversion to GST Tax Invoices (SAC 998731).
 - 📖 **Party Ledger & Statement of Account (Khata)**: Complete account statement for Customers and Suppliers with opening balances, running Dr/Cr debit-credit calculations, A4 PDF printable statement, 1-click CSV export, and WhatsApp khata reminder dispatch.
 - 🛡️ **Automated Local Backup & Data Safety (Desktop)**: Background daily rolling backup saved silently to your local Documents folder with automated 7-day retention cleanup, detected backups list with 1-click restore, and File Explorer folder access.
+- 📦 **Bulk Excel / CSV Product & Opening Stock Import**: Download ready sample template, import hundreds of products in 1 click, visual verification preview grid with error detection, smart upsert (update existing & add new), and 1-click catalog export.
 - 🛡️ **Hardware Serial Number (S/N) & IMEI Tracking**: Record line-item serial numbers across Sales Invoices, Purchase Bills, and print them on all receipts.
 - ⏳ **Warranty Engine & Expiry Tracking**: Supports Testing Warranty, 3M, 6M, 1–5 Years, and Lifetime coverage with live active/expired badges.
 - 🔍 **Hardware Serial & Warranty Lookup Hub**: 1-click topbar search (`Warranty S/N`) to instantly look up any S/N, view customer invoice, remaining warranty, and distributor RMA records.
