@@ -167,6 +167,16 @@ app.on('window-all-closed', () => {
 });
 
 // ── Native Desktop Print & PDF Export Handlers ──
+ipcMain.handle('print-now', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed()) return;
+  win.webContents.print({ silent: false, printBackground: true }, (success, failureReason) => {
+    if (!success && failureReason !== 'cancelled') {
+      console.warn('Native print notice:', failureReason);
+    }
+  });
+});
+
 ipcMain.handle('print-html', async (event, payload) => {
   const fs = require('fs');
   const path = require('path');
@@ -197,7 +207,7 @@ ipcMain.handle('print-html', async (event, payload) => {
       <span style="font-size:.82rem;color:#94a3b8;font-weight:600">| ${title}</span>
     </div>
     <div style="display:flex;gap:10px;align-items:center">
-      <button onclick="window.print()" style="background:#2563eb;color:#fff;border:none;padding:7px 16px;border-radius:6px;font-weight:700;font-size:.85rem;cursor:pointer;display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 6px rgba(37,99,235,0.4)">
+      <button id="btn-do-print" onclick="if(window.desktopApp&&window.desktopApp.printNow){window.desktopApp.printNow();}else{window.print();}" style="background:#2563eb;color:#fff;border:none;padding:7px 16px;border-radius:6px;font-weight:700;font-size:.85rem;cursor:pointer;display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 6px rgba(37,99,235,0.4)">
         🖨️ Print
       </button>
       <button id="btn-save-as-pdf" style="background:#059669;color:#fff;border:none;padding:7px 16px;border-radius:6px;font-weight:700;font-size:.85rem;cursor:pointer;display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 6px rgba(5,150,105,0.4)">
@@ -216,15 +226,19 @@ ipcMain.handle('print-html', async (event, payload) => {
   </style>
   <script>
     document.getElementById('btn-save-as-pdf')?.addEventListener('click', async () => {
-      if (window.desktopApp && window.desktopApp.savePdf) {
-        const clone = document.documentElement.cloneNode(true);
-        clone.querySelectorAll('.print-toolbar').forEach(el => el.remove());
-        await window.desktopApp.savePdf({
-          html: '<!DOCTYPE html><html>' + clone.innerHTML + '</html>',
-          title: '${sanitizedTitle.replace(/'/g, "\\'")}'
-        });
-      } else {
-        window.print();
+      const btn = document.getElementById('btn-save-as-pdf');
+      if (btn) btn.textContent = '⏳ Preparing PDF...';
+      try {
+        if (window.desktopApp && window.desktopApp.savePdf) {
+          await window.desktopApp.savePdf({
+            title: '${sanitizedTitle.replace(/'/g, "\\'")}',
+            fromCurrentWindow: true
+          });
+        }
+      } catch (err) {
+        console.error('PDF save error:', err);
+      } finally {
+        if (btn) btn.innerHTML = '📄 Save as PDF';
       }
     });
   </script>
@@ -413,19 +427,20 @@ ipcMain.handle('save-backup', async (event, { data, defaultDir, filename }) => {
   return { success: true, filePath };
 });
 
-ipcMain.handle('save-pdf', async (event, { html, title, defaultDir }) => {
+ipcMain.handle('save-pdf', async (event, payload = {}) => {
   const fs = require('fs');
   const path = require('path');
-  const targetWin = BrowserWindow.getFocusedWindow() || mainWindow;
+  const senderWin = BrowserWindow.fromWebContents(event.sender);
+  const targetWin = senderWin || BrowserWindow.getFocusedWindow() || mainWindow;
 
-  // Clean filename: Replace spaces, slashes and special chars with underscores/dashes
-  const cleanTitle = (title || 'ShopPulse_Document')
+  const title = payload.title || 'ShopPulse_Document';
+  const cleanTitle = title
     .replace(/[\/\\:*?"<>|]/g, '-')
     .replace(/\s+/g, '_')
     .replace(/_+/g, '_');
   const defaultFilename = `${cleanTitle}.pdf`;
-  const baseDir = defaultDir || app.getPath('documents') || app.getPath('downloads');
-  const defaultPath = path.join(baseDir, defaultFilename);
+  const defaultDir = payload.defaultDir || app.getPath('documents') || app.getPath('downloads');
+  const defaultPath = path.join(defaultDir, defaultFilename);
 
   const { canceled, filePath } = await dialog.showSaveDialog(targetWin, {
     title: `Save PDF — ${cleanTitle}`,
@@ -435,56 +450,76 @@ ipcMain.handle('save-pdf', async (event, { html, title, defaultDir }) => {
 
   if (canceled || !filePath) return { canceled: true };
 
-  let pdfWin = new BrowserWindow({
-    width: 900,
-    height: 1000,
-    show: false,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
-  });
+  try {
+    let pdfBuffer;
 
-  // Ensure clean HTML without toolbar
-  let cleanHtml = html || '';
-  cleanHtml = cleanHtml.replace(/<div class="print-toolbar"[\s\S]*?<\/div>/gi, '');
-
-  const tempPdfPath = path.join(app.getPath('temp'), `shoppulse_pdf_gen_${Date.now()}.html`);
-  fs.writeFileSync(tempPdfPath, cleanHtml, 'utf8');
-
-  await pdfWin.loadFile(tempPdfPath);
-
-  // Ensure DOM is fully rendered
-  await new Promise(resolve => {
-    if (pdfWin.webContents.isLoading()) {
-      pdfWin.webContents.once('did-finish-load', resolve);
+    // Direct capture from current window if requested
+    if (payload.fromCurrentWindow && senderWin && !senderWin.isDestroyed()) {
+      pdfBuffer = await senderWin.webContents.printToPDF({
+        printBackground: true,
+        pageSize: 'A4',
+        margins: { top: 0.15, bottom: 0.15, left: 0.15, right: 0.15 },
+      });
     } else {
-      resolve();
+      // Offscreen window generation for background PDF exports
+      let pdfWin = new BrowserWindow({
+        width: 900,
+        height: 1000,
+        show: false,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+        },
+      });
+
+      let cleanHtml = payload.html || '';
+      cleanHtml = cleanHtml.replace(/<div class="print-toolbar"[\s\S]*?<\/div>/gi, '');
+
+      const tempPdfPath = path.join(app.getPath('temp'), `shoppulse_pdf_${Date.now()}.html`);
+      fs.writeFileSync(tempPdfPath, cleanHtml, 'utf8');
+
+      await pdfWin.loadFile(tempPdfPath);
+
+      const isCompactThermal = cleanHtml.includes('compact-pos') || cleanHtml.includes('compact_pos') || cleanHtml.includes('80mm');
+
+      pdfBuffer = await pdfWin.webContents.printToPDF({
+        printBackground: true,
+        pageSize: isCompactThermal ? { width: 80000, height: 297000 } : 'A4',
+        margins: { top: 0.15, bottom: 0.15, left: 0.15, right: 0.15 },
+      });
+
+      if (pdfWin && !pdfWin.isDestroyed()) {
+        pdfWin.close();
+      }
+      try { fs.unlinkSync(tempPdfPath); } catch (e) {}
     }
-  });
-  await new Promise(r => setTimeout(r, 250));
 
-  const isCompactThermal = cleanHtml.includes('compact-pos') || cleanHtml.includes('compact_pos') || cleanHtml.includes('80mm');
+    fs.writeFileSync(filePath, pdfBuffer);
 
-  const pdfBuffer = await pdfWin.webContents.printToPDF({
-    printBackground: true,
-    pageSize: isCompactThermal ? { width: 80000, height: 297000 } : 'A4',
-    margins: { top: 0.15, bottom: 0.15, left: 0.15, right: 0.15 },
-  });
+    // Immediately open file in viewer and reveal in Windows File Explorer
+    try {
+      shell.showItemInFolder(filePath);
+    } catch (e) {}
 
-  fs.writeFileSync(filePath, pdfBuffer);
+    dialog.showMessageBox(targetWin, {
+      type: 'info',
+      title: 'PDF Saved Successfully',
+      message: 'Your PDF has been saved successfully!',
+      detail: `File Location:\n${filePath}\n\nThe folder has been opened in Windows File Explorer.`,
+      buttons: ['Open PDF', 'OK'],
+      defaultId: 0,
+    }).then(res => {
+      if (res.response === 0) {
+        shell.openPath(filePath);
+      }
+    }).catch(() => {});
 
-  if (pdfWin && !pdfWin.isDestroyed()) {
-    pdfWin.close();
-    pdfWin = null;
+    return { success: true, filePath };
+  } catch (err) {
+    console.error('PDF export error:', err);
+    dialog.showErrorBox('PDF Save Error', `Could not save PDF file:\n${err.message}`);
+    return { success: false, error: err.message };
   }
-
-  try { fs.unlinkSync(tempPdfPath); } catch (e) {}
-
-  // Open saved PDF in system default viewer
-  try { shell.openPath(filePath); } catch (e) {}
-
-  return { success: true, filePath };
 });
 
 // ── Security: block new window creation ──
