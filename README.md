@@ -6,7 +6,7 @@
 
 ---
 
-## 🌟 What's New in v1.2.0 — Specialized Computer & Electronics Store Edition
+## 🌟 What's New in v1.3.0 — Specialized Computer & Electronics Store Edition
 - 🛠️ **Service & Repair Job Sheet System**: Complete intake workflow for customer laptops, desktops, DVRs, CCTV cameras, and printers with 3" thermal claim tokens, technician diagnostics, and 1-click conversion to GST Tax Invoices (SAC 998731).
 - 📖 **Party Ledger & Statement of Account (Khata)**: Complete account statement for Customers and Suppliers with opening balances, running Dr/Cr debit-credit calculations, A4 PDF printable statement, 1-click CSV export, and WhatsApp khata reminder dispatch.
 - 🛡️ **Automated Local Backup & Data Safety (Desktop)**: Background daily rolling backup saved silently to your local Documents folder with automated 7-day retention cleanup, detected backups list with 1-click restore, and File Explorer folder access.
