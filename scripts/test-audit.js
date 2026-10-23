@@ -101,6 +101,7 @@ function createMockElement(id, tag = 'div') {
     },
     style: {},
     appendChild: () => {},
+    closest: () => null,
     querySelector: () => null,
     querySelectorAll: () => [],
     addEventListener: () => {},
@@ -357,12 +358,20 @@ assert(typeof custLedger.closingBalance === 'number', `Customer ledger closing b
 const ledgerHtml = context.CRM.generateLedgerHtml(testCust.id, 'customers');
 assert(typeof ledgerHtml === 'string' && ledgerHtml.includes('Sharma Electronics'), 'Ledger HTML rendered successfully with customer name');
 
-// Phase 9: App Navigation & Router Tests
-console.log('\n--- Phase 9: App Navigation & Collapsible Sidebar Tests ---');
+// Phase 9: App Navigation, Roles & Collapsible Sidebar Tests
+console.log('\n--- Phase 9: App Navigation, Roles & Collapsible Sidebar Tests ---');
 runFile(path.resolve(__dirname, '..', 'js/app.js'), context, 'App');
 assert(typeof context.App === 'object', 'App module loaded successfully');
 
-// Test sidebar collapse toggle
+// Test 9.1: Role security - default to staff mode
+assert(context.DB.getRole() === 'staff', 'Security: Default active role is staff mode');
+assert(context.DB.verifyOwnerPin('1234') === true, 'Owner default PIN 1234 verifies successfully');
+context.DB.setRole('owner');
+assert(context.DB.getRole() === 'owner', 'Switched to owner mode successfully');
+context.App.init();
+assert(context.DB.getRole() === 'staff', 'App.init() securely defaults active session back to staff mode on launch');
+
+// Test 9.2: Test sidebar collapse toggle
 const initialCollapsed = context.App.getCollapsedNav();
 assert(Array.isArray(initialCollapsed), 'getCollapsedNav returns array');
 context.App.toggleNavSection('transactions');
@@ -396,3 +405,4 @@ if (failedTests > 0) {
 console.log('======================================================');
 
 if (failedTests > 0) process.exit(1);
+process.exit(0);

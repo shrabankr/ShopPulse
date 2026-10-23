@@ -8,6 +8,8 @@ const App = {
 
   init() {
     DB.seed();
+    // Always default to Staff Mode on launch / app open for security & privacy
+    DB.setRole('staff');
     this.buildSidebar();
     this.buildTopbar();
     window.addEventListener('hashchange', () => this.route());
@@ -173,7 +175,7 @@ const App = {
 
     let modeBadge = '';
     if (role === 'staff') {
-      modeBadge = `<button class="btn btn-xs btn-secondary" onclick="App.toggleRoleModal()" title="Click to unlock Owner Mode" style="border-radius:20px;padding:3px 10px;font-size:.78rem"><span class="material-icons" style="font-size:13px;color:var(--text-secondary)">lock</span> Staff Mode ▾</button>`;
+      modeBadge = `<button class="btn btn-xs btn-secondary" onclick="App.toggleRoleModal()" title="Currently in Staff Mode. Click to unlock Owner Mode (PIN: 1234)" style="border-radius:20px;padding:3px 10px;font-size:.78rem;font-weight:600"><span class="material-icons" style="font-size:13px;color:var(--warning)">lock</span> Staff Mode ▾</button>`;
     } else if (role === 'developer') {
       modeBadge = `<button class="btn btn-xs" onclick="App.toggleRoleModal()" title="Click to switch to Owner or Staff Mode" style="border-radius:20px;padding:3px 10px;font-size:.78rem;background:hsl(271,78%,50%);color:#fff"><span class="material-icons" style="font-size:13px">terminal</span> Dev Mode ▾</button>`;
     } else {
@@ -286,6 +288,15 @@ const App = {
       return;
     }
 
+    // Guard owner-only sections when in Staff Mode
+    const ownerOnlyRoutes = ['billing-purchases', 'returns-purchases', 'expenses', 'payables', 'suppliers', 'reports', 'gst'];
+    if (DB.getRole() === 'staff' && ownerOnlyRoutes.includes(r)) {
+      this.toast('🔒 This section requires Owner Mode. Enter PIN to unlock.', 'warning');
+      this.toggleRoleModal();
+      this.route('#dashboard');
+      return;
+    }
+
     switch (r) {
       case 'dashboard': this.renderDashboard(c); break;
       case 'billing-sales': Billing.render(c, 'sales'); break;
@@ -363,15 +374,15 @@ const App = {
             <div class="kpi-icon"><span class="material-icons">payments</span></div>
             <div class="kpi-content">
               <div class="kpi-label">Payables</div>
-              <div class="kpi-value">${fmtCurrency(payables)}</div>
-              <div class="kpi-sub">${purchases.filter(p => p.status !== 'paid').length} pending bills</div>
+              <div class="kpi-value">${DB.getRole() === 'staff' ? '<span style="font-size:1.05rem;color:var(--text-secondary);font-weight:700">🔒 Hidden</span>' : fmtCurrency(payables)}</div>
+              <div class="kpi-sub">${DB.getRole() === 'staff' ? 'Locked in Staff Mode' : `${purchases.filter(p => p.status !== 'paid').length} pending bills`}</div>
             </div>
           </div>
           <div class="kpi-card kpi-success">
             <div class="kpi-icon"><span class="material-icons">inventory</span></div>
             <div class="kpi-content">
               <div class="kpi-label">Inventory Value</div>
-              <div class="kpi-value">${fmtCurrency(invValue)}</div>
+              <div class="kpi-value">${DB.getRole() === 'staff' ? '<span style="font-size:1.05rem;color:var(--text-secondary);font-weight:700">🔒 Hidden</span>' : fmtCurrency(invValue)}</div>
               <div class="kpi-sub">${products.length} products</div>
             </div>
           </div>
@@ -472,10 +483,10 @@ const App = {
               label: 'Revenue', data: monthlyRevenue.map(m => m.revenue),
               backgroundColor: 'rgba(59,130,246,0.85)', borderRadius: 5, borderSkipped: false,
             },
-            {
+            ...(DB.getRole() === 'staff' ? [] : [{
               label: 'Purchases', data: monthlyRevenue.map(m => m.purchases),
               backgroundColor: 'rgba(239,68,68,0.6)', borderRadius: 5, borderSkipped: false,
-            }
+            }])
           ]
         },
         options: {

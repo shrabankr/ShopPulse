@@ -1344,7 +1344,7 @@ const DB = {
   /* ─── Mode & Security ─── */
   getAuth() {
     return this._get(this.K.AUTH) || {
-      role: 'owner', // 'staff' | 'owner' | 'developer'
+      role: 'staff', // Default role on launch: 'staff' | 'owner' | 'developer'
       ownerPin: '1234',
       devKey: 'andropcsoft',
       lastBackupDate: null,
@@ -1354,7 +1354,7 @@ const DB = {
     };
   },
   setAuth(a) { this._set(this.K.AUTH, a); },
-  getRole() { return this.getAuth().role || 'owner'; },
+  getRole() { return this.getAuth().role || 'staff'; },
   setRole(role) {
     const a = this.getAuth();
     a.role = role;
