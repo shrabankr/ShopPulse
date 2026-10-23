@@ -15,6 +15,18 @@
 
 ---
 
+## 🌟 The Golden Rule — 100% Backward Compatibility & Trust
+
+> **ALWAYS PRESERVE EXISTING BUSINESS DATA AND SETTINGS.**
+> Businesses rely on ShopPulse for their livelihood, GST tax filing records, invoices, and customer balances.
+> Updates, reinstalls, migrations, or feature additions must **NEVER** wipe, reset, alter, or corrupt existing user data or `localStorage`.
+> - Always support older database records gracefully (`item.field || defaultValue`).
+> - Never assume new fields exist on old records.
+> - Never overwrite existing data keys with default/seed templates once initialized (`sp_seeded`).
+> - Maintain rolling automated local backups so businesses can recover under any circumstances.
+
+---
+
 ## ⚠️ Critical Rules — Never Break These
 
 1. **NO build tools.** No npm, no webpack, no bundler. Plain `<script src="...">` tags only.
