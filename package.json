@@ -31,6 +31,7 @@
   ],
   "main": "electron/main.js",
   "scripts": {
+    "test": "node scripts/test-audit.js",
     "start": "electron .",
     "desktop": "electron .",
     "pack": "electron-packager . ShopPulse --platform=win32 --arch=x64 --out=dist --overwrite --icon=electron/icon.ico --ignore=\"^/(dist|\\.git)\" && node electron/inject-icon.js",
