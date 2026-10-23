@@ -579,6 +579,9 @@ const Services = {
         <button class="btn btn-secondary" onclick="Services.printTokenPrompt('${job.id}')" title="Print Token Slip">
           <span class="material-icons">print</span> Print Token
         </button>
+        <button class="btn btn-secondary" onclick="Services.exportTokenPDF('${job.id}', 'a4')" title="Save as PDF">
+          <span class="material-icons" style="color:#e74c3c">picture_as_pdf</span> PDF
+        </button>
         <button class="btn btn-primary" onclick="App.closeModal();Services.openStatusModal('${job.id}')">
           <span class="material-icons">tune</span> Update Status / Parts
         </button>
@@ -733,12 +736,15 @@ const Services = {
           <p style="color:var(--text-secondary);font-size:.85rem;margin:6px 0 16px">
             Select the desired print format. 3" Thermal slip is ideal for sticking on the device and handing customer a claim receipt.
           </p>
-          <div style="display:flex;gap:12px;justify-content:center">
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
             <button class="btn btn-primary" onclick="App.closeModal();Services.printToken('${job.id}', 'compact_pos')" style="padding:10px 16px">
               <span class="material-icons">receipt</span> 3" Thermal POS Slip (80mm)
             </button>
             <button class="btn btn-secondary" onclick="App.closeModal();Services.printToken('${job.id}', 'a4')" style="padding:10px 16px">
-              <span class="material-icons">description</span> Standard A4 / A5 Slip
+              <span class="material-icons">description</span> Standard A4 Slip
+            </button>
+            <button class="btn btn-secondary" onclick="App.closeModal();Services.exportTokenPDF('${job.id}', 'a4')" style="padding:10px 16px">
+              <span class="material-icons" style="color:#e74c3c">picture_as_pdf</span> Save as PDF
             </button>
           </div>
         </div>
@@ -751,9 +757,8 @@ const Services = {
   /* ═══════════════════════════════════════════
      GENERATE PRINTABLE HTML & DISPATCH
   ═══════════════════════════════════════════ */
-  printToken(jobId, format = 'compact_pos') {
-    const job = DB.getJobById(jobId);
-    if (!job) return;
+  generateTokenHtml(job, format = 'compact_pos') {
+    if (!job) return '';
     const biz = DB.getBiz();
     const estCost = parseFloat(job.finalCost || job.estimatedCost) || 0;
     const advPaid = parseFloat(job.advancePaid) || 0;
@@ -943,11 +948,56 @@ const Services = {
       `;
     }
 
+    return html;
+  },
+
+  printToken(jobId, format = 'compact_pos') {
+    const job = DB.getJobById(jobId);
+    if (!job) return;
+    const cleanJobNo = (job.jobNo || 'Token').replace(/[\/\\:*?"<>|]/g, '-');
+    const cleanParty = ((job.customerName || 'Customer').trim()).replace(/[\/\\:*?"<>|\s]+/g, '_');
+    const title = `JobSheet_${cleanJobNo}_${cleanParty}`;
+    const html = this.generateTokenHtml(job, format);
+
+    if (window.desktopApp && typeof window.desktopApp.printHtml === 'function') {
+      window.desktopApp.printHtml({ html, title });
+      return;
+    }
+
     const printWin = window.open('', '_blank', 'width=900,height=750');
     if (printWin) {
       printWin.document.open();
       printWin.document.write(html);
       printWin.document.close();
+    }
+  },
+
+  async exportTokenPDF(jobId, format = 'a4') {
+    const job = DB.getJobById(jobId);
+    if (!job) {
+      App.toast('Job not found for export', 'error');
+      return;
+    }
+    const cleanJobNo = (job.jobNo || 'Token').replace(/[\/\\:*?"<>|]/g, '-');
+    const cleanParty = ((job.customerName || 'Customer').trim()).replace(/[\/\\:*?"<>|\s]+/g, '_');
+    const title = `JobSheet_${cleanJobNo}_${cleanParty}`;
+    const html = this.generateTokenHtml(job, format);
+    const defaultDir = DB.getBiz().pdfSaveDir || '';
+
+    if (window.desktopApp && window.desktopApp.savePdf) {
+      App.toast('Preparing Job Sheet PDF...', 'info');
+      try {
+        const res = await window.desktopApp.savePdf({ html, title, defaultDir });
+        if (res && res.success) {
+          App.toast(`🎉 PDF Saved: ${res.filePath}`, 'success');
+        }
+      } catch (err) {
+        console.error('Job sheet PDF export error:', err);
+        this.printToken(jobId, format);
+      }
+    } else {
+      this.printToken(jobId, format);
+      App.toast('In the print dialog, choose "Save as PDF" 📄', 'info');
     }
   },
 

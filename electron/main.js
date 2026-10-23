@@ -167,12 +167,20 @@ app.on('window-all-closed', () => {
 });
 
 // ── Native Desktop Print & PDF Export Handlers ──
-ipcMain.handle('print-html', async (event, html) => {
+ipcMain.handle('print-html', async (event, payload) => {
+  const fs = require('fs');
   const path = require('path');
+  const html = typeof payload === 'string' ? payload : (payload.html || '');
+  const title = (typeof payload === 'object' && payload.title) ? payload.title : 'ShopPulse_Document';
+  const autoPrint = typeof payload === 'object' && typeof payload.autoPrint === 'boolean' ? payload.autoPrint : false;
+
+  const sanitizedTitle = title.replace(/[\/\\:*?"<>|]/g, '-').replace(/\s+/g, '_');
+
   let printWin = new BrowserWindow({
-    width: 920,
-    height: 950,
-    title: 'Print Preview & Dispatch — ShopPulse',
+    width: 960,
+    height: 980,
+    title: `${title} — ShopPulse`,
+    icon: path.join(__dirname, 'icon.ico'),
     autoHideMenuBar: true,
     show: true,
     webPreferences: {
@@ -186,11 +194,11 @@ ipcMain.handle('print-html', async (event, html) => {
   <div class="print-toolbar" style="position:sticky;top:0;left:0;right:0;z-index:99999;background:#0f172a;color:#fff;padding:10px 18px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 4px 12px rgba(0,0,0,0.3);font-family:system-ui,-apple-system,sans-serif;margin-bottom:12px">
     <div style="display:flex;align-items:center;gap:10px">
       <span style="font-weight:800;font-size:.95rem;color:#38bdf8">⚡ ShopPulse Dispatch</span>
-      <span style="font-size:.8rem;color:#94a3b8">| Select action:</span>
+      <span style="font-size:.82rem;color:#94a3b8;font-weight:600">| ${title}</span>
     </div>
     <div style="display:flex;gap:10px;align-items:center">
       <button onclick="window.print()" style="background:#2563eb;color:#fff;border:none;padding:7px 16px;border-radius:6px;font-weight:700;font-size:.85rem;cursor:pointer;display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 6px rgba(37,99,235,0.4)">
-        🖨️ Select Printer &amp; Print
+        🖨️ Print
       </button>
       <button id="btn-save-as-pdf" style="background:#059669;color:#fff;border:none;padding:7px 16px;border-radius:6px;font-weight:700;font-size:.85rem;cursor:pointer;display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 6px rgba(5,150,105,0.4)">
         📄 Save as PDF
@@ -209,7 +217,12 @@ ipcMain.handle('print-html', async (event, html) => {
   <script>
     document.getElementById('btn-save-as-pdf')?.addEventListener('click', async () => {
       if (window.desktopApp && window.desktopApp.savePdf) {
-        await window.desktopApp.savePdf({ html: document.documentElement.outerHTML, title: document.title || 'Invoice' });
+        const clone = document.documentElement.cloneNode(true);
+        clone.querySelectorAll('.print-toolbar').forEach(el => el.remove());
+        await window.desktopApp.savePdf({
+          html: '<!DOCTYPE html><html>' + clone.innerHTML + '</html>',
+          title: '${sanitizedTitle.replace(/'/g, "\\'")}'
+        });
       } else {
         window.print();
       }
@@ -218,23 +231,37 @@ ipcMain.handle('print-html', async (event, html) => {
   `;
 
   let processedHtml = html;
+  if (processedHtml.includes('<title>')) {
+    processedHtml = processedHtml.replace(/<title>.*?<\/title>/i, `<title>${title}</title>`);
+  } else if (processedHtml.includes('<head>')) {
+    processedHtml = processedHtml.replace('<head>', `<head><title>${title}</title>`);
+  }
+
   if (processedHtml.includes('<body')) {
     processedHtml = processedHtml.replace(/<body[^>]*>/i, match => `${match}\n${toolbarHtml}\n`);
   } else {
     processedHtml = toolbarHtml + processedHtml;
   }
 
-  const dataUri = 'data:text/html;charset=utf-8,' + encodeURIComponent(processedHtml);
-  await printWin.loadURL(dataUri);
+  const tempPreviewFile = path.join(app.getPath('temp'), `shoppulse_preview_${Date.now()}.html`);
+  fs.writeFileSync(tempPreviewFile, processedHtml, 'utf8');
 
-  printWin.webContents.on('did-finish-load', () => {
-    setTimeout(() => {
-      printWin.webContents.print({
-        silent: false,
-        printBackground: true,
-      });
-    }, 300);
+  await printWin.loadFile(tempPreviewFile);
+
+  printWin.on('closed', () => {
+    try { fs.unlinkSync(tempPreviewFile); } catch (e) {}
+    printWin = null;
   });
+
+  if (autoPrint) {
+    printWin.webContents.on('did-finish-load', () => {
+      setTimeout(() => {
+        if (printWin && !printWin.isDestroyed()) {
+          printWin.webContents.print({ silent: false, printBackground: true });
+        }
+      }, 350);
+    });
+  }
 
   return { success: true };
 });
@@ -389,12 +416,19 @@ ipcMain.handle('save-backup', async (event, { data, defaultDir, filename }) => {
 ipcMain.handle('save-pdf', async (event, { html, title, defaultDir }) => {
   const fs = require('fs');
   const path = require('path');
-  const sanitizedTitle = (title || 'ShopPulse_Invoice').replace(/[^a-zA-Z0-9_\-\.]/g, '_');
-  const defaultFilename = `${sanitizedTitle}.pdf`;
-  const defaultPath = defaultDir ? path.join(defaultDir, defaultFilename) : defaultFilename;
+  const targetWin = BrowserWindow.getFocusedWindow() || mainWindow;
 
-  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
-    title: 'Save Invoice as PDF — ShopPulse',
+  // Clean filename: Replace spaces, slashes and special chars with underscores/dashes
+  const cleanTitle = (title || 'ShopPulse_Document')
+    .replace(/[\/\\:*?"<>|]/g, '-')
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_');
+  const defaultFilename = `${cleanTitle}.pdf`;
+  const baseDir = defaultDir || app.getPath('documents') || app.getPath('downloads');
+  const defaultPath = path.join(baseDir, defaultFilename);
+
+  const { canceled, filePath } = await dialog.showSaveDialog(targetWin, {
+    title: `Save PDF — ${cleanTitle}`,
     defaultPath: defaultPath,
     filters: [{ name: 'PDF Documents (*.pdf)', extensions: ['pdf'] }],
   });
@@ -402,8 +436,8 @@ ipcMain.handle('save-pdf', async (event, { html, title, defaultDir }) => {
   if (canceled || !filePath) return { canceled: true };
 
   let pdfWin = new BrowserWindow({
-    width: 860,
-    height: 900,
+    width: 900,
+    height: 1000,
     show: false,
     webPreferences: {
       nodeIntegration: false,
@@ -411,10 +445,16 @@ ipcMain.handle('save-pdf', async (event, { html, title, defaultDir }) => {
     },
   });
 
-  const dataUri = 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
-  await pdfWin.loadURL(dataUri);
+  // Ensure clean HTML without toolbar
+  let cleanHtml = html || '';
+  cleanHtml = cleanHtml.replace(/<div class="print-toolbar"[\s\S]*?<\/div>/gi, '');
 
-  // Ensure DOM and fonts are completely loaded
+  const tempPdfPath = path.join(app.getPath('temp'), `shoppulse_pdf_gen_${Date.now()}.html`);
+  fs.writeFileSync(tempPdfPath, cleanHtml, 'utf8');
+
+  await pdfWin.loadFile(tempPdfPath);
+
+  // Ensure DOM is fully rendered
   await new Promise(resolve => {
     if (pdfWin.webContents.isLoading()) {
       pdfWin.webContents.once('did-finish-load', resolve);
@@ -422,23 +462,28 @@ ipcMain.handle('save-pdf', async (event, { html, title, defaultDir }) => {
       resolve();
     }
   });
-  await new Promise(r => setTimeout(r, 200));
+  await new Promise(r => setTimeout(r, 250));
+
+  const isCompactThermal = cleanHtml.includes('compact-pos') || cleanHtml.includes('compact_pos') || cleanHtml.includes('80mm');
 
   const pdfBuffer = await pdfWin.webContents.printToPDF({
     printBackground: true,
-    pageSize: 'A4',
-    margins: { top: 0.2, bottom: 0.2, left: 0.2, right: 0.2 },
+    pageSize: isCompactThermal ? { width: 80000, height: 297000 } : 'A4',
+    margins: { top: 0.15, bottom: 0.15, left: 0.15, right: 0.15 },
   });
 
   fs.writeFileSync(filePath, pdfBuffer);
-  
+
   if (pdfWin && !pdfWin.isDestroyed()) {
     pdfWin.close();
     pdfWin = null;
   }
 
-  // Open saved PDF in default PDF reader automatically
-  shell.openPath(filePath);
+  try { fs.unlinkSync(tempPdfPath); } catch (e) {}
+
+  // Open saved PDF in system default viewer
+  try { shell.openPath(filePath); } catch (e) {}
+
   return { success: true, filePath };
 });
 

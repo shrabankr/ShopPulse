@@ -835,6 +835,9 @@ const CRM = {
         <button class="btn btn-secondary" onclick="CRM.exportLedgerCSV('${contactId}','${type}','${from || ''}','${to || ''}')" title="Export Ledger as CSV / Excel">
           <span class="material-icons">download</span> Export CSV
         </button>
+        <button class="btn btn-secondary" onclick="CRM.exportLedgerPDF('${contactId}','${type}','${from || ''}','${to || ''}')" title="Save Statement as PDF">
+          <span class="material-icons" style="color:#e74c3c">picture_as_pdf</span> PDF
+        </button>
         <button class="btn btn-primary" onclick="CRM.printLedger('${contactId}','${type}','${from || ''}','${to || ''}')" title="Print Official A4 Statement of Accounts">
           <span class="material-icons">print</span> Print Statement
         </button>
@@ -850,11 +853,11 @@ const CRM = {
   },
 
   /* ═══════════════════════════════════════════
-     PRINT OFFICIAL STATEMENT OF ACCOUNT (A4)
+     GENERATE STATEMENT OF ACCOUNT HTML (A4)
   ═══════════════════════════════════════════ */
-  printLedger(contactId, type, fromDate, toDate) {
+  generateLedgerHtml(contactId, type, fromDate, toDate) {
     const ledger = this.computeLedger(contactId, type, fromDate, toDate);
-    if (!ledger) return;
+    if (!ledger) return '';
     const biz = DB.getBiz();
     const c = ledger.contact;
     const isCustomer = ledger.isCustomer;
@@ -1017,11 +1020,56 @@ const CRM = {
       </html>
     `;
 
+    return html;
+  },
+
+  printLedger(contactId, type, fromDate, toDate) {
+    const ledger = this.computeLedger(contactId, type, fromDate, toDate);
+    if (!ledger) return;
+    const c = ledger.contact;
+    const cleanParty = ((c.name || 'Account').trim()).replace(/[\/\\:*?"<>|\s]+/g, '_');
+    const title = `Statement_${cleanParty}_${getFY()}`;
+    const html = this.generateLedgerHtml(contactId, type, fromDate, toDate);
+
+    if (window.desktopApp && typeof window.desktopApp.printHtml === 'function') {
+      window.desktopApp.printHtml({ html, title });
+      return;
+    }
+
     const w = window.open('', '_blank', 'width=900,height=750');
     if (w) {
       w.document.open();
       w.document.write(html);
       w.document.close();
+    }
+  },
+
+  async exportLedgerPDF(contactId, type, fromDate, toDate) {
+    const ledger = this.computeLedger(contactId, type, fromDate, toDate);
+    if (!ledger) {
+      App.toast('Statement not found for export', 'error');
+      return;
+    }
+    const c = ledger.contact;
+    const cleanParty = ((c.name || 'Account').trim()).replace(/[\/\\:*?"<>|\s]+/g, '_');
+    const title = `Statement_${cleanParty}_${getFY()}`;
+    const html = this.generateLedgerHtml(contactId, type, fromDate, toDate);
+    const defaultDir = DB.getBiz().pdfSaveDir || '';
+
+    if (window.desktopApp && window.desktopApp.savePdf) {
+      App.toast('Preparing Statement PDF...', 'info');
+      try {
+        const res = await window.desktopApp.savePdf({ html, title, defaultDir });
+        if (res && res.success) {
+          App.toast(`🎉 PDF Saved: ${res.filePath}`, 'success');
+        }
+      } catch (err) {
+        console.error('Statement PDF export error:', err);
+        this.printLedger(contactId, type, fromDate, toDate);
+      }
+    } else {
+      this.printLedger(contactId, type, fromDate, toDate);
+      App.toast('In print dialog, choose "Save as PDF" 📄', 'info');
     }
   },
 

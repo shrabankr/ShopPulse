@@ -20,5 +20,4 @@ desktop.ini
 node_modules/
 dist/
 out/
-electron/icon.ico
-electron/icon.icns
+*.zip

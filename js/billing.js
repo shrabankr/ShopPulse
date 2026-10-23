@@ -1872,30 +1872,31 @@ const Billing = {
   },
 
   /* ═══════════════════════════════════════════
-     EXPORT / SAVE AS PDF (LICENSED FEATURE 💎)
+     EXPORT / SAVE AS PDF
   ═══════════════════════════════════════════ */
   async exportPDF(id, type) {
-    const limits = DB.getTrialLimits();
-    if (limits.isTrial) {
-      App.toast('🔒 1-Click PDF Bill Export is exclusive to Licensed Commercial users. Activate your license to unlock PDF generation.', 'warning');
-      App.openLicenseModal();
+    const isSales = type === 'sales';
+    const doc = isSales ? DB.getSaleById(id) : DB.getPurchaseById(id);
+    if (!doc) {
+      App.toast('Document not found for export', 'error');
       return;
     }
 
-    const isSales = type === 'sales';
-    const doc = isSales ? DB.getSaleById(id) : DB.getPurchaseById(id);
-    if (!doc) return;
-
     const html = this.generateDocHtml(doc, type, window._viewDocFmt || DB.getBillFormat());
-    const title = `${isSales ? (doc.invoiceNo || 'Invoice') : (doc.billNo || 'Bill')}_${(doc.customerName || doc.supplierName || 'Client').replace(/\s+/g, '_')}`;
+    const docPrefix = isSales ? 'Invoice' : 'PurchaseBill';
+    const rawNo = (isSales ? doc.invoiceNo : doc.billNo) || 'Doc';
+    const cleanNo = rawNo.replace(/[\/\\:*?"<>|]/g, '-');
+    const partyName = (doc.customerName || doc.supplierName || 'Client').trim();
+    const cleanParty = partyName.replace(/[\/\\:*?"<>|\s]+/g, '_');
+    const title = `${docPrefix}_${cleanNo}_${cleanParty}`;
     const defaultDir = DB.getBiz().pdfSaveDir || '';
 
     if (window.desktopApp && window.desktopApp.savePdf) {
-      App.toast('Preparing PDF export dialog...', 'info');
+      App.toast('Preparing PDF export...', 'info');
       try {
         const res = await window.desktopApp.savePdf({ html, title, defaultDir });
         if (res && res.success) {
-          App.toast(`🎉 PDF Saved to: ${res.filePath}`, 'success');
+          App.toast(`🎉 PDF Saved: ${res.filePath}`, 'success');
         }
       } catch (err) {
         console.error('PDF export error:', err);
@@ -1960,7 +1961,13 @@ const Billing = {
 
     const format = formatOverride || window._viewDocFmt || DB.getBillFormat() || 'classic';
     const html = this.generateDocHtml(doc, type, format, false);
-    this._executePrint(html);
+    const docPrefix = isSales ? 'Invoice' : 'PurchaseBill';
+    const rawNo = (isSales ? doc.invoiceNo : doc.billNo) || 'Doc';
+    const cleanNo = rawNo.replace(/[\/\\:*?"<>|]/g, '-');
+    const partyName = (doc.customerName || doc.supplierName || 'Client').trim();
+    const cleanParty = partyName.replace(/[\/\\:*?"<>|\s]+/g, '_');
+    const title = `${docPrefix}_${cleanNo}_${cleanParty}`;
+    this._executePrint(html, title);
   },
 
   generateDocHtml(doc, type = 'sales', formatOverride = null, forcePreview = false) {
@@ -2366,17 +2373,15 @@ ${showWatermark ? `
 </div>
 ` : ''}
 </body></html>`;
-
-    this._executePrint(html);
   },
 
-  async _executePrint(html) {
+  async _executePrint(html, title = 'ShopPulse_Document') {
     App.closeModal();
 
     // 1. If running in Electron Desktop App, use native desktop print bridge
     if (window.desktopApp && typeof window.desktopApp.printHtml === 'function') {
       try {
-        await window.desktopApp.printHtml(html);
+        await window.desktopApp.printHtml({ html, title });
         return;
       } catch (err) {
         console.error('Desktop print bridge failed, falling back:', err);
@@ -2388,7 +2393,11 @@ ${showWatermark ? `
       const w = window.open('', '_blank');
       if (w) {
         w.document.open();
-        w.document.write(html);
+        let docHtml = html;
+        if (!docHtml.includes('<title>')) {
+          docHtml = docHtml.replace('<head>', `<head><title>${title}</title>`);
+        }
+        w.document.write(docHtml);
         w.document.close();
         setTimeout(() => {
           try {
@@ -3485,7 +3494,11 @@ body { font-family: 'Inter', Arial, sans-serif; font-size: 8.5pt; color: #1e293b
 </div>
 </body></html>`;
 
-    this._executePrint(html);
+    const notePrefix = isSales ? 'CreditNote' : 'DebitNote';
+    const noteNo = (note.noteNo || 'Note').replace(/[\/\\:*?"<>|]/g, '-');
+    const party = (partyName || 'Party').replace(/[\/\\:*?"<>|\s]+/g, '_');
+    const title = `${notePrefix}_${noteNo}_${party}`;
+    this._executePrint(html, title);
   },
 
   /* ═══════════════════════════════════════════
@@ -3698,6 +3711,7 @@ body { font-family: 'Inter', Arial, sans-serif; font-size: 8.5pt; color: #1e293b
               `}
               <button class="btn btn-xs btn-secondary" onclick="Billing.viewQuotation('${q.id}')" title="View Details"><span class="material-icons" style="font-size:14px">visibility</span></button>
               <button class="btn btn-xs btn-secondary" onclick="Billing.printQuotation('${q.id}')" title="Print Quotation"><span class="material-icons" style="font-size:14px">print</span></button>
+              <button class="btn btn-xs btn-secondary" onclick="Billing.exportQuotationPDF('${q.id}')" title="Save as PDF"><span class="material-icons" style="font-size:14px;color:#e74c3c">picture_as_pdf</span></button>
               <button class="btn btn-xs btn-secondary" onclick="Billing.shareQuotationWhatsApp('${q.id}')" title="Share via WhatsApp"><span class="material-icons" style="font-size:14px;color:#25d366">chat</span></button>
               ${!isConverted ? `
                 <button class="btn btn-xs btn-secondary" onclick="Billing.openQuotationForm('${q.id}')" title="Edit Quotation"><span class="material-icons" style="font-size:14px">edit</span></button>
@@ -4396,6 +4410,9 @@ body { font-family: 'Inter', Arial, sans-serif; font-size: 8.5pt; color: #1e293b
       <button class="btn btn-secondary" onclick="Billing.printQuotation('${quote.id}')">
         <span class="material-icons">print</span> Print Quotation
       </button>
+      <button class="btn btn-secondary" onclick="Billing.exportQuotationPDF('${quote.id}')">
+        <span class="material-icons" style="color:#e74c3c">picture_as_pdf</span> PDF
+      </button>
       <button class="btn btn-secondary" onclick="Billing.shareQuotationWhatsApp('${quote.id}')">
         <span class="material-icons" style="color:#25d366">chat</span> WhatsApp
       </button>
@@ -4775,13 +4792,15 @@ body { font-family: 'Inter', Arial, sans-serif; font-size: 8.5pt; color: #1e293b
     this.viewDoc(savedSale.id, 'sales');
   },
 
-  /* ─── Print Quotation Document ─── */
-  printQuotation(id) {
-    const quote = DB.getQuotationById(id);
-    if (!quote) return;
+  /* ─── Generate Quotation Printable HTML ─── */
+  generateQuotationHtml(quote) {
+    if (!quote) return '';
     const biz = DB.getBiz();
     const today = new Date().toISOString().split('T')[0];
     const isExpired = quote.status !== 'converted' && quote.validUntil && quote.validUntil < today;
+    const qNo = (quote.quotationNo || 'Quote').replace(/[\/\\:*?"<>|]/g, '-');
+    const party = ((quote.customerName || 'Client').trim()).replace(/[\/\\:*?"<>|\s]+/g, '_');
+    const title = `Quotation_${qNo}_${party}`;
 
     let taxRows = '';
     if (quote.isIntra) {
@@ -4795,7 +4814,21 @@ body { font-family: 'Inter', Arial, sans-serif; font-size: 8.5pt; color: #1e293b
       `;
     }
 
-    const html = `
+    return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>${title}</title>
+<style>
+  @page { size: A4; margin: 10mm 12mm; }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 9pt; color: #0f172a; margin: 0; padding: 16px; background: #fff; }
+  .quotation-doc { width: 100%; max-width: 820px; margin: 0 auto; }
+  table { border-collapse: collapse; }
+  @media print { body { padding: 0; } }
+</style>
+</head>
+<body>
       <div class="print-doc quotation-doc">
         <!-- Header -->
         <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0f172a;padding-bottom:14px;margin-bottom:14px">
@@ -4906,9 +4939,49 @@ body { font-family: 'Inter', Arial, sans-serif; font-size: 8.5pt; color: #1e293b
           </div>
         </div>
       </div>
-    `;
+</body>
+</html>`;
+  },
 
-    this._executePrint(html);
+  /* ─── Print Quotation Document ─── */
+  printQuotation(id) {
+    const quote = DB.getQuotationById(id);
+    if (!quote) return;
+    const qNo = (quote.quotationNo || 'Quote').replace(/[\/\\:*?"<>|]/g, '-');
+    const party = ((quote.customerName || 'Client').trim()).replace(/[\/\\:*?"<>|\s]+/g, '_');
+    const title = `Quotation_${qNo}_${party}`;
+    const html = this.generateQuotationHtml(quote);
+    this._executePrint(html, title);
+  },
+
+  /* ─── Save Quotation as PDF ─── */
+  async exportQuotationPDF(id) {
+    const quote = DB.getQuotationById(id);
+    if (!quote) {
+      App.toast('Quotation not found', 'error');
+      return;
+    }
+    const qNo = (quote.quotationNo || 'Quote').replace(/[\/\\:*?"<>|]/g, '-');
+    const party = ((quote.customerName || 'Client').trim()).replace(/[\/\\:*?"<>|\s]+/g, '_');
+    const title = `Quotation_${qNo}_${party}`;
+    const defaultDir = DB.getBiz().pdfSaveDir || '';
+    const html = this.generateQuotationHtml(quote);
+
+    if (window.desktopApp && window.desktopApp.savePdf) {
+      App.toast('Preparing Quotation PDF...', 'info');
+      try {
+        const res = await window.desktopApp.savePdf({ html, title, defaultDir });
+        if (res && res.success) {
+          App.toast(`🎉 PDF Saved: ${res.filePath}`, 'success');
+        }
+      } catch (e) {
+        console.error('Quotation PDF export error:', e);
+        this.printQuotation(id);
+      }
+    } else {
+      this.printQuotation(id);
+      App.toast('In the print dialog, select "Save as PDF" 📄', 'info');
+    }
   },
 
   /* ─── Share Quotation via WhatsApp ─── */

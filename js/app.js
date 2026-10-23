@@ -54,6 +54,8 @@ const App = {
     const showLogo = hasBranding && biz.logo;
     const showTagline = hasBranding && biz.tagline;
 
+    const collapsed = this.getCollapsedNav();
+
     document.getElementById('sidebar').innerHTML = `
       <div class="sidebar-logo" onclick="App._handleLogoClick()" title="Triple click for Developer Tools">
         <div class="logo-icon" style="${showLogo ? 'background:transparent;' : ''}">
@@ -65,39 +67,56 @@ const App = {
         </div>
       </div>
       <nav class="sidebar-nav">
-        <div class="nav-section">
+        <div class="nav-section" data-section="overview">
           <span class="nav-section-label">Overview</span>
-          <a href="#dashboard" class="nav-item" data-r="dashboard"><span class="material-icons">dashboard</span><span>Dashboard</span></a>
+          <div class="nav-section-items">
+            <a href="#dashboard" class="nav-item" data-r="dashboard"><span class="material-icons">dashboard</span><span>Dashboard</span></a>
+          </div>
         </div>
-        <div class="nav-section">
-          <span class="nav-section-label">Transactions</span>
-          <a href="#billing-sales" class="nav-item" data-r="billing-sales"><span class="material-icons">receipt_long</span><span>Sales Invoices</span></a>
-          <a href="#quotations" class="nav-item" data-r="quotations"><span class="material-icons">request_quote</span><span>Quotations / Estimates</span></a>
-          <a href="#services" class="nav-item" data-r="services"><span class="material-icons">build</span><span>Repairs &amp; Services</span>${activeJobs ? `<span class="nav-badge warn">${activeJobs}</span>` : ''}</a>
-          ${isStaff ? '' : `<a href="#billing-purchases" class="nav-item" data-r="billing-purchases"><span class="material-icons">shopping_bag</span><span>Purchase Bills</span></a>`}
-          <a href="#returns" class="nav-item" data-r="returns"><span class="material-icons">assignment_return</span><span>Returns &amp; Notes</span></a>
-          ${isStaff ? '' : `<a href="#expenses" class="nav-item" data-r="expenses"><span class="material-icons">receipt</span><span>Expenses</span></a>`}
-          <a href="#receivables" class="nav-item" data-r="receivables"><span class="material-icons">account_balance_wallet</span><span>Receivables</span>${unpaidSales ? `<span class="nav-badge">${unpaidSales}</span>` : ''}</a>
-          ${isStaff ? '' : `<a href="#payables" class="nav-item" data-r="payables"><span class="material-icons">payments</span><span>Payables</span>${unpaidBuys ? `<span class="nav-badge">${unpaidBuys}</span>` : ''}</a>`}
+        <div class="nav-section ${collapsed.includes('transactions') ? 'collapsed' : ''}" data-section="transactions">
+          <div class="nav-section-label collapsible" onclick="App.toggleNavSection('transactions')" title="Click to collapse / expand Transactions">
+            <span>Transactions</span>
+            <span class="material-icons nav-section-toggle-icon">expand_more</span>
+          </div>
+          <div class="nav-section-items">
+            <a href="#billing-sales" class="nav-item" data-r="billing-sales"><span class="material-icons">receipt_long</span><span>Sales Invoices</span></a>
+            <a href="#quotations" class="nav-item" data-r="quotations"><span class="material-icons">request_quote</span><span>Quotations / Estimates</span></a>
+            <a href="#services" class="nav-item" data-r="services"><span class="material-icons">build</span><span>Repairs &amp; Services</span>${activeJobs ? `<span class="nav-badge warn">${activeJobs}</span>` : ''}</a>
+            ${isStaff ? '' : `<a href="#billing-purchases" class="nav-item" data-r="billing-purchases"><span class="material-icons">shopping_bag</span><span>Purchase Bills</span></a>`}
+            <a href="#returns" class="nav-item" data-r="returns"><span class="material-icons">assignment_return</span><span>Returns &amp; Notes</span></a>
+            ${isStaff ? '' : `<a href="#expenses" class="nav-item" data-r="expenses"><span class="material-icons">receipt</span><span>Expenses</span></a>`}
+            <a href="#receivables" class="nav-item" data-r="receivables"><span class="material-icons">account_balance_wallet</span><span>Receivables</span>${unpaidSales ? `<span class="nav-badge">${unpaidSales}</span>` : ''}</a>
+            ${isStaff ? '' : `<a href="#payables" class="nav-item" data-r="payables"><span class="material-icons">payments</span><span>Payables</span>${unpaidBuys ? `<span class="nav-badge">${unpaidBuys}</span>` : ''}</a>`}
+          </div>
         </div>
-        <div class="nav-section">
-          <span class="nav-section-label">Management</span>
-          <a href="#inventory" class="nav-item" data-r="inventory"><span class="material-icons">inventory_2</span><span>Inventory</span>${lowStock ? `<span class="nav-badge warn">${lowStock}</span>` : ''}</a>
-          <a href="#configurator" class="nav-item" data-r="configurator"><span class="material-icons">memory</span><span>PC &amp; CCTV Builder</span></a>
-          <a href="#customers" class="nav-item" data-r="customers"><span class="material-icons">people</span><span>Customers</span></a>
-          ${isStaff ? '' : `<a href="#suppliers" class="nav-item" data-r="suppliers"><span class="material-icons">local_shipping</span><span>Suppliers</span></a>`}
+        <div class="nav-section ${collapsed.includes('management') ? 'collapsed' : ''}" data-section="management">
+          <div class="nav-section-label collapsible" onclick="App.toggleNavSection('management')" title="Click to collapse / expand Management">
+            <span>Management</span>
+            <span class="material-icons nav-section-toggle-icon">expand_more</span>
+          </div>
+          <div class="nav-section-items">
+            <a href="#inventory" class="nav-item" data-r="inventory"><span class="material-icons">inventory_2</span><span>Inventory</span>${lowStock ? `<span class="nav-badge warn">${lowStock}</span>` : ''}</a>
+            <a href="#configurator" class="nav-item" data-r="configurator"><span class="material-icons">memory</span><span>PC &amp; CCTV Builder</span></a>
+            <a href="#customers" class="nav-item" data-r="customers"><span class="material-icons">people</span><span>Customers</span></a>
+            ${isStaff ? '' : `<a href="#suppliers" class="nav-item" data-r="suppliers"><span class="material-icons">local_shipping</span><span>Suppliers</span></a>`}
+          </div>
         </div>
-        <div class="nav-section">
-          <span class="nav-section-label">Analytics &amp; System</span>
-          ${isStaff ? `
-            <a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked in Staff Mode"><span class="material-icons">lock</span><span>Reports (Locked)</span></a>
-          ` : `
-            <a href="#reports" class="nav-item" data-r="reports"><span class="material-icons">bar_chart</span><span>Reports &amp; P&amp;L</span></a>
-            <a href="#gst" class="nav-item" data-r="gst"><span class="material-icons">receipt</span><span>GST Returns</span></a>
-          `}
-          <a href="#ai" class="nav-item" data-r="ai"><span class="material-icons">auto_awesome</span><span>AI Assistant</span><span class="nav-chip">AI</span></a>
-          <a href="#settings" class="nav-item" data-r="settings"><span class="material-icons">settings</span><span>Settings &amp; Backup</span></a>
-          <a href="#help" class="nav-item" data-r="help"><span class="material-icons">help_outline</span><span>Help &amp; Support</span></a>
+        <div class="nav-section ${collapsed.includes('analytics') ? 'collapsed' : ''}" data-section="analytics">
+          <div class="nav-section-label collapsible" onclick="App.toggleNavSection('analytics')" title="Click to collapse / expand Analytics &amp; System">
+            <span>Analytics &amp; System</span>
+            <span class="material-icons nav-section-toggle-icon">expand_more</span>
+          </div>
+          <div class="nav-section-items">
+            ${isStaff ? `
+              <a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked in Staff Mode"><span class="material-icons">lock</span><span>Reports (Locked)</span></a>
+            ` : `
+              <a href="#reports" class="nav-item" data-r="reports"><span class="material-icons">bar_chart</span><span>Reports &amp; P&amp;L</span></a>
+              <a href="#gst" class="nav-item" data-r="gst"><span class="material-icons">receipt</span><span>GST Returns</span></a>
+            `}
+            <a href="#ai" class="nav-item" data-r="ai"><span class="material-icons">auto_awesome</span><span>AI Assistant</span><span class="nav-chip">AI</span></a>
+            <a href="#settings" class="nav-item" data-r="settings"><span class="material-icons">settings</span><span>Settings &amp; Backup</span></a>
+            <a href="#help" class="nav-item" data-r="help"><span class="material-icons">help_outline</span><span>Help &amp; Support</span></a>
+          </div>
         </div>
       </nav>
       <div class="sidebar-footer" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;font-size:0.75rem;color:hsl(220,15%,60%);border-top:1px solid rgba(255,255,255,0.07)">
@@ -105,6 +124,35 @@ const App = {
         <span class="badge" style="background:rgba(255,255,255,0.08);color:#cbd5e1;font-size:0.72rem;padding:2px 8px;border-radius:10px;font-weight:600">v${DB.VERSION || '1.1.0'}</span>
       </div>
     `;
+  },
+
+  getCollapsedNav() {
+    try {
+      return JSON.parse(localStorage.getItem('shoppulse_collapsed_nav') || '[]');
+    } catch (e) {
+      return [];
+    }
+  },
+
+  toggleNavSection(secId) {
+    const sec = document.querySelector(`.nav-section[data-section="${secId}"]`);
+    if (!sec) return;
+    const isCollapsed = sec.classList.toggle('collapsed');
+    let list = this.getCollapsedNav();
+    if (isCollapsed) {
+      if (!list.includes(secId)) list.push(secId);
+    } else {
+      list = list.filter(s => s !== secId);
+    }
+    try { localStorage.setItem('shoppulse_collapsed_nav', JSON.stringify(list)); } catch (e) {}
+  },
+
+  expandNavSection(secId) {
+    const sec = document.querySelector(`.nav-section[data-section="${secId}"]`);
+    if (!sec) return;
+    sec.classList.remove('collapsed');
+    let list = this.getCollapsedNav().filter(s => s !== secId);
+    try { localStorage.setItem('shoppulse_collapsed_nav', JSON.stringify(list)); } catch (e) {}
   },
 
   _logoClicks: 0,
@@ -184,7 +232,14 @@ const App = {
     // Active nav
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     const active = document.querySelector(`.nav-item[data-r="${r}"]`);
-    if (active) active.classList.add('active');
+    if (active) {
+      active.classList.add('active');
+      const parentSec = active.closest('.nav-section');
+      if (parentSec && parentSec.classList.contains('collapsed')) {
+        const secId = parentSec.getAttribute('data-section');
+        if (secId) this.expandNavSection(secId);
+      }
+    }
 
     const c = document.getElementById('page-content');
     const T = document.getElementById('tb-title');
