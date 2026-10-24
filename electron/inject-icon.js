@@ -2,7 +2,7 @@ const resedit = require('resedit');
 const fs = require('fs');
 const path = require('path');
 
-const exePath = path.resolve('dist/ShopPulse-win32-x64/ShopPulse.exe');
+const exePath = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve('dist/ShopPulse-win32-x64/ShopPulse.exe');
 const iconPath = path.resolve('electron/icon.ico');
 
 if (!fs.existsSync(exePath)) {
