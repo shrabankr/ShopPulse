@@ -76,6 +76,7 @@ const Inventory = {
                     </td>
                     <td><span class="stock-badge ${stockClass}">${stockLabel}</span></td>
                     <td class="action-col">
+                      <button class="btn btn-xs btn-secondary" onclick="Inventory.openBarcodeStudio('${p.id}')" title="Print Barcode &amp; Price Tag Stickers"><span class="material-icons" style="font-size:14px">qr_code_2</span></button>
                       <button class="btn btn-xs btn-secondary" onclick="Inventory.adjustStock('${p.id}')" title="Adjust Stock"><span class="material-icons" style="font-size:14px">tune</span></button>
                       <button class="btn btn-xs btn-secondary" onclick="Inventory.openForm('${p.id}')" title="Edit"><span class="material-icons" style="font-size:14px">edit</span></button>
                       ${DB.getRole() !== 'staff' ? `<button class="btn btn-xs btn-ghost" onclick="Inventory.deleteProduct('${p.id}')" title="Delete"><span class="material-icons" style="font-size:14px;color:var(--danger)">delete</span></button>` : ''}
@@ -99,6 +100,7 @@ const Inventory = {
       <div class="page-header-row">
         <h2>Inventory</h2>
         <div class="actions" style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-secondary" onclick="Inventory.openBarcodeStudio()" title="Design and print barcode &amp; price tag stickers for thermal rolls or A4 sheets"><span class="material-icons">qr_code_2</span> Barcode Studio</button>
           <button class="btn btn-secondary" onclick="Inventory.exportCSV()" title="Export entire product catalog to CSV"><span class="material-icons">file_download</span> Export CSV</button>
           <button class="btn btn-secondary" onclick="Inventory.openImportModal()" title="Bulk import products and stock from CSV"><span class="material-icons">file_upload</span> Import CSV</button>
           <button class="btn btn-secondary" onclick="Inventory.openAdjustAll()"><span class="material-icons">tune</span> Bulk Adjust</button>
@@ -1027,5 +1029,593 @@ const Inventory = {
     App.toast(`🎉 Successfully imported ${itemsToSave.length} products (${addedCount} added, ${updatedCount} updated)!`, 'success');
     App.refreshSidebar();
     Inventory.render(document.getElementById('page-content'));
+  },
+
+  /* ─────────────────────────────────────────────
+     Barcode & Price Tag Studio (Thermal & A4)
+  ───────────────────────────────────────────── */
+  openBarcodeStudio(productId = null) {
+    const products = DB.getProducts();
+    const biz = DB.getBiz();
+    const selectedProd = productId ? DB.getProductById(productId) : (products[0] || null);
+
+    const initialTitle = selectedProd ? selectedProd.name : '';
+    const initialBarcode = selectedProd ? (selectedProd.barcode || selectedProd.sku || genBarcodeEAN()) : genBarcodeEAN();
+    const initialPrice = selectedProd ? (selectedProd.sellingPrice || 0) : '';
+    const initialWarranty = selectedProd ? (selectedProd.warranty || '1 Year') : '1 Year';
+    const initialCopies = selectedProd ? Math.max(1, Math.min(100, selectedProd.stock || 24)) : 24;
+
+    const bodyHtml = `
+      <div style="display:grid;grid-template-columns:1.2fr 0.8fr;gap:20px;align-items:start">
+        <!-- Controls Column -->
+        <div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label style="font-weight:700;font-size:.85rem">Select Product</label>
+            <select id="bc-product-sel" class="form-control" onchange="Inventory._onBarcodeProdChange(this)">
+              <option value="">-- Custom / Manual Item --</option>
+              ${products.map(p => `<option value="${p.id}" ${selectedProd && selectedProd.id === p.id ? 'selected' : ''}>${p.name} (Stock: ${p.stock})</option>`).join('')}
+            </select>
+          </div>
+
+          <div class="form-group" style="margin-bottom:12px">
+            <label style="font-weight:700;font-size:.85rem">Product Name / Title</label>
+            <input type="text" id="bc-title" class="form-control" value="${initialTitle.replace(/"/g, '&quot;')}" oninput="Inventory._renderBarcodePreview()">
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;margin-bottom:12px">
+            <div class="form-group" style="margin:0">
+              <label style="font-weight:700;font-size:.85rem">Barcode / SKU (Code 128 / EAN)</label>
+              <input type="text" id="bc-barcode" class="form-control" value="${initialBarcode.replace(/"/g, '&quot;')}" oninput="Inventory._renderBarcodePreview()">
+            </div>
+            <button type="button" class="btn btn-secondary" onclick="Inventory._generateNewBarcodeForStudio()" title="Generate Random Indian 12-digit EAN Barcode" style="height:38px;padding:0 12px">
+              🎲 Auto EAN
+            </button>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+            <div class="form-group" style="margin:0">
+              <label style="font-weight:700;font-size:.85rem">Selling Price (₹)</label>
+              <input type="number" id="bc-price" class="form-control" value="${initialPrice}" min="0" step="1" oninput="Inventory._renderBarcodePreview()">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label style="font-weight:700;font-size:.85rem">Warranty / Subtext</label>
+              <input type="text" id="bc-warranty" class="form-control" value="${initialWarranty.replace(/"/g, '&quot;')}" oninput="Inventory._renderBarcodePreview()">
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom:12px">
+            <label style="font-weight:700;font-size:.85rem">Printer Layout</label>
+            <select id="bc-layout" class="form-control" onchange="Inventory._renderBarcodePreview()">
+              <option value="thermal_50x25">🏷️ 50mm × 25mm Thermal Roll (2" × 1" — TVS / TSC / Zebra / Xprinter)</option>
+              <option value="a4_24">📄 A4 Sheet — 24 Labels (3 cols × 8 rows, 70 × 37mm)</option>
+              <option value="a4_48">📄 A4 Sheet — 48 Mini Labels (4 cols × 12 rows, 48.5 × 25.4mm)</option>
+              <option value="qr_35x35">🔳 35mm × 35mm 2D QR Code Sticker</option>
+            </select>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+            <div class="form-group" style="margin:0">
+              <label style="font-weight:700;font-size:.85rem">Label Copies</label>
+              <input type="number" id="bc-copies" class="form-control" value="${initialCopies}" min="1" max="1000">
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;justify-content:center;padding-top:14px">
+              <label style="display:flex;align-items:center;gap:6px;font-size:.82rem;cursor:pointer">
+                <input type="checkbox" id="bc-show-shop" checked onchange="Inventory._renderBarcodePreview()"> Include Shop Name
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:.82rem;cursor:pointer">
+                <input type="checkbox" id="bc-show-price" checked onchange="Inventory._renderBarcodePreview()"> Include Price Tag
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Visual Preview Column -->
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:16px;text-align:center">
+          <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);margin-bottom:12px">
+            Live Sticker Preview
+          </div>
+          <div id="bc-preview-box" style="display:flex;justify-content:center;align-items:center;min-height:160px;margin-bottom:12px">
+            <!-- Rendered by _renderBarcodePreview() -->
+          </div>
+          <div style="font-size:.75rem;color:var(--text-secondary);line-height:1.4">
+            Supports all thermal sticker barcode printers (ESC/POS &amp; TSPL) and standard desktop laser/inkjet A4 label sheets.
+          </div>
+          <div id="bc-save-btn-wrap" style="margin-top:12px">
+            ${selectedProd ? `
+            <button type="button" class="btn btn-xs btn-secondary" onclick="Inventory._saveBarcodeToSelectedProduct()">
+              💾 Save Barcode to Product Record
+            </button>` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+
+    App.modal('🏷️ Barcode & Price Tag Studio', bodyHtml, `
+      <button class="btn btn-secondary" onclick="App.closeModal()">Close</button>
+      <button class="btn btn-primary" onclick="Inventory.printBarcodeSheet()">
+        <span class="material-icons" style="font-size:16px">print</span> Print Label Sheet
+      </button>
+    `, 'modal-lg');
+
+    setTimeout(() => this._renderBarcodePreview(), 50);
+  },
+
+  _getBarcodeStudioConfig() {
+    const biz = DB.getBiz();
+    return {
+      title: document.getElementById('bc-title')?.value.trim() || 'Sample Product',
+      barcode: document.getElementById('bc-barcode')?.value.trim() || '890100100001',
+      price: document.getElementById('bc-price')?.value.trim() || '',
+      warranty: document.getElementById('bc-warranty')?.value.trim() || '',
+      shopName: biz.name || 'ShopPulse Electronics',
+      showShopName: document.getElementById('bc-show-shop')?.checked ?? true,
+      showPrice: document.getElementById('bc-show-price')?.checked ?? true,
+      layout: document.getElementById('bc-layout')?.value || 'thermal_50x25',
+      copies: parseInt(document.getElementById('bc-copies')?.value, 10) || 1
+    };
+  },
+
+  _renderBarcodePreview() {
+    const box = document.getElementById('bc-preview-box');
+    if (!box) return;
+    const cfg = this._getBarcodeStudioConfig();
+    const isQR = cfg.layout === 'qr_35x35';
+
+    let graphic = '';
+    if (isQR) {
+      const qrData = genUPIQrDataUrl(cfg.barcode || cfg.title, 4);
+      graphic = qrData ? `<img src="${qrData}" style="width:75px;height:75px;object-fit:contain;margin:4px auto;display:block">` : `<div style="font-size:10px;color:#999;padding:15px">QR Generator Ready</div>`;
+    } else {
+      graphic = generateBarcodeSVG(cfg.barcode, 34, 1.4);
+    }
+
+    box.innerHTML = `
+      <div style="background:#fff;color:#000;border:1px solid #999;box-shadow:0 3px 8px rgba(0,0,0,0.12);border-radius:4px;padding:8px 12px;width:240px;box-sizing:border-box;text-align:center">
+        ${cfg.showShopName && cfg.shopName ? `<div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;color:#222;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${cfg.shopName}</div>` : ''}
+        <div style="font-size:11px;font-weight:700;line-height:1.2;margin:2px 0 4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${cfg.title}</div>
+        <div style="margin:4px 0">
+          ${graphic}
+          <div style="font-family:monospace;font-size:9px;font-weight:600;letter-spacing:1px;margin-top:2px">${cfg.barcode}</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding-top:4px;border-top:1px dashed #ccc">
+          ${cfg.showPrice && cfg.price ? `<div style="font-size:12px;font-weight:900;color:#000">₹${cfg.price}</div>` : '<div></div>'}
+          ${cfg.warranty ? `<div style="font-size:9px;font-weight:600;color:#555">${cfg.warranty}</div>` : ''}
+        </div>
+      </div>
+    `;
+  },
+
+  _onBarcodeProdChange(sel) {
+    const saveWrap = document.getElementById('bc-save-btn-wrap');
+    if (!sel || !sel.value) {
+      if (saveWrap) saveWrap.innerHTML = '';
+      return;
+    }
+    const p = DB.getProductById(sel.value);
+    if (!p) return;
+    const titleInput = document.getElementById('bc-title');
+    const barcodeInput = document.getElementById('bc-barcode');
+    const priceInput = document.getElementById('bc-price');
+    const warrantyInput = document.getElementById('bc-warranty');
+    const copiesInput = document.getElementById('bc-copies');
+
+    if (titleInput) titleInput.value = p.name || '';
+    if (barcodeInput) barcodeInput.value = p.barcode || p.sku || genBarcodeEAN();
+    if (priceInput) priceInput.value = p.sellingPrice || 0;
+    if (warrantyInput) warrantyInput.value = p.warranty || '1 Year';
+    if (copiesInput) copiesInput.value = Math.max(1, Math.min(100, p.stock || 24));
+
+    if (saveWrap) {
+      saveWrap.innerHTML = `
+        <button type="button" class="btn btn-xs btn-secondary" onclick="Inventory._saveBarcodeToSelectedProduct()">
+          💾 Save Barcode to Product Record
+        </button>
+      `;
+    }
+
+    this._renderBarcodePreview();
+  },
+
+  _generateNewBarcodeForStudio() {
+    const input = document.getElementById('bc-barcode');
+    if (input) {
+      input.value = genBarcodeEAN();
+      this._renderBarcodePreview();
+    }
+  },
+
+  _saveBarcodeToSelectedProduct() {
+    const sel = document.getElementById('bc-product-sel');
+    if (!sel || !sel.value) {
+      App.toast('Select a product to update its barcode.', 'warning');
+      return;
+    }
+    const p = DB.getProductById(sel.value);
+    if (!p) return;
+    const barcode = (document.getElementById('bc-barcode')?.value || '').trim();
+    if (!barcode) {
+      App.toast('Barcode cannot be empty.', 'warning');
+      return;
+    }
+    p.barcode = barcode;
+    DB.saveProduct(p);
+    App.toast(`✅ Barcode "${barcode}" saved to ${p.name}!`, 'success');
+  },
+
+  generateBarcodeSheetHtml(config) {
+    const {
+      title,
+      barcode,
+      price,
+      warranty,
+      shopName,
+      showShopName,
+      showPrice,
+      layout,
+      copies
+    } = config;
+
+    const isQR = layout === 'qr_35x35';
+    let codeGraphic = '';
+    if (isQR) {
+      const qrDataUrl = genUPIQrDataUrl(barcode || title, 4);
+      codeGraphic = `<img src="${qrDataUrl}" style="width:24mm;height:24mm;object-fit:contain;margin:0 auto;display:block">`;
+    } else {
+      const svgHeight = layout === 'a4_48' ? 22 : 28;
+      const svgWidth = layout === 'a4_48' ? 1.2 : 1.5;
+      codeGraphic = generateBarcodeSVG(barcode || '000000', svgHeight, svgWidth);
+    }
+
+    const singleStickerHtml = `
+      <div class="sticker sticker-${layout}">
+        ${showShopName && shopName ? `<div class="sticker-shop">${shopName}</div>` : ''}
+        <div class="sticker-title">${title}</div>
+        <div class="sticker-code-wrap">
+          ${codeGraphic}
+          <div class="sticker-code-num">${barcode}</div>
+        </div>
+        <div class="sticker-footer">
+          ${showPrice && price ? `<div class="sticker-price">₹${price}</div>` : '<div></div>'}
+          ${warranty ? `<div class="sticker-warranty">${warranty}</div>` : ''}
+        </div>
+      </div>
+    `;
+
+    const stickers = Array(copies).fill(singleStickerHtml).join('\n');
+
+    let pageStyles = '';
+    if (layout === 'thermal_50x25') {
+      pageStyles = `
+        @page {
+          size: 50mm 25mm;
+          margin: 0;
+        }
+        body {
+          margin: 0;
+          padding: 0;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+          background: #fff;
+          color: #000;
+        }
+        .sheet {
+          display: block;
+        }
+        .sticker-thermal_50x25 {
+          width: 50mm;
+          height: 25mm;
+          box-sizing: border-box;
+          padding: 1.5mm 2mm;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          text-align: center;
+          page-break-after: always;
+          overflow: hidden;
+        }
+        .sticker-shop {
+          font-size: 7pt;
+          font-weight: 800;
+          letter-spacing: 0.5px;
+          text-transform: uppercase;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          line-height: 1.1;
+        }
+        .sticker-title {
+          font-size: 7.5pt;
+          font-weight: 700;
+          line-height: 1.1;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .sticker-code-wrap {
+          margin: 0.5mm 0;
+        }
+        .sticker-code-num {
+          font-size: 6pt;
+          font-family: monospace;
+          font-weight: 600;
+          letter-spacing: 1px;
+        }
+        .sticker-footer {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          line-height: 1;
+        }
+        .sticker-price {
+          font-size: 8pt;
+          font-weight: 900;
+        }
+        .sticker-warranty {
+          font-size: 6pt;
+          font-weight: 600;
+          color: #333;
+        }
+      `;
+    } else if (layout === 'a4_24') {
+      pageStyles = `
+        @page {
+          size: A4 portrait;
+          margin: 8mm 6mm;
+        }
+        body {
+          margin: 0;
+          padding: 0;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+          background: #fff;
+          color: #000;
+        }
+        .sheet {
+          display: grid;
+          grid-template-columns: repeat(3, 68mm);
+          grid-auto-rows: 35mm;
+          gap: 2mm 3mm;
+          justify-content: center;
+        }
+        .sticker-a4_24 {
+          width: 68mm;
+          height: 35mm;
+          box-sizing: border-box;
+          padding: 2mm 3mm;
+          border: 1px dashed #e0e0e0;
+          border-radius: 3px;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          text-align: center;
+          overflow: hidden;
+          page-break-inside: avoid;
+        }
+        @media print {
+          .sticker-a4_24 { border: 1px solid transparent; }
+        }
+        .sticker-shop {
+          font-size: 7.5pt;
+          font-weight: 800;
+          letter-spacing: 0.5px;
+          text-transform: uppercase;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .sticker-title {
+          font-size: 8.5pt;
+          font-weight: 700;
+          line-height: 1.15;
+          max-height: 2.3em;
+          overflow: hidden;
+        }
+        .sticker-code-wrap {
+          margin: 1mm 0;
+        }
+        .sticker-code-num {
+          font-size: 6.5pt;
+          font-family: monospace;
+          font-weight: 600;
+          letter-spacing: 1px;
+        }
+        .sticker-footer {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding-top: 1mm;
+          border-top: 0.5px solid #eee;
+        }
+        .sticker-price {
+          font-size: 9.5pt;
+          font-weight: 900;
+        }
+        .sticker-warranty {
+          font-size: 7pt;
+          font-weight: 600;
+          color: #444;
+        }
+      `;
+    } else if (layout === 'a4_48') {
+      pageStyles = `
+        @page {
+          size: A4 portrait;
+          margin: 6mm 4mm;
+        }
+        body {
+          margin: 0;
+          padding: 0;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+          background: #fff;
+          color: #000;
+        }
+        .sheet {
+          display: grid;
+          grid-template-columns: repeat(4, 48.5mm);
+          grid-auto-rows: 23.5mm;
+          gap: 1.5mm 1.5mm;
+          justify-content: center;
+        }
+        .sticker-a4_48 {
+          width: 48.5mm;
+          height: 23.5mm;
+          box-sizing: border-box;
+          padding: 1mm 1.5mm;
+          border: 1px dashed #e0e0e0;
+          border-radius: 2px;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          text-align: center;
+          overflow: hidden;
+          page-break-inside: avoid;
+        }
+        @media print {
+          .sticker-a4_48 { border: 1px solid transparent; }
+        }
+        .sticker-shop {
+          font-size: 6pt;
+          font-weight: 800;
+          text-transform: uppercase;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .sticker-title {
+          font-size: 6.5pt;
+          font-weight: 700;
+          line-height: 1.1;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .sticker-code-wrap {
+          margin: 0.5mm 0;
+        }
+        .sticker-code-num {
+          font-size: 5.5pt;
+          font-family: monospace;
+          font-weight: 600;
+          letter-spacing: 0.5px;
+        }
+        .sticker-footer {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        .sticker-price {
+          font-size: 7pt;
+          font-weight: 900;
+        }
+        .sticker-warranty {
+          font-size: 5.5pt;
+          font-weight: 600;
+          color: #444;
+        }
+      `;
+    } else {
+      pageStyles = `
+        @page {
+          size: 35mm 35mm;
+          margin: 0;
+        }
+        body {
+          margin: 0;
+          padding: 0;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+          background: #fff;
+          color: #000;
+        }
+        .sheet {
+          display: block;
+        }
+        .sticker-qr_35x35 {
+          width: 35mm;
+          height: 35mm;
+          box-sizing: border-box;
+          padding: 1.5mm;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          align-items: center;
+          text-align: center;
+          page-break-after: always;
+          overflow: hidden;
+        }
+        .sticker-shop {
+          font-size: 6.5pt;
+          font-weight: 800;
+          text-transform: uppercase;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 100%;
+        }
+        .sticker-title {
+          font-size: 6.5pt;
+          font-weight: 700;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 100%;
+        }
+        .sticker-footer {
+          font-size: 7.5pt;
+          font-weight: 900;
+        }
+      `;
+    }
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${title} - Barcode Labels</title>
+  <style>
+    ${pageStyles}
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    ${stickers}
+  </div>
+</body>
+</html>`;
+  },
+
+  printBarcodeSheet() {
+    const config = this._getBarcodeStudioConfig();
+    if (!config.title) {
+      App.toast('Please enter or select a product title', 'warning');
+      return;
+    }
+    if (!config.barcode) {
+      App.toast('Please provide a barcode or generate one', 'warning');
+      return;
+    }
+
+    const html = this.generateBarcodeSheetHtml(config);
+    const title = `${config.barcode}_Labels_${config.layout}`;
+
+    // 1. Electron desktopApp print bridge
+    if (window.desktopApp && typeof window.desktopApp.printHtml === 'function') {
+      window.desktopApp.printHtml({ html, title });
+      return;
+    }
+
+    // 2. Web popup print fallback
+    try {
+      const w = window.open('', '_blank');
+      if (w) {
+        w.document.open();
+        w.document.write(html);
+        w.document.close();
+        w.focus();
+        setTimeout(() => {
+          w.print();
+        }, 300);
+      }
+    } catch (err) {
+      console.error('Print popup error:', err);
+      App.toast('Popup blocked. Please allow popups to print barcode sheets.', 'error');
+    }
   }
 };

@@ -6,6 +6,24 @@
 
 ---
 
+## 🌟 What's New in v1.5.0 — Barcode Label Printing Studio & Always-Active Scanner POS
+- 🏷️ **Barcode & Price Tag Studio**: Dedicated interactive design modal in Inventory allowing creation of barcode and price stickers for any product or custom item with live real-time sticker preview.
+- 📐 **Multiple Standard Label Sheet & Roll Layouts**:
+  - **50mm × 25mm Thermal Roll (2" × 1")**: Single-row continuous sticker roll for thermal barcode label printers (TVS, TSC, Zebra, Xprinter).
+  - **A4 Sheet — 24 Labels (3 cols × 8 rows, 70 × 37mm)**: Standard 24-up sticker paper for regular laser/inkjet printers (Avery/Oddy).
+  - **A4 Sheet — 48 Mini Labels (4 cols × 12 rows, 48.5 × 25.4mm)**: Compact mini stickers for small parts (RAM, adapters, connectors).
+  - **2D QR Code Sticker (35mm × 35mm)**: 2D QR code sticker format with shop branding and price tags.
+- 🖨️ **Zero-Dependency Vector Barcode Engine**: 100% vanilla Code 128 (subset B) SVG generator outputting crisp, scannable vector barcodes without external images or npm packages.
+- 🎲 **Automatic Indian 12-digit EAN Barcode Generator**: 1-click generation of standard 12-digit Indian prefix (`890...`) barcodes with option to save generated barcodes directly to product records.
+- ⚡ **Global Always-Active Hardware Barcode Scanner POS**: Background scanner listener automatically intercepts rapid laser/CCD scanner gun inputs (< 60ms keystrokes) anywhere in the app:
+  - If invoice/bill form is open: auto-adds item or increments quantity with audio beep.
+  - If serial/warranty lookup is open: populates S/N and triggers instant warranty lookup.
+  - If in Inventory: filters catalog to exact product.
+  - Anywhere else: displays a fast identification popup with stock status, retail & dealer prices, and 1-click invoice creation.
+- 🧪 **89-Point Automated Test Suite**: Expanded test coverage verifying pure SVG Code 128 rendering, Indian EAN prefixes, barcode lookup, and multi-layout label sheets.
+
+---
+
 ## 🌟 What's New in v1.4.0 — Desktop Experience & Security Edition
 - 💿 **Official Windows NSIS Setup Wizard Installer**: Standard installation wizard (`ShopPulse-Setup-v1.4.0.exe`) creating desktop shortcuts, Start Menu integration, and clean uninstaller support.
 - 🔒 **Default Staff Mode & Privacy Engine**: Every app launch safely defaults to Counter Staff Mode (`🔒 Staff Mode ▾`), masking sensitive wholesale purchase costs, supplier bills, payables, and P&L until unlocked by the shop owner with PIN (`1234`).

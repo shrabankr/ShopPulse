@@ -37,6 +37,9 @@ const App = {
       }).catch(() => {});
     }, 2000);
 
+    // Global Hardware Barcode / QR Scanner Gun Listener
+    this.initBarcodeScannerListener();
+
     // Automated Local Daily Backup (Silent background save with 7-day retention)
     setTimeout(() => this.triggerAutoBackup(), 3500);
   },
@@ -697,6 +700,148 @@ const App = {
     this.buildTopbar();
     this.toast('Switched to Staff Mode 🧾', 'info');
     this.route('#billing-sales');
+  },
+
+  /* ─────────────────────────────────────────────
+     Global Fast Barcode / QR Scanner Gun Listener
+  ───────────────────────────────────────────── */
+  initBarcodeScannerListener() {
+    let buffer = '';
+    let lastKeyTime = 0;
+    const SCANNER_MAX_INTERVAL_MS = 60; // Hardware laser/CCD scanners emit keystrokes ~10-40ms apart
+
+    window.addEventListener('keydown', (e) => {
+      // Don't intercept shortcut combinations
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+      const now = Date.now();
+      const interval = now - lastKeyTime;
+
+      // When Enter is pressed, check if buffer was accumulated at scanner speeds
+      if (e.key === 'Enter') {
+        if (buffer.length >= 3 && interval < 120) {
+          const scannedCode = buffer.trim();
+          buffer = '';
+          lastKeyTime = 0;
+          this.handleGlobalBarcodeScan(scannedCode);
+          return;
+        }
+        buffer = '';
+        lastKeyTime = 0;
+        return;
+      }
+
+      // Single printable characters
+      if (e.key && e.key.length === 1) {
+        if (interval > SCANNER_MAX_INTERVAL_MS && buffer.length > 0) {
+          buffer = e.key;
+        } else {
+          buffer += e.key;
+        }
+        lastKeyTime = now;
+      }
+    }, true);
+  },
+
+  handleGlobalBarcodeScan(code) {
+    if (!code) return;
+    code = String(code).trim();
+    if (!code) return;
+
+    // 1. If Billing / Invoice / Purchase form is open with items table
+    const itemsTbody = document.getElementById('items-tbody');
+    if (itemsTbody && typeof Billing !== 'undefined' && typeof Billing._triggerBarcodeAdd === 'function') {
+      Billing._triggerBarcodeAdd(code);
+      return;
+    }
+
+    // 2. If Serial / Warranty lookup modal is open
+    const serialInput = document.getElementById('serial-search-input');
+    if (serialInput) {
+      serialInput.value = code;
+      if (typeof Billing !== 'undefined' && typeof Billing._performSerialSearch === 'function') {
+        Billing._performSerialSearch();
+      }
+      return;
+    }
+
+    // 3. If currently on Inventory catalog view
+    const invSearch = document.getElementById('inv-search');
+    if (location.hash === '#inventory' && invSearch && typeof Inventory !== 'undefined') {
+      invSearch.value = code;
+      Inventory._applyFilter();
+      this.toast(`Filtered catalog by scanned code: ${code}`, 'info');
+      return;
+    }
+
+    // 4. Global Lookup anywhere else in ShopPulse
+    const prod = DB.getProductByBarcode(code);
+    if (prod) {
+      this.playScannerBeep();
+      const stockBadge = prod.stock <= 0
+        ? `<span class="badge badge-danger">Out of Stock (${prod.stock})</span>`
+        : prod.stock <= (prod.reorderLevel || 5)
+        ? `<span class="badge badge-warning">Low Stock (${prod.stock})</span>`
+        : `<span class="badge badge-paid">${prod.stock} ${prod.unit || 'Nos'} in stock</span>`;
+
+      this.modal(
+        `📦 Product Identified: ${prod.name}`,
+        `
+        <div style="padding:10px 0;text-align:center">
+          <div style="font-size:1.15rem;font-weight:700;color:var(--text-primary);margin-bottom:6px">${prod.name}</div>
+          <div style="margin-bottom:12px">${stockBadge}</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;background:var(--bg);padding:14px;border-radius:var(--radius);border:1px solid var(--border);text-align:left;margin-bottom:14px">
+            <div>
+              <div style="font-size:.75rem;color:var(--text-secondary);font-weight:600">RETAIL PRICE</div>
+              <div style="font-size:1.2rem;font-weight:800;color:var(--primary)">${fmtCurrency(prod.sellingPrice || 0)}</div>
+            </div>
+            ${prod.dealerPrice ? `
+            <div>
+              <div style="font-size:.75rem;color:var(--text-secondary);font-weight:600">DEALER PRICE</div>
+              <div style="font-size:1.2rem;font-weight:800;color:hsl(271,78%,45%)">${fmtCurrency(prod.dealerPrice)}</div>
+            </div>` : `
+            <div>
+              <div style="font-size:.75rem;color:var(--text-secondary);font-weight:600">GST RATE</div>
+              <div style="font-size:1.1rem;font-weight:700">${prod.gstRate || 18}%</div>
+            </div>`}
+            <div>
+              <div style="font-size:.75rem;color:var(--text-secondary)">BARCODE / EAN</div>
+              <div style="font-family:monospace;font-weight:600">${prod.barcode || '—'}</div>
+            </div>
+            <div>
+              <div style="font-size:.75rem;color:var(--text-secondary)">HSN / SAC</div>
+              <div style="font-weight:600">${prod.hsn || '—'}</div>
+            </div>
+          </div>
+          ${generateBarcodeSVG(prod.barcode || prod.sku || prod.id, 32, 1.4)}
+        </div>
+        `,
+        `
+        <button class="btn btn-secondary" onclick="App.closeModal();location.hash='#inventory';setTimeout(()=>{const s=document.getElementById('inv-search');if(s){s.value='${prod.name}';Inventory._applyFilter();}},150)">View in Inventory</button>
+        <button class="btn btn-primary" onclick="App.closeModal();Billing.openForm('sales');setTimeout(()=>{Billing._triggerBarcodeAdd('${prod.id}');},250)">+ New Invoice with Item</button>
+        `
+      );
+    } else {
+      this.toast(`Scanned code "${code}" not found in catalog.`, 'warning');
+    }
+  },
+
+  playScannerBeep() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1900, ctx.currentTime);
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.08);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.08);
+    } catch (e) {}
   },
 
   /* ─── Backup & Restore Functions ─── */

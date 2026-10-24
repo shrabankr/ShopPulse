@@ -30,7 +30,7 @@ function assertClose(actual, expected, message, precision = 0.01) {
 }
 
 console.log('======================================================');
-console.log('       SHOPPULSE v1.4.0 COMPREHENSIVE AUDIT & TEST    ');
+console.log('       SHOPPULSE v1.5.0 COMPREHENSIVE AUDIT & TEST    ');
 console.log('======================================================\n');
 
 // Phase 1: JS Syntax Check
@@ -392,6 +392,63 @@ const mainCode = fs.readFileSync(path.resolve(__dirname, '..', 'electron/main.js
 assert(mainCode.includes("ipcMain.handle('save-pdf'"), 'main.js handles save-pdf IPC call');
 assert(mainCode.includes("ipcMain.handle('print-now'"), 'main.js handles print-now IPC call');
 assert(mainCode.includes('shell.showItemInFolder'), 'main.js automatically highlights saved PDF in Windows File Explorer');
+
+// Phase 11: Barcode Engine & Label Printing Studio Verification
+console.log('\n--- Phase 11: Barcode Engine & Label Printing Studio Verification ---');
+runFile(path.resolve(__dirname, '..', 'js/inventory.js'), context, 'Inventory');
+assert(typeof context.Inventory === 'object', 'Inventory module loaded successfully');
+
+// Test 11.1: Pure Code 128 SVG Barcode Generator
+const sampleSvg = context.generateBarcodeSVG('890100100001', 30, 1.5);
+assert(sampleSvg && sampleSvg.startsWith('<svg') && sampleSvg.includes('<rect'), 'generateBarcodeSVG returns valid SVG containing bars');
+assert(sampleSvg.includes('viewBox="0 0'), 'Barcode SVG includes responsive viewBox');
+
+// Test 11.2: 12-digit Indian EAN Barcode Generator
+const sampleEan = context.genBarcodeEAN();
+assert(typeof sampleEan === 'string' && sampleEan.length === 12 && sampleEan.startsWith('890'), `genBarcodeEAN generates 12-digit Indian prefix barcode: ${sampleEan}`);
+
+// Test 11.3: DB.getProductByBarcode Lookup
+const seededProducts = context.DB.getProducts();
+assert(seededProducts.length > 0, 'Catalog has seeded products');
+const firstProd = seededProducts[0];
+if (!firstProd.barcode) {
+  firstProd.barcode = '890123456789';
+  context.DB.saveProduct(firstProd);
+}
+const foundByBarcode = context.DB.getProductByBarcode(firstProd.barcode);
+assert(foundByBarcode && foundByBarcode.id === firstProd.id, `DB.getProductByBarcode successfully resolved product by barcode (${firstProd.barcode})`);
+const foundBySku = context.DB.getProductByBarcode(firstProd.sku || firstProd.id);
+assert(foundBySku && foundBySku.id === firstProd.id, 'DB.getProductByBarcode fallback to SKU/ID works');
+
+// Test 11.4: Thermal 50x25mm and A4 Sheet Label HTML Generation
+const thermalHtml = context.Inventory.generateBarcodeSheetHtml({
+  title: 'Hikvision 2MP Dome Camera',
+  barcode: '890100100004',
+  price: '1850',
+  warranty: '2 Years',
+  shopName: 'ShopPulse IT Solutions',
+  showShopName: true,
+  showPrice: true,
+  layout: 'thermal_50x25',
+  copies: 5
+});
+assert(thermalHtml.includes('@page') && thermalHtml.includes('50mm 25mm'), 'Thermal 50x25mm layout uses exact roll page dimensions');
+assert(thermalHtml.includes('sticker-thermal_50x25'), 'Thermal label includes container class');
+assert(thermalHtml.includes('Hikvision 2MP Dome Camera'), 'Thermal label includes product title');
+
+const a4SheetHtml = context.Inventory.generateBarcodeSheetHtml({
+  title: 'Cat6 Network Cable 305m',
+  barcode: '890100100007',
+  price: '4200',
+  warranty: '',
+  shopName: 'ShopPulse IT Solutions',
+  showShopName: true,
+  showPrice: true,
+  layout: 'a4_24',
+  copies: 24
+});
+assert(a4SheetHtml.includes('grid-template-columns: repeat(3, 68mm)'), 'A4 24-up layout creates 3-column sticker grid');
+assert(a4SheetHtml.includes('sticker-a4_24'), 'A4 24-up label includes correct layout class');
 
 // Summary
 console.log('\n======================================================');

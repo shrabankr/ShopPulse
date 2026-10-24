@@ -730,10 +730,9 @@ const Billing = {
     }
   },
 
-  _triggerBarcodeAdd() {
+  _triggerBarcodeAdd(directCode = null) {
     const input = document.getElementById('barcode-quick-scan');
-    if (!input) return;
-    const query = input.value.trim().toLowerCase();
+    const query = (directCode ? String(directCode) : (input ? input.value : '')).trim().toLowerCase();
     if (!query) return;
 
     const products = DB.getProducts();
@@ -746,10 +745,11 @@ const Billing = {
 
     if (!p) {
       App.toast(`Item not found for barcode / SKU "${query}"`, 'warning');
-      input.select();
+      if (input) input.select();
       return;
     }
 
+    if (input) input.value = '';
     this._playScanBeep();
 
     const tbody = document.getElementById('items-tbody');
