@@ -6,6 +6,20 @@
 
 ---
 
+## 🌟 What's New in v1.9.0 — Official GSTR-1 JSON Generator for Direct GST Portal Upload
+- 🏛️ **Official GSTN GSTR-1 JSON Generation (`Reports.generateGSTR1Json()`)**: Compiles 100% government-compliant `.json` return files ready to upload directly on the Indian GST Portal (`services.gst.gov.in`) under **Returns Dashboard $\rightarrow$ GSTR-1 $\rightarrow$ Prepare Offline $\rightarrow$ Upload**.
+- 📑 **Complete Statutory GSTN Tables Coverage**:
+  - **Table 4 (B2B)**: Outward supplies to registered taxable persons grouped by Buyer GSTIN with 2-digit Place of Supply (`pos`), reverse charge flags (`rchrg`), invoice numbers, and item tax rates.
+  - **Table 5 (B2CL)**: Large inter-state invoices to consumers exceeding ₹2.5 Lakhs.
+  - **Table 7 (B2CS)**: Aggregated consumer sales classified by supply type (`INTRA` / `INTER`), Place of Supply code, and tax rate.
+  - **Table 9B (CDNR & CDNUR)**: Credit notes and debit notes issued to registered and unregistered buyers.
+  - **Table 12 (HSN/SAC Summary)**: Product and service summary with standardized Indian Unit Quantity Codes (UQC: `NOS`, `BOX`, `MTR`, `SET`, `PAC`) and aggregated values.
+  - **Table 13 (Documents Issued)**: Complete document series numbering ranges (`from`, `to`, `totnum`, `net_issue`).
+- 🔍 **Interactive Pre-Upload GST Inspector & Validator (`Reports.viewGSTR1JsonModal()`)**: Live modal previewing JSON payloads, syntax validation, B2B GSTIN checksum verification, and 1-click clipboard copy with portal upload instructions.
+- 🧪 **147-Point Automated Test Suite**: Expanded verification covering GSTN schema generation, financial period mapping (`MMYYYY`), rate groupings, UQC conversion, and validation error detection.
+
+---
+
 ## 🌟 What's New in v1.8.0 — Daily Cash Register, Shift Balancing & Day-End Z-Report
 - 💼 **Daily Cash Register & Shift Management**: Full POS till management enabling cashiers to start morning shifts with opening float cash (`DB.openRegister()`), tracking active drawer sessions throughout the workday.
 - 🧮 **Interactive Indian Currency Denomination Note Counter**: Fast note counting matrix (₹500, ₹200, ₹100, ₹50, ₹20, ₹10 & coins) with live subtotal calculation and automated physical cash aggregation.

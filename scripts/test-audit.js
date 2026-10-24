@@ -30,7 +30,7 @@ function assertClose(actual, expected, message, precision = 0.01) {
 }
 
 console.log('======================================================');
-console.log('       SHOPPULSE v1.8.0 COMPREHENSIVE AUDIT & TEST    ');
+console.log('       SHOPPULSE v1.9.0 COMPREHENSIVE AUDIT & TEST    ');
 console.log('======================================================\n');
 
 // Phase 1: JS Syntax Check
@@ -630,6 +630,65 @@ assert(a4ZReport.includes('DAY-END Z-REPORT') && a4ZReport.includes('Financial M
 // Test 14.7: Backup Payload Verification
 const regBackup = context.DB.createBackupObject();
 assert(Array.isArray(regBackup.data.registers) && regBackup.stats.registersCount >= 1, 'createBackupObject includes registers data array and stats');
+
+// Phase 15: Official GSTR-1 JSON Generator & GST Portal Schema Verification
+console.log('\n--- Phase 15: Official GSTR-1 JSON Generator & GST Portal Schema Verification ---');
+runFile(path.resolve(__dirname, '..', 'js/reports.js'), context, 'Reports');
+assert(typeof context.Reports === 'object', 'Reports module loaded successfully');
+
+// Test 15.1: Date Formatting & UQC Mapping Helpers
+assert(context.Reports._fmtDateGSTN('2026-10-24') === '24-10-2026', 'Date correctly formatted to GSTN DD-MM-YYYY format');
+assert(context.Reports._mapUQC('Nos') === 'NOS' && context.Reports._mapUQC('Box') === 'BOX', 'UQC mapper resolves NOS and BOX standard unit codes');
+assert(context.Reports._mapUQC('Meter') === 'MTR' && context.Reports._mapUQC('Set') === 'SET', 'UQC mapper resolves MTR and SET standard unit codes');
+
+// Test 15.2: Seed an invoice with B2B GSTIN for October 2026
+const b2bSale = {
+  invoiceNo: 'APS/2026-27/0088',
+  date: '2026-10-24',
+  customerId: 'CUST-001',
+  customerName: 'Tech Innovators Pvt Ltd',
+  customerGstin: '27AABCZ9321K1Z4',
+  customerStateCode: '27',
+  placeOfSupply: '27',
+  reverseCharge: false,
+  items: [
+    { productId: 'PROD-001', name: 'Hikvision 4MP IP Dome Camera', hsn: '8525', unit: 'Nos', qty: 2, rate: 4500, discount: 0, gstRate: 18, taxableValue: 9000, cgstRate: 9, cgstAmt: 810, sgstRate: 9, sgstAmt: 810, igstRate: 0, igstAmt: 0, totalAmt: 10620 }
+  ],
+  subtotal: 9000,
+  totalCgst: 810,
+  totalSgst: 810,
+  totalIgst: 0,
+  totalTax: 1620,
+  total: 10620,
+  isIntra: true,
+  status: 'paid'
+};
+context.DB.saveSale(b2bSale);
+
+// Test 15.3: GSTR-1 JSON Top-Level Structure
+const gstr1 = context.Reports.generateGSTR1Json('2026-10');
+assert(typeof gstr1 === 'object', 'generateGSTR1Json returns valid JSON object');
+assert(gstr1.gstin && gstr1.fp === '102026', `Top-level GSTR-1 contains valid GSTIN and financial period 102026 (got ${gstr1.fp})`);
+assert(Array.isArray(gstr1.b2b) && Array.isArray(gstr1.b2cs) && Array.isArray(gstr1.cdnr) && Array.isArray(gstr1.cdnur), 'Contains required b2b, b2cs, cdnr, and cdnur arrays');
+assert(typeof gstr1.hsn === 'object' && Array.isArray(gstr1.hsn.data), 'Contains required Table 12 HSN data array');
+assert(typeof gstr1.doc_issue === 'object' && Array.isArray(gstr1.doc_issue.doc_det), 'Contains required Table 13 doc_issue array');
+
+// Test 15.4: B2B Table Verification
+const b2bEntry = gstr1.b2b.find(b => b.ctin === '27AABCZ9321K1Z4');
+assert(b2bEntry && b2bEntry.inv.length >= 1, 'B2B table accurately grouped registered customer with invoice');
+const b2bInv = b2bEntry.inv.find(i => i.inum === 'APS/2026-27/0088');
+assert(b2bInv && b2bInv.idt === '24-10-2026' && b2bInv.pos === '27', 'B2B invoice carries valid DD-MM-YYYY date and 2-digit POS code');
+assert(b2bInv.itms && b2bInv.itms[0].itm_det.rt === 18 && b2bInv.itms[0].itm_det.txval === 9000, 'B2B invoice item details carry rate 18% and taxable value 9000');
+
+// Test 15.5: Table 12 HSN Summary & Table 13 Document Series
+const hsnEntry = gstr1.hsn.data.find(h => h.hsn_sc === '8525');
+assert(hsnEntry && hsnEntry.uqc === 'NOS' && hsnEntry.qty >= 2, 'HSN summary accurately aggregates CCTV camera quantities');
+assert(gstr1.doc_issue.doc_det.some(d => d.doc_num === 1), 'Table 13 doc_issue includes outward sales invoice serial range');
+
+// Test 15.6: Validation Engine
+const valReport = context.Reports.validateGSTR1('2026-10');
+assert(valReport && typeof valReport.isValid === 'boolean', 'validateGSTR1 returns validation report');
+assert(valReport.stats.b2bCount >= 1 && valReport.stats.hsnCount >= 1, 'validateGSTR1 stats correctly reflect populated sections');
 
 // Summary
 console.log('\n======================================================');
