@@ -6,6 +6,20 @@
 
 ---
 
+## 🌟 What's New in v1.6.0 — AMC Contracts & Warranty Renewal Engine
+- 🤝 **Comprehensive AMC Contract Management**: Dedicated lifecycle manager for Annual Maintenance Contracts (AMCs) tailored for IT, CCTV surveillance, networking, and hardware service providers.
+- 🏢 **Multi-Category & Scope Support**: Register contracts for CCTV Surveillance, Computers & IT Hardware, Networking & Firewall, Biometric & Intercom, and Complete IT Infrastructure with equipment inventories, device counts, and site addresses.
+- ⚖️ **Comprehensive vs Non-Comprehensive Coverage**: Clear distinction between parts-inclusive agreements and labor/service-only contracts with automated SLA terms.
+- 📅 **Automated Preventive Maintenance (PM) Scheduler**: Auto-generates quarterly, bi-monthly, monthly, or half-yearly scheduled service visit dates across the contract period.
+- 🛠️ **1-Click Field Service Ticket Creation**: Convert any scheduled PM visit directly into a field service repair ticket (`DB.saveJob()`) for field technicians to execute on-site.
+- 🔄 **1-Click Contract Renewal Engine**: Instantly creates the next year's contract starting seamlessly from the previous expiration date with auto-generated contract numbering.
+- 🧾 **1-Click GST Tax Invoice Conversion (SAC 998314)**: Converts contracts to GST-compliant Tax Invoices for Information Technology & Maintenance Services (SAC 998314, 18% GST).
+- 📄 **Professional A4 AMC SLA Agreement Certificate**: Printable and PDF-exportable contract document with provider branding, client site details, equipment schedule, SLA response window, terms & conditions, and signature blocks.
+- 📲 **WhatsApp Contract & Renewal Dispatch**: Pre-formatted status updates, visit notifications, and renewal alerts directly sent to customer WhatsApp numbers.
+- 🧪 **102-Point Automated Test Suite**: Expanded verification covering PM schedule generation, AMC CRUD, expiry detection, and agreement document generation.
+
+---
+
 ## 🌟 What's New in v1.5.0 — Barcode Label Printing Studio & Always-Active Scanner POS
 - 🏷️ **Barcode & Price Tag Studio**: Dedicated interactive design modal in Inventory allowing creation of barcode and price stickers for any product or custom item with live real-time sticker preview.
 - 📐 **Multiple Standard Label Sheet & Roll Layouts**:

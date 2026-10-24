@@ -45,7 +45,7 @@ const GST_RATES = [0, 0.1, 0.25, 1, 1.5, 3, 5, 7.5, 12, 18, 28];
 const PAYMENT_METHODS = ['Cash', 'Bank Transfer', 'UPI', 'Cheque', 'NEFT', 'RTGS', 'Credit Card', 'Other'];
 const UNITS = ['Nos', 'Pcs', 'Box', 'Pack', 'Set', 'Roll', 'Mtr', 'Job', 'Visit', 'License', 'Year', 'Month'];
 const DECIMAL_UNITS = ['Mtr', 'Roll'];
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '1.6.0';
 
 function isDecimalUnit(unit) {
   return DECIMAL_UNITS.includes(unit);
@@ -134,6 +134,41 @@ function generateBarcodeSVG(text, height = 35, barWidth = 1.6) {
 
 function genBarcodeEAN() {
   return '890' + Math.floor(100000000 + Math.random() * 900000000);
+}
+
+function generatePmSchedule(startDateStr, endDateStr, frequency) {
+  if (!startDateStr || !endDateStr) return [];
+  const start = new Date(startDateStr);
+  const end = new Date(endDateStr);
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || start >= end) return [];
+
+  let count = 4;
+  if (frequency === 'Monthly') count = 12;
+  else if (frequency === 'Bi-Monthly') count = 6;
+  else if (frequency === 'Quarterly') count = 4;
+  else if (frequency === 'Half-Yearly') count = 2;
+  else if (frequency === 'On-Demand') return [];
+
+  const totalMs = end.getTime() - start.getTime();
+  const stepMs = totalMs / count;
+  const visits = [];
+
+  for (let i = 1; i <= count; i++) {
+    const targetMs = start.getTime() + (stepMs * i) - (stepMs * 0.15);
+    const d = new Date(Math.min(targetMs, end.getTime()));
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    visits.push({
+      id: i,
+      scheduledDate: `${yyyy}-${mm}-${dd}`,
+      status: 'pending',
+      completedDate: null,
+      technician: '',
+      notes: ''
+    });
+  }
+  return visits;
 }
 
 function calcWarrantyExpiry(startDateStr, warrantyStr) {
@@ -337,6 +372,7 @@ const DB = {
     DEBIT_NOTES: 'sp_debit_notes',
     QUOTATIONS: 'sp_quotations',
     SERVICES: 'sp_service_jobs',
+    AMCS: 'sp_amcs',
     BUNDLES: 'sp_bundles',
     EXPENSES: 'sp_expenses',
     MOVEMENTS: 'sp_movements',
@@ -832,6 +868,121 @@ const DB = {
     const no = `${b.jobPrefix || 'JOB'}/${getFY()}/${String(b.jobCounter || 1).padStart(4, '0')}`;
     this.setBiz({ ...b, jobCounter: (b.jobCounter || 1) + 1 });
     return no;
+  },
+
+  /* ─── AMC (Annual Maintenance Contracts) & Warranty Renewals ─── */
+  getAmcs() { return this._get(this.K.AMCS) || []; },
+  getAmcById(id) { return this.getAmcs().find(a => a.id === id); },
+  saveAmc(data) {
+    const list = this.getAmcs();
+    data.updatedAt = new Date().toISOString();
+    if (data.id) {
+      const idx = list.findIndex(a => a.id === data.id);
+      if (idx > -1) list[idx] = { ...list[idx], ...data };
+      else list.unshift(data);
+    } else {
+      data.id = genId('AMC');
+      data.createdAt = new Date().toISOString();
+      list.unshift(data);
+    }
+    this._set(this.K.AMCS, list);
+    return data;
+  },
+  deleteAmc(id) {
+    this._set(this.K.AMCS, this.getAmcs().filter(a => a.id !== id));
+  },
+  nextAmcNo() {
+    const b = this.getBiz();
+    const no = `${b.amcPrefix || 'AMC'}/${getFY()}/${String(b.amcCounter || 1).padStart(4, '0')}`;
+    this.setBiz({ ...b, amcCounter: (b.amcCounter || 1) + 1 });
+    return no;
+  },
+  getExpiringAmcs(withinDays = 30) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return this.getAmcs().filter(a => {
+      if (['expired', 'renewed'].includes(a.status)) return false;
+      if (!a.endDate) return false;
+      const end = new Date(a.endDate);
+      end.setHours(0, 0, 0, 0);
+      const diffDays = Math.ceil((end - today) / (1000 * 60 * 60 * 24));
+      return diffDays >= 0 && diffDays <= withinDays;
+    });
+  },
+  ensureAmcSeed() {
+    if (this._get(this.K.AMCS)) return;
+    const customers = this.getCustomers();
+    const cSchool = customers.find(c => c.name.includes('School')) || customers[1];
+    const cHosp = customers.find(c => c.name.includes('Hospital')) || customers[2];
+
+    const today = new Date();
+    const curYear = today.getFullYear();
+    const start1 = `${curYear}-04-01`;
+    const end1 = `${curYear + 1}-03-31`;
+
+    const sampleAmcs = [
+      {
+        id: genId('AMC'),
+        amcNo: 'AMC/2026-27/0001',
+        customerId: cSchool ? cSchool.id : 'CUST-002',
+        customerName: cSchool ? cSchool.name : 'St. Xavier School & College',
+        customerPhone: cSchool ? (cSchool.whatsapp || cSchool.phone) : '9823003344',
+        customerEmail: cSchool ? cSchool.email : 'admin@stxaviers.edu.in',
+        siteAddress: 'St. Xavier School Campus & Computer Labs, Camp, Pune',
+        contractType: 'Comprehensive',
+        deviceCategory: 'CCTV Surveillance',
+        equipmentSummary: '24x Hikvision 4MP IP Cameras, 2x 16CH NVR, 3x 16-Port Gigabit PoE Switches, 2x 4TB Surveillance HDDs',
+        unitsCovered: 31,
+        startDate: start1,
+        endDate: end1,
+        visitFrequency: 'Quarterly',
+        pmVisits: [
+          { id: 1, scheduledDate: `${curYear}-06-15`, status: 'completed', completedDate: `${curYear}-06-14`, technician: 'Sandeep (CCTV Tech)', notes: 'Full camera lens cleaning, firmware patch applied, all 24 feeds recording OK.' },
+          { id: 2, scheduledDate: `${curYear}-09-15`, status: 'completed', completedDate: `${curYear}-09-16`, technician: 'Sandeep (CCTV Tech)', notes: 'Tested UPS backup runtime, cleaned NVR cooling fans, HDD health 100% normal.' },
+          { id: 3, scheduledDate: `${curYear}-12-15`, status: 'pending', completedDate: null, technician: '', notes: '' },
+          { id: 4, scheduledDate: `${curYear + 1}-03-15`, status: 'pending', completedDate: null, technician: '', notes: '' }
+        ],
+        slaResponseHours: 4,
+        contractValue: 45000,
+        gstRate: 18,
+        sacCode: '998314',
+        taxableValue: 45000,
+        gstAmount: 8100,
+        totalValue: 53100,
+        status: 'active',
+        paymentStatus: 'paid',
+        notes: 'Includes free camera realignment, connector replacements, and emergency on-call support within 4 hours.'
+      },
+      {
+        id: genId('AMC'),
+        amcNo: 'AMC/2026-27/0002',
+        customerId: cHosp ? cHosp.id : 'CUST-003',
+        customerName: cHosp ? cHosp.name : 'City Hospital & Research Centre',
+        customerPhone: cHosp ? (cHosp.whatsapp || cHosp.phone) : '9823005566',
+        customerEmail: cHosp ? cHosp.email : 'accounts@cityhospital.in',
+        siteAddress: 'ICU & OPD Wings, 88 Nagar Road, Yerawada, Pune',
+        contractType: 'Non-Comprehensive',
+        deviceCategory: 'Computers & IT Hardware',
+        equipmentSummary: '18x Dell OptiPlex Desktops, 4x HP LaserJet Printers, 2x 1KVA Online UPS, Local Area Network',
+        unitsCovered: 24,
+        startDate: start1,
+        endDate: end1,
+        visitFrequency: 'Monthly',
+        pmVisits: generatePmSchedule(start1, end1, 'Monthly'),
+        slaResponseHours: 2,
+        contractValue: 60000,
+        gstRate: 18,
+        sacCode: '998314',
+        taxableValue: 60000,
+        gstAmount: 10800,
+        totalValue: 70800,
+        status: 'active',
+        paymentStatus: 'paid',
+        notes: 'Hospital OPD systems high-priority contract. Critical 2-hour response window for ICU billing counters.'
+      }
+    ];
+
+    this._set(this.K.AMCS, sampleAmcs);
   },
 
   /* ─── Package Bundles & Custom PC Configurator ─── */
@@ -1882,6 +2033,7 @@ const DB = {
         creditNotesCount: this.getCreditNotes().length,
         debitNotesCount: this.getDebitNotes().length,
         servicesCount: this.getJobs ? this.getJobs().length : 0,
+        amcsCount: this.getAmcs ? this.getAmcs().length : 0,
         bundlesCount: this.getBundles ? this.getBundles().length : 0,
         expensesCount: this.getExpenses().length,
         productsCount: this.getProducts().length,
@@ -1900,6 +2052,7 @@ const DB = {
         creditNotes: this.getCreditNotes(),
         debitNotes: this.getDebitNotes(),
         services: this.getJobs ? this.getJobs() : [],
+        amcs: this.getAmcs ? this.getAmcs() : [],
         bundles: this.getBundles ? this.getBundles() : [],
         expenses: this.getExpenses(),
         movements: this.getMovements(),
@@ -1969,6 +2122,7 @@ const DB = {
     if (d.creditNotes) this._set(this.K.CREDIT_NOTES, d.creditNotes);
     if (d.debitNotes) this._set(this.K.DEBIT_NOTES, d.debitNotes);
     if (d.services) this._set(this.K.SERVICES, d.services);
+    if (d.amcs) this._set(this.K.AMCS, d.amcs);
     if (d.bundles) this._set(this.K.BUNDLES, d.bundles);
     if (d.expenses) this._set(this.K.EXPENSES, d.expenses);
     if (d.movements) this._set(this.K.MOVEMENTS, d.movements);
@@ -2385,6 +2539,7 @@ const DB = {
     }, true);
 
     this.ensureConfiguratorSeed();
+    this.ensureAmcSeed();
     this._set(this.K.SEEDED, true);
   }
 };

@@ -8,6 +8,7 @@ const App = {
 
   init() {
     DB.seed();
+    DB.ensureAmcSeed();
     // Always default to Staff Mode on launch / app open for security & privacy
     DB.setRole('staff');
     this.buildSidebar();
@@ -53,6 +54,7 @@ const App = {
     const unpaidBuys = DB.getPurchases().filter(p => ['unpaid', 'overdue'].includes(p.status)).length;
     const lowStock = DB.getProducts().filter(p => p.reorderLevel > 0 && p.stock <= p.reorderLevel).length;
     const activeJobs = DB.getJobs ? DB.getJobs().filter(j => ['received', 'diagnosing', 'waiting_parts'].includes(j.status)).length : 0;
+    const expiringAmcs = DB.getExpiringAmcs ? DB.getExpiringAmcs(30).length : 0;
 
     const limits = DB.getTrialLimits();
     const hasBranding = limits.canSetBranding;
@@ -87,6 +89,7 @@ const App = {
             <a href="#billing-sales" class="nav-item" data-r="billing-sales"><span class="material-icons">receipt_long</span><span>Sales Invoices</span></a>
             <a href="#quotations" class="nav-item" data-r="quotations"><span class="material-icons">request_quote</span><span>Quotations / Estimates</span></a>
             <a href="#services" class="nav-item" data-r="services"><span class="material-icons">build</span><span>Repairs &amp; Services</span>${activeJobs ? `<span class="nav-badge warn">${activeJobs}</span>` : ''}</a>
+            <a href="#amc" class="nav-item" data-r="amc"><span class="material-icons">handshake</span><span>AMC Contracts</span>${expiringAmcs ? `<span class="nav-badge warn">${expiringAmcs}</span>` : ''}</a>
             ${isStaff ? '' : `<a href="#billing-purchases" class="nav-item" data-r="billing-purchases"><span class="material-icons">shopping_bag</span><span>Purchase Bills</span></a>`}
             <a href="#returns" class="nav-item" data-r="returns"><span class="material-icons">assignment_return</span><span>Returns &amp; Notes</span></a>
             ${isStaff ? '' : `<a href="#expenses" class="nav-item" data-r="expenses"><span class="material-icons">receipt</span><span>Expenses</span></a>`}
@@ -305,6 +308,7 @@ const App = {
       case 'billing-sales': Billing.render(c, 'sales'); break;
       case 'quotations': Billing.renderQuotations(c); break;
       case 'services': Services.render(c); break;
+      case 'amc': AMC.render(c); break;
       case 'configurator': Configurator.render(c); break;
       case 'pc-builder': Configurator.render(c); break;
       case 'billing-purchases': Billing.render(c, 'purchases'); break;
@@ -343,6 +347,7 @@ const App = {
     const allJobs = DB.getJobs ? DB.getJobs() : [];
     const activeJobsList = allJobs.filter(j => ['received', 'diagnosing', 'waiting_parts'].includes(j.status));
     const readyJobsList = allJobs.filter(j => j.status === 'ready');
+    const expiringAmcList = DB.getExpiringAmcs ? DB.getExpiringAmcs(30) : [];
     const monthlyRevenue = this._monthly(sales);
     const topProds = this._topProducts(sales);
 
@@ -419,6 +424,12 @@ const App = {
               <div><strong>${lowStock.length} Low Stock Alert${lowStock.length > 1 ? 's' : ''}</strong>
               <p>${lowStock.slice(0, 2).map(p => p.name.split(' ').slice(0, 2).join(' ')).join(', ')}${lowStock.length > 2 ? '...' : ''}</p></div>
               <a href="#inventory" onclick="App.route('#inventory')" class="alert-action">View</a>
+            </div>` : ''}
+            ${expiringAmcList.length ? `<div class="alert-card alert-warning">
+              <span class="material-icons">handshake</span>
+              <div><strong>${expiringAmcList.length} AMC Contract${expiringAmcList.length > 1 ? 's' : ''} Expiring Soon</strong>
+              <p>Renewal follow-up due for ${expiringAmcList[0].customerName}</p></div>
+              <a href="#amc" onclick="App.route('#amc')" class="alert-action">Renew</a>
             </div>` : ''}
             <div class="alert-card alert-info">
               <span class="material-icons">auto_awesome</span>

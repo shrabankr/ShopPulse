@@ -30,7 +30,7 @@ function assertClose(actual, expected, message, precision = 0.01) {
 }
 
 console.log('======================================================');
-console.log('       SHOPPULSE v1.5.0 COMPREHENSIVE AUDIT & TEST    ');
+console.log('       SHOPPULSE v1.6.0 COMPREHENSIVE AUDIT & TEST    ');
 console.log('======================================================\n');
 
 // Phase 1: JS Syntax Check
@@ -42,6 +42,7 @@ const jsFiles = [
   'js/inventory.js',
   'js/crm.js',
   'js/services.js',
+  'js/amc.js',
   'js/configurator.js',
   'js/expenses.js',
   'js/reports.js',
@@ -449,6 +450,50 @@ const a4SheetHtml = context.Inventory.generateBarcodeSheetHtml({
 });
 assert(a4SheetHtml.includes('grid-template-columns: repeat(3, 68mm)'), 'A4 24-up layout creates 3-column sticker grid');
 assert(a4SheetHtml.includes('sticker-a4_24'), 'A4 24-up label includes correct layout class');
+
+// Phase 12: AMC (Annual Maintenance Contracts) & Warranty Renewals Verification
+console.log('\n--- Phase 12: AMC Engine & Preventive Maintenance Scheduler Verification ---');
+runFile(path.resolve(__dirname, '..', 'js/amc.js'), context, 'AMC');
+assert(typeof context.AMC === 'object', 'AMC module loaded successfully');
+
+// Test 12.1: PM Visits Generation Engine
+const quarterlySchedule = context.generatePmSchedule('2026-04-01', '2027-03-31', 'Quarterly');
+assert(quarterlySchedule.length === 4, `Quarterly schedule generates exactly 4 visits: got ${quarterlySchedule.length}`);
+const monthlySchedule = context.generatePmSchedule('2026-04-01', '2027-03-31', 'Monthly');
+assert(monthlySchedule.length === 12, `Monthly schedule generates exactly 12 visits: got ${monthlySchedule.length}`);
+const biMonthlySchedule = context.generatePmSchedule('2026-04-01', '2027-03-31', 'Bi-Monthly');
+assert(biMonthlySchedule.length === 6, `Bi-Monthly schedule generates exactly 6 visits: got ${biMonthlySchedule.length}`);
+
+// Test 12.2: AMC CRUD & Seed Integrity
+context.DB.ensureAmcSeed();
+const allAmcs = context.DB.getAmcs();
+assert(allAmcs.length >= 2, `Seeded initial AMC contracts correctly: found ${allAmcs.length}`);
+const testAmc = allAmcs[0];
+assert(testAmc.amcNo && testAmc.sacCode === '998314', `AMC Contract ${testAmc.amcNo} carries valid SAC 998314 for IT maintenance services`);
+
+// Test 12.3: Expiring Soon Calculation
+const expiringSample = {
+  amcNo: 'AMC/2026-27/9999',
+  customerName: 'Test School',
+  startDate: '2025-05-01',
+  endDate: new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0], // 15 days from now
+  contractValue: 25000,
+  status: 'active'
+};
+context.DB.saveAmc(expiringSample);
+const expiringAmcs = context.DB.getExpiringAmcs(30);
+assert(expiringAmcs.some(a => a.amcNo === 'AMC/2026-27/9999'), 'getExpiringAmcs successfully detected contract expiring in 15 days');
+
+// Test 12.4: A4 Agreement / SLA Certificate Generation
+const agreementHtml = context.AMC.generateAgreementHtml(testAmc.id);
+assert(agreementHtml.includes('AMC Service Agreement') && agreementHtml.includes(testAmc.amcNo), 'Agreement HTML contains valid title and contract number');
+assert(agreementHtml.includes('998314'), 'Agreement HTML contains SAC 998314 IT Service Code');
+assert(agreementHtml.includes('SERVICE LEVEL AGREEMENT'), 'Agreement HTML contains SLA terms and conditions');
+
+// Test 12.5: Backup payload incorporates AMCs
+const backupObj = context.DB.createBackupObject();
+assert(Array.isArray(backupObj.data.amcs) && backupObj.data.amcs.length >= 2, 'createBackupObject includes amcs data array');
+assert(backupObj.stats.amcsCount >= 2, 'createBackupObject stats includes amcsCount');
 
 // Summary
 console.log('\n======================================================');
