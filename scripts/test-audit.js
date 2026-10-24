@@ -30,7 +30,7 @@ function assertClose(actual, expected, message, precision = 0.01) {
 }
 
 console.log('======================================================');
-console.log('       SHOPPULSE v1.7.0 COMPREHENSIVE AUDIT & TEST    ');
+console.log('       SHOPPULSE v1.8.0 COMPREHENSIVE AUDIT & TEST    ');
 console.log('======================================================\n');
 
 // Phase 1: JS Syntax Check
@@ -39,6 +39,7 @@ const jsFiles = [
   'js/data.js',
   'js/app.js',
   'js/billing.js',
+  'js/register.js',
   'js/inventory.js',
   'js/crm.js',
   'js/services.js',
@@ -580,6 +581,55 @@ assert(posDocHtml.includes('UPI-UTR-9876543210'), 'POS 3" thermal invoice includ
 
 const a4DocHtml = context.Billing.generateDocHtml(savedSplitSale, 'sales', 'classic', true);
 assert(a4DocHtml.includes('Amount Paid') && a4DocHtml.includes('Cash Tendered') && a4DocHtml.includes('Change Returned'), 'A4 Classic invoice includes split payment breakdown');
+
+// Phase 14: Daily Cash Register, Shift Balancing & Day-End Z-Report Verification
+console.log('\n--- Phase 14: Daily Cash Register & Shift Balancing Verification ---');
+runFile(path.resolve(__dirname, '..', 'js/register.js'), context, 'Register');
+assert(typeof context.Register === 'object', 'Register module loaded successfully');
+
+// Test 14.1: Seed & Data Layer Integrity
+context.DB.ensureRegisterSeed();
+const seededRegs = context.DB.getRegisters();
+assert(seededRegs.length >= 1, `Register seed populated: found ${seededRegs.length} shifts`);
+
+// Test 14.2: Open Shift with Morning Float
+const openRes = context.DB.openRegister(2500, 'Ramesh Cashier', 'Morning retail shift');
+assert(openRes.success && openRes.register.openingFloat === 2500, 'openRegister successfully opened new shift with ₹2,500 float');
+const currentOpen = context.DB.getCurrentRegister();
+assert(currentOpen && currentOpen.id === openRes.register.id && currentOpen.status === 'open', 'getCurrentRegister accurately resolved open shift');
+
+// Test 14.3: Manual Float Drop & Top-up Cash Movements
+context.DB.addRegisterCashMovement(openRes.register.id, 'in', 500, 'Added coins & change from bank');
+context.DB.addRegisterCashMovement(openRes.register.id, 'out', 200, 'Courier postage cash');
+const updatedOpenReg = context.DB.getRegisterById(openRes.register.id);
+assert(updatedOpenReg.cashAdditions.length === 1 && updatedOpenReg.cashDrops.length === 1, 'Manual cash in and cash drop correctly recorded');
+
+// Test 14.4: Expected Cash Calculation
+const regCalc = context.DB.calcRegisterExpectedCash(updatedOpenReg);
+assert(regCalc.openingFloat === 2500, `calcRegisterExpectedCash float matches: ₹${regCalc.openingFloat}`);
+assert(regCalc.manualCashIn === 500 && regCalc.manualCashOut === 200, `calcRegisterExpectedCash accounts for manual cash-in (₹500) and drop (₹200)`);
+// Expected: 2500 + 500 (in) - 200 (out) = 2800 (plus any cash sales within shift)
+assert(regCalc.systemExpectedCash >= 2800, `Expected drawer cash computed accurately: ₹${regCalc.systemExpectedCash}`);
+
+// Test 14.5: Physical Denomination Counter & Shift Closure
+// Counting: 5 x ₹500 (2500) + 1 x ₹200 (200) + 1 x ₹100 (100) = ₹2,800
+const testDenoms = { n500: 5, n200: 1, n100: 1, n50: 0, n20: 0, n10: 0, coins: 0 };
+const closeRes = context.DB.closeRegister(openRes.register.id, testDenoms, 'End of shift handover completed', 'Shraban (Owner)');
+assert(closeRes.success && closeRes.register.status === 'closed', 'closeRegister successfully finalized and closed shift');
+assert(closeRes.register.actualPhysicalCash === 2800, `Physical cash counted accurately (5x500 + 1x200 + 1x100 = ₹2,800): got ₹${closeRes.register.actualPhysicalCash}`);
+assert(typeof closeRes.register.cashDiscrepancy === 'number', `Variance discrepancy computed: ₹${closeRes.register.cashDiscrepancy}`);
+
+// Test 14.6: Z-Report Document Generation (3" POS Slip & A4)
+const posZReport = context.Register.generateZReportHtml(closeRes.register.id, 'compact_pos');
+assert(posZReport.includes('DAILY REGISTER Z-REPORT') && posZReport.includes('CASH RECONCILIATION'), '3" Thermal POS Z-Report HTML includes headers and reconciliation tables');
+assert(posZReport.includes('EXPECTED TILL CASH:'), 'POS Z-Report includes system expected cash line');
+
+const a4ZReport = context.Register.generateZReportHtml(closeRes.register.id, 'a4');
+assert(a4ZReport.includes('DAY-END Z-REPORT') && a4ZReport.includes('Financial Movements'), 'A4 Audit Z-Report HTML generated with complete tables');
+
+// Test 14.7: Backup Payload Verification
+const regBackup = context.DB.createBackupObject();
+assert(Array.isArray(regBackup.data.registers) && regBackup.stats.registersCount >= 1, 'createBackupObject includes registers data array and stats');
 
 // Summary
 console.log('\n======================================================');

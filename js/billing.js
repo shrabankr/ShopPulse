@@ -100,6 +100,11 @@ const Billing = {
       <div class="page-header-row">
         <h2>${isSales ? 'Sales Invoices' : 'Purchase Bills'}</h2>
         <div class="actions">
+          ${isSales ? `
+          <button class="btn btn-secondary" onclick="App.route('#cash-register')" title="View Active Cash Register Till Status">
+            <span class="material-icons" style="font-size:16px">point_of_sale</span> Till: ${DB.getCurrentRegister && DB.getCurrentRegister() ? `<span style="color:#059669;font-weight:700">OPEN</span>` : `<span style="color:#64748b">CLOSED</span>`}
+          </button>
+          ` : ''}
           <button class="btn btn-secondary" onclick="App.route('#returns-${type}')"><span class="material-icons">assignment_return</span> ${isSales ? 'Customer Returns (CN)' : 'Supplier Returns (DN)'}</button>
           <button class="btn btn-primary" onclick="Billing.openNew('${type}')"><span class="material-icons">add</span> New ${isSales ? 'Invoice' : 'Bill'}</button>
         </div>

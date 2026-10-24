@@ -6,6 +6,16 @@
 
 ---
 
+## 🌟 What's New in v1.8.0 — Daily Cash Register, Shift Balancing & Day-End Z-Report
+- 💼 **Daily Cash Register & Shift Management**: Full POS till management enabling cashiers to start morning shifts with opening float cash (`DB.openRegister()`), tracking active drawer sessions throughout the workday.
+- 🧮 **Interactive Indian Currency Denomination Note Counter**: Fast note counting matrix (₹500, ₹200, ₹100, ₹50, ₹20, ₹10 & coins) with live subtotal calculation and automated physical cash aggregation.
+- ⚖️ **Automated Discrepancy & Variance Reconciliation**: Real-time comparison between System Expected Cash (Opening float $+$ Cash sales $+$ Overdue collections $+$ Cash-in drops $-$ Cash expenses $-$ Cash purchases $-$ Cash-drops) versus Counted Physical Cash with color-coded **Balanced (₹0)**, **Shortage (-₹)**, or **Overage (+₹)** indicators.
+- 📄 **Dual-Format Day-End Z-Report (3" POS Thermal Slip & A4 Audit Sheet)**: 1-click printable and exportable audit report detailing shift timings, financial movements, gross revenue across all payment modes (Cash, UPI, Card), physical denomination breakdown, variance, and dual signature blocks (Cashier and Store Manager/Owner).
+- 💰 **Drawer Float & Drop Operations**: Fast modal actions for mid-day cash injections (bank change top-ups) or petty cash drops (owner handovers, courier postage) with full narration audit trails.
+- 🧪 **131-Point Automated Test Suite**: Expanded verification covering register opening, cash inflow/outflow balance calculations, denomination matrix totals, shift finalization, and Z-report generation.
+
+---
+
 ## 🌟 What's New in v1.7.0 — Split Payments, Dynamic Countertop UPI QR & Change Calculator
 - 💳 **Split Payments & Multi-Tender Support**: Cashiers can now settle bills across multiple tenders simultaneously (e.g., ₹2,000 Cash + ₹8,500 UPI + ₹1,500 Store Credit/Receivable) with live breakdown and auto-balancing line items.
 - 📲 **Dynamic Countertop UPI QR Modal**: Live high-resolution QR modal generated on-screen with exact payable amounts encoded via standard NPCI UPI URI (`upi://pay?pa=...&am=...`), with 12-digit UTR confirmation input to auto-apply transactions without any external network dependency.

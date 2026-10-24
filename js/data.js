@@ -45,7 +45,7 @@ const GST_RATES = [0, 0.1, 0.25, 1, 1.5, 3, 5, 7.5, 12, 18, 28];
 const PAYMENT_METHODS = ['Cash', 'Bank Transfer', 'UPI', 'Cheque', 'NEFT', 'RTGS', 'Credit Card', 'Other'];
 const UNITS = ['Nos', 'Pcs', 'Box', 'Pack', 'Set', 'Roll', 'Mtr', 'Job', 'Visit', 'License', 'Year', 'Month'];
 const DECIMAL_UNITS = ['Mtr', 'Roll'];
-const APP_VERSION = '1.7.0';
+const APP_VERSION = '1.8.0';
 
 function isDecimalUnit(unit) {
   return DECIMAL_UNITS.includes(unit);
@@ -373,6 +373,7 @@ const DB = {
     QUOTATIONS: 'sp_quotations',
     SERVICES: 'sp_service_jobs',
     AMCS: 'sp_amcs',
+    REGISTERS: 'sp_registers',
     BUNDLES: 'sp_bundles',
     EXPENSES: 'sp_expenses',
     MOVEMENTS: 'sp_movements',
@@ -983,6 +984,245 @@ const DB = {
     ];
 
     this._set(this.K.AMCS, sampleAmcs);
+  },
+
+  /* ─── Cash Register & Shift Balancing ─── */
+  getRegisters() { return this._get(this.K.REGISTERS) || []; },
+  getRegisterById(id) { return this.getRegisters().find(r => r.id === id); },
+  getCurrentRegister() { return this.getRegisters().find(r => r.status === 'open') || null; },
+
+  saveRegister(reg) {
+    const list = this.getRegisters();
+    const idx = list.findIndex(r => r.id === reg.id);
+    if (idx >= 0) list[idx] = reg;
+    else list.unshift(reg);
+    this._set(this.K.REGISTERS, list);
+    return reg;
+  },
+
+  openRegister(floatAmt = 2000, openedBy = 'Cashier', notes = '') {
+    const current = this.getCurrentRegister();
+    if (current) {
+      return { success: false, message: `Shift ${current.shiftNo || current.id} is already open!` };
+    }
+    const today = new Date().toISOString().split('T')[0];
+    const shiftCount = this.getRegisters().filter(r => (r.date || '').startsWith(today)).length + 1;
+    const shiftNo = `REG/${today.replace(/-/g, '')}/${String(shiftCount).padStart(2, '0')}`;
+    
+    const newReg = {
+      id: genId('REG'),
+      shiftNo,
+      date: today,
+      openedAt: new Date().toISOString(),
+      closedAt: null,
+      openedBy: openedBy || 'Counter Staff',
+      closedBy: null,
+      status: 'open',
+      openingFloat: Math.max(0, parseFloat(floatAmt) || 0),
+      notes: notes || '',
+      cashAdditions: [],
+      cashDrops: []
+    };
+
+    this.saveRegister(newReg);
+    return { success: true, register: newReg };
+  },
+
+  calcRegisterExpectedCash(reg) {
+    if (!reg) return { systemExpectedCash: 0, cashSales: 0, upiSales: 0, cardSales: 0, otherSales: 0, totalSales: 0, cashReceivedDue: 0, cashExpenses: 0, cashPurchases: 0, manualCashIn: 0, manualCashOut: 0, openingFloat: 0 };
+    
+    const startTime = new Date(reg.openedAt).getTime();
+    const endTime = reg.closedAt ? new Date(reg.closedAt).getTime() : Date.now();
+
+    const sales = this.getSales();
+    let cashSales = 0;
+    let upiSales = 0;
+    let cardSales = 0;
+    let otherSales = 0;
+    let totalSales = 0;
+
+    sales.forEach(s => {
+      const docTime = s.createdAt ? new Date(s.createdAt).getTime() : new Date((s.date || '') + 'T12:00:00').getTime();
+      const isWithinShift = (docTime >= (startTime - 60000) && docTime <= (endTime + 60000)) || (s.date === reg.date && !reg.closedAt);
+      
+      if (isWithinShift && s.status !== 'draft') {
+        totalSales += (parseFloat(s.total) || 0);
+        const payments = this.getDocPayments(s);
+        if (payments && payments.length > 0) {
+          payments.forEach(p => {
+            const m = (p.method || 'Cash').toLowerCase();
+            const a = (parseFloat(p.amount) || 0);
+            if (m === 'cash') cashSales += a;
+            else if (m === 'upi') upiSales += a;
+            else if (m.includes('card') || m.includes('credit') || m.includes('debit')) cardSales += a;
+            else otherSales += a;
+          });
+        } else if (s.status === 'paid') {
+          const m = (s.paymentMethod || 'Cash').toLowerCase();
+          const a = (parseFloat(s.paidAmount || s.total) || 0);
+          if (m === 'cash') cashSales += a;
+          else if (m === 'upi') upiSales += a;
+          else if (m.includes('card') || m.includes('credit') || m.includes('debit')) cardSales += a;
+          else otherSales += a;
+        }
+      }
+    });
+
+    let cashReceivedDue = 0;
+    sales.forEach(s => {
+      const payments = this.getDocPayments(s);
+      payments.forEach(p => {
+        if (p.createdAt) {
+          const pTime = new Date(p.createdAt).getTime();
+          if (pTime >= startTime && pTime <= endTime && (p.method || '').toLowerCase() === 'cash') {
+            const sTime = s.createdAt ? new Date(s.createdAt).getTime() : 0;
+            if (pTime > sTime + 300000) {
+              cashReceivedDue += (parseFloat(p.amount) || 0);
+            }
+          }
+        }
+      });
+    });
+
+    const expenses = this.getExpenses();
+    let cashExpenses = 0;
+    expenses.forEach(e => {
+      const expTime = e.createdAt ? new Date(e.createdAt).getTime() : new Date((e.date || '') + 'T12:00:00').getTime();
+      const isWithin = (expTime >= (startTime - 60000) && expTime <= (endTime + 60000)) || (e.date === reg.date && !reg.closedAt);
+      if (isWithin && (e.paymentMethod || 'Cash').toLowerCase() === 'cash') {
+        cashExpenses += (parseFloat(e.amount) || 0);
+      }
+    });
+
+    const purchases = this.getPurchases();
+    let cashPurchases = 0;
+    purchases.forEach(p => {
+      const pTime = p.createdAt ? new Date(p.createdAt).getTime() : new Date((p.date || '') + 'T12:00:00').getTime();
+      const isWithin = (pTime >= (startTime - 60000) && pTime <= (endTime + 60000)) || (p.date === reg.date && !reg.closedAt);
+      if (isWithin && p.status === 'paid' && (p.paymentMethod || 'Cash').toLowerCase() === 'cash') {
+        cashPurchases += (parseFloat(p.paidAmount || p.total) || 0);
+      }
+    });
+
+    let manualCashIn = 0;
+    (reg.cashAdditions || []).forEach(a => manualCashIn += (parseFloat(a.amount) || 0));
+    let manualCashOut = 0;
+    (reg.cashDrops || []).forEach(d => manualCashOut += (parseFloat(d.amount) || 0));
+
+    const openingFloat = parseFloat(reg.openingFloat) || 0;
+    const systemExpectedCash = Math.max(0, Math.round((openingFloat + cashSales + cashReceivedDue + manualCashIn - cashExpenses - cashPurchases - manualCashOut) * 100) / 100);
+
+    return {
+      openingFloat,
+      cashSales: Math.round(cashSales * 100) / 100,
+      upiSales: Math.round(upiSales * 100) / 100,
+      cardSales: Math.round(cardSales * 100) / 100,
+      otherSales: Math.round(otherSales * 100) / 100,
+      totalSales: Math.round(totalSales * 100) / 100,
+      cashReceivedDue: Math.round(cashReceivedDue * 100) / 100,
+      cashExpenses: Math.round(cashExpenses * 100) / 100,
+      cashPurchases: Math.round(cashPurchases * 100) / 100,
+      manualCashIn: Math.round(manualCashIn * 100) / 100,
+      manualCashOut: Math.round(manualCashOut * 100) / 100,
+      systemExpectedCash
+    };
+  },
+
+  closeRegister(id, closingDenominations, notes = '', closedBy = 'Owner') {
+    const reg = this.getRegisterById(id);
+    if (!reg) return { success: false, message: 'Register not found' };
+
+    const calc = this.calcRegisterExpectedCash(reg);
+    
+    const denoms = closingDenominations || {};
+    const n500 = (parseInt(denoms.n500) || 0) * 500;
+    const n200 = (parseInt(denoms.n200) || 0) * 200;
+    const n100 = (parseInt(denoms.n100) || 0) * 100;
+    const n50  = (parseInt(denoms.n50)  || 0) * 50;
+    const n20  = (parseInt(denoms.n20)  || 0) * 20;
+    const n10  = (parseInt(denoms.n10)  || 0) * 10;
+    const coins = parseFloat(denoms.coins) || 0;
+
+    const actualPhysicalCash = Math.round((n500 + n200 + n100 + n50 + n20 + n10 + coins) * 100) / 100;
+    const cashDiscrepancy = Math.round((actualPhysicalCash - calc.systemExpectedCash) * 100) / 100;
+
+    const closedReg = {
+      ...reg,
+      closedAt: new Date().toISOString(),
+      closedBy: closedBy || 'Owner',
+      status: 'closed',
+      closingDenominations: {
+        n500: parseInt(denoms.n500) || 0,
+        n200: parseInt(denoms.n200) || 0,
+        n100: parseInt(denoms.n100) || 0,
+        n50:  parseInt(denoms.n50)  || 0,
+        n20:  parseInt(denoms.n20)  || 0,
+        n10:  parseInt(denoms.n10)  || 0,
+        coins
+      },
+      actualPhysicalCash,
+      cashDiscrepancy,
+      ...calc,
+      closeNotes: notes || ''
+    };
+
+    this.saveRegister(closedReg);
+    return { success: true, register: closedReg };
+  },
+
+  addRegisterCashMovement(id, type = 'in', amount = 0, reason = '') {
+    const reg = this.getRegisterById(id);
+    if (!reg || reg.status !== 'open') return null;
+    const amt = Math.max(0, parseFloat(amount) || 0);
+    if (amt <= 0) return null;
+
+    const entry = {
+      id: genId('TX'),
+      time: new Date().toISOString(),
+      amount: amt,
+      reason: reason || (type === 'in' ? 'Additional Cash Float' : 'Petty Cash Drop')
+    };
+
+    if (type === 'in') {
+      if (!reg.cashAdditions) reg.cashAdditions = [];
+      reg.cashAdditions.push(entry);
+    } else {
+      if (!reg.cashDrops) reg.cashDrops = [];
+      reg.cashDrops.push(entry);
+    }
+    return this.saveRegister(reg);
+  },
+
+  ensureRegisterSeed() {
+    if (this._get(this.K.REGISTERS)) return;
+    const today = new Date().toISOString().split('T')[0];
+    const sample = {
+      id: genId('REG'),
+      shiftNo: `REG/${today.replace(/-/g, '')}/01`,
+      date: today,
+      openedAt: new Date(Date.now() - 3600000 * 8).toISOString(),
+      closedAt: new Date(Date.now() - 3600000 * 1).toISOString(),
+      openedBy: 'Cashier Ramesh',
+      closedBy: 'Shraban (Owner)',
+      status: 'closed',
+      openingFloat: 2000,
+      cashSales: 14500,
+      upiSales: 28000,
+      cardSales: 4500,
+      otherSales: 0,
+      totalSales: 47000,
+      cashReceivedDue: 3500,
+      cashExpenses: 450,
+      cashPurchases: 0,
+      manualCashIn: 0,
+      manualCashOut: 0,
+      systemExpectedCash: 19550,
+      closingDenominations: { n500: 35, n200: 8, n100: 4, n50: 1, n20: 0, n10: 0, coins: 0 },
+      actualPhysicalCash: 19550,
+      cashDiscrepancy: 0,
+      closeNotes: 'Initial day-end shift closure completed without discrepancies.'
+    };
+    this._set(this.K.REGISTERS, [sample]);
   },
 
   /* ─── Package Bundles & Custom PC Configurator ─── */
@@ -2034,6 +2274,7 @@ const DB = {
         debitNotesCount: this.getDebitNotes().length,
         servicesCount: this.getJobs ? this.getJobs().length : 0,
         amcsCount: this.getAmcs ? this.getAmcs().length : 0,
+        registersCount: this.getRegisters ? this.getRegisters().length : 0,
         bundlesCount: this.getBundles ? this.getBundles().length : 0,
         expensesCount: this.getExpenses().length,
         productsCount: this.getProducts().length,
@@ -2053,6 +2294,7 @@ const DB = {
         debitNotes: this.getDebitNotes(),
         services: this.getJobs ? this.getJobs() : [],
         amcs: this.getAmcs ? this.getAmcs() : [],
+        registers: this.getRegisters ? this.getRegisters() : [],
         bundles: this.getBundles ? this.getBundles() : [],
         expenses: this.getExpenses(),
         movements: this.getMovements(),
@@ -2123,6 +2365,7 @@ const DB = {
     if (d.debitNotes) this._set(this.K.DEBIT_NOTES, d.debitNotes);
     if (d.services) this._set(this.K.SERVICES, d.services);
     if (d.amcs) this._set(this.K.AMCS, d.amcs);
+    if (d.registers) this._set(this.K.REGISTERS, d.registers);
     if (d.bundles) this._set(this.K.BUNDLES, d.bundles);
     if (d.expenses) this._set(this.K.EXPENSES, d.expenses);
     if (d.movements) this._set(this.K.MOVEMENTS, d.movements);
@@ -2540,6 +2783,7 @@ const DB = {
 
     this.ensureConfiguratorSeed();
     this.ensureAmcSeed();
+    this.ensureRegisterSeed();
     this._set(this.K.SEEDED, true);
   }
 };

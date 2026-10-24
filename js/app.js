@@ -9,6 +9,7 @@ const App = {
   init() {
     DB.seed();
     DB.ensureAmcSeed();
+    DB.ensureRegisterSeed();
     // Always default to Staff Mode on launch / app open for security & privacy
     DB.setRole('staff');
     this.buildSidebar();
@@ -55,6 +56,7 @@ const App = {
     const lowStock = DB.getProducts().filter(p => p.reorderLevel > 0 && p.stock <= p.reorderLevel).length;
     const activeJobs = DB.getJobs ? DB.getJobs().filter(j => ['received', 'diagnosing', 'waiting_parts'].includes(j.status)).length : 0;
     const expiringAmcs = DB.getExpiringAmcs ? DB.getExpiringAmcs(30).length : 0;
+    const openReg = DB.getCurrentRegister ? DB.getCurrentRegister() : null;
 
     const limits = DB.getTrialLimits();
     const hasBranding = limits.canSetBranding;
@@ -86,6 +88,7 @@ const App = {
             <span class="material-icons nav-section-toggle-icon">expand_more</span>
           </div>
           <div class="nav-section-items">
+            <a href="#cash-register" class="nav-item" data-r="cash-register"><span class="material-icons">point_of_sale</span><span>Cash Register (Till)</span>${openReg ? `<span class="nav-badge" style="background:#10b981;color:#fff">OPEN</span>` : ''}</a>
             <a href="#billing-sales" class="nav-item" data-r="billing-sales"><span class="material-icons">receipt_long</span><span>Sales Invoices</span></a>
             <a href="#quotations" class="nav-item" data-r="quotations"><span class="material-icons">request_quote</span><span>Quotations / Estimates</span></a>
             <a href="#services" class="nav-item" data-r="services"><span class="material-icons">build</span><span>Repairs &amp; Services</span>${activeJobs ? `<span class="nav-badge warn">${activeJobs}</span>` : ''}</a>
@@ -305,6 +308,7 @@ const App = {
 
     switch (r) {
       case 'dashboard': this.renderDashboard(c); break;
+      case 'cash-register': Register.render(c); break;
       case 'billing-sales': Billing.render(c, 'sales'); break;
       case 'quotations': Billing.renderQuotations(c); break;
       case 'services': Services.render(c); break;
