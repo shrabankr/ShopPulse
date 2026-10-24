@@ -1,9 +1,11 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const pkg = require('../package.json');
+const version = pkg.version;
 
 console.log('========================================================');
-console.log('       BUILDING SHOPPULSE WINDOWS SETUP INSTALLER       ');
+console.log(`   BUILDING SHOPPULSE WINDOWS SETUP INSTALLER v${version}   `);
 console.log('========================================================\n');
 
 try {
@@ -21,12 +23,12 @@ try {
   execSync('npx electron-builder --win --x64 --prepackaged dist/win-unpacked', { stdio: 'inherit' });
 
   // Step 4: Inject Custom Bolt Icon into the Setup Installer itself
-  const setupExe = path.resolve('dist/ShopPulse-Setup-1.3.0.exe');
+  const setupExe = path.resolve(`dist/ShopPulse-Setup-${version}.exe`);
   console.log('\n⚡ Step 4/4: Embedding brand icon into Setup Wizard installer...');
   execSync(`node electron/inject-icon.js "${setupExe}"`, { stdio: 'inherit' });
 
   // Copy to root for convenient distribution
-  const rootInstaller = path.resolve('ShopPulse-Setup-v1.3.0.exe');
+  const rootInstaller = path.resolve(`ShopPulse-Setup-v${version}.exe`);
   fs.copyFileSync(setupExe, rootInstaller);
   console.log('\n========================================================');
   console.log('✅ BUILD COMPLETE!');

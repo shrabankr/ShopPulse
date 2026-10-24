@@ -6,6 +6,17 @@
 
 ---
 
+## 🌟 What's New in v1.4.0 — Desktop Experience & Security Edition
+- 💿 **Official Windows NSIS Setup Wizard Installer**: Standard installation wizard (`ShopPulse-Setup-v1.4.0.exe`) creating desktop shortcuts, Start Menu integration, and clean uninstaller support.
+- 🔒 **Default Staff Mode & Privacy Engine**: Every app launch safely defaults to Counter Staff Mode (`🔒 Staff Mode ▾`), masking sensitive wholesale purchase costs, supplier bills, payables, and P&L until unlocked by the shop owner with PIN (`1234`).
+- 🗂️ **Collapsible Sidebar Navigation**: Sleek categorized sections (Transactions, Management, Analytics & System) with smooth caret indicators, local state persistence, and auto-expansion on route navigation.
+- 🖨️ **Native Win32 Printing Engine**: Direct hardware printing support via native system dialogs, completely eliminating the Windows UWP print preview bug.
+- 📄 **Enhanced Vector PDF Engine & Auto-Explorer Reveal**: Direct vector PDF generation with automatic file highlighting in Windows File Explorer and meaningful document names.
+- ⚡ **Native Brand Icon Packaging**: High-resolution multi-size Windows bolt icon embedded directly into `ShopPulse.exe` and `ShopPulse-Setup-v1.4.0.exe`.
+- 🧪 **Comprehensive Automated Test Suite**: Built-in 77-point test runner (`npm test`) covering GST engines, CRM ledgers, configurator TDP math, and data safety.
+
+---
+
 ## 🌟 What's New in v1.3.0 — Specialized Computer & Electronics Store Edition
 - 🛠️ **Service & Repair Job Sheet System**: Complete intake workflow for customer laptops, desktops, DVRs, CCTV cameras, and printers with 3" thermal claim tokens, technician diagnostics, and 1-click conversion to GST Tax Invoices (SAC 998731).
 - 📖 **Party Ledger & Statement of Account (Khata)**: Complete account statement for Customers and Suppliers with opening balances, running Dr/Cr debit-credit calculations, A4 PDF printable statement, 1-click CSV export, and WhatsApp khata reminder dispatch.
