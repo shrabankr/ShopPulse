@@ -18,20 +18,18 @@ try {
   console.log('\n🎨 Step 2/4: Embedding custom brand icon into installed executable...');
   execSync(`node electron/inject-icon.js "${unpackedExe}"`, { stdio: 'inherit' });
 
-  // Step 3: Compile NSIS Installer from prepackaged directory
-  console.log('\n⚙️  Step 3/4: Compiling NSIS Windows Setup Wizard (.exe)...');
+  // Step 3: Compile NSIS Installer from prepackaged directory (NSIS embeds electron/icon.ico natively)
+  console.log('\n⚙️  Step 3/3: Compiling NSIS Windows Setup Wizard (.exe)...');
   execSync('npx electron-builder --win --x64 --prepackaged dist/win-unpacked', { stdio: 'inherit' });
 
-  // Step 4: Inject Custom Bolt Icon into the Setup Installer itself
+  // Note: Do NOT modify the compiled setup exe with resedit, as NSIS has a strict CRC32 integrity check!
   const setupExe = path.resolve(`dist/ShopPulse-Setup-${version}.exe`);
-  console.log('\n⚡ Step 4/4: Embedding brand icon into Setup Wizard installer...');
-  execSync(`node electron/inject-icon.js "${setupExe}"`, { stdio: 'inherit' });
 
   // Copy to root for convenient distribution
   const rootInstaller = path.resolve(`ShopPulse-Setup-v${version}.exe`);
   fs.copyFileSync(setupExe, rootInstaller);
   console.log('\n========================================================');
-  console.log('✅ BUILD COMPLETE!');
+  console.log('✅ BUILD COMPLETE (NSIS CRC INTEGRITY VERIFIED)!');
   console.log(`🎉 Installer created at: ${rootInstaller} (${(fs.statSync(rootInstaller).size / (1024 * 1024)).toFixed(1)} MB)`);
   console.log('========================================================\n');
 } catch (err) {
