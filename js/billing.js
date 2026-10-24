@@ -185,6 +185,9 @@ const Billing = {
     const doc = existingDoc;
     const items = doc ? doc.items : [{ productId: '', name: '', hsn: '', unit: 'Nos', qty: 1, rate: 0, discount: 0, gstRate: 18 }];
 
+    window._paymentTenderMode = (doc && doc.payments && doc.payments.length > 1) ? 'split' : 'single';
+    window._paymentSplits = (doc && doc.payments && doc.payments.length > 1) ? JSON.parse(JSON.stringify(doc.payments)) : [];
+
     App.modal(doc ? `Edit ${isSales ? 'Invoice' : 'Bill'}` : `New ${isSales ? 'Sales Invoice' : 'Purchase Bill'}`,
       `
       <div id="invoice-form">
@@ -402,6 +405,119 @@ const Billing = {
           <button class="add-line-btn" onclick="Billing._addRow()"><span class="material-icons">add</span> Add Item</button>
         </div>
 
+        ${isSales ? `
+        <!-- Countertop POS Payment & Settlement Section -->
+        <div class="card" style="margin-top:16px;border:1px solid var(--border);border-radius:var(--radius)">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--bg);flex-wrap:wrap;gap:8px">
+            <strong style="font-size:.88rem;color:var(--text-primary);display:flex;align-items:center;gap:6px">
+              <span class="material-icons" style="font-size:18px;color:var(--primary)">payments</span>
+              Payment &amp; Settlement (Countertop POS)
+            </strong>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <button type="button" class="btn btn-xs btn-primary" onclick="Billing.showCountertopUpiQr()" title="Display live UPI QR Code for customer to scan on screen">
+                <span class="material-icons" style="font-size:14px">qr_code_2</span> 📲 Show UPI QR
+              </button>
+              <div style="display:inline-flex;background:var(--border);padding:2px;border-radius:4px">
+                <button type="button" id="pay-mode-single-btn" class="btn btn-xs ${(!doc || !doc.payments || doc.payments.length <= 1) ? 'btn-primary' : 'btn-ghost'}" onclick="Billing._switchPaymentTenderMode('single')">Single Mode</button>
+                <button type="button" id="pay-mode-split-btn" class="btn btn-xs ${(doc && doc.payments && doc.payments.length > 1) ? 'btn-primary' : 'btn-ghost'}" onclick="Billing._switchPaymentTenderMode('split')">Split Mode (Multi-Tender)</button>
+              </div>
+            </div>
+          </div>
+          <div class="card-body" style="padding:14px">
+            <!-- Single Mode View -->
+            <div id="pay-single-wrap" style="display:${(!doc || !doc.payments || doc.payments.length <= 1) ? 'block' : 'none'}">
+              <div class="form-grid" style="font-size:.85rem">
+                <div class="form-group">
+                  <label>Settlement Status</label>
+                  <select id="if-pay-status" onchange="Billing._onPayStatusChange(this.value)">
+                    <option value="paid" ${doc?.status === 'paid' || !doc ? 'selected' : ''}>✅ Paid (Immediate Settlement)</option>
+                    <option value="unpaid" ${doc?.status === 'unpaid' || doc?.status === 'sent' ? 'selected' : ''}>⏳ Credit / Unpaid (Add to Receivables)</option>
+                    <option value="partial" ${doc?.status === 'partial' ? 'selected' : ''}>🌓 Partial Payment</option>
+                  </select>
+                </div>
+                <div class="form-group" id="if-pay-method-wrap">
+                  <label>Payment Method</label>
+                  <select id="if-pay-method" onchange="Billing._onPayMethodChange(this.value)">
+                    ${PAYMENT_METHODS.map(m => `<option value="${m}" ${doc?.paymentMethod === m || (!doc && m === 'Cash') ? 'selected' : ''}>${m}</option>`).join('')}
+                  </select>
+                </div>
+                <div class="form-group" id="if-pay-amount-wrap" style="display:${doc?.status === 'partial' ? 'block' : 'none'}">
+                  <label>Amount Paid Now (₹)</label>
+                  <input type="number" id="if-paid-amount" step="0.01" min="0" value="${doc?.paidAmount || ''}" oninput="Billing._recalcPaymentSummary()">
+                </div>
+                <div class="form-group" id="if-pay-ref-wrap">
+                  <label>UTR / Transaction Ref / Auth Code</label>
+                  <input type="text" id="if-pay-ref" value="${doc?.paymentRef || ''}" placeholder="Optional transaction ID / UPI Ref...">
+                </div>
+              </div>
+            </div>
+
+            <!-- Split Mode View -->
+            <div id="pay-split-wrap" style="display:${(doc && doc.payments && doc.payments.length > 1) ? 'block' : 'none'}">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px">
+                <span style="font-size:.8rem;color:var(--text-secondary)">Split payment across multiple tenders (Cash, UPI, Card, Credit):</span>
+                <div style="display:flex;gap:6px">
+                  <button type="button" class="btn btn-xs btn-secondary" onclick="Billing._quickSplitPreset('cash_upi')">💵+📲 50% Cash + 50% UPI</button>
+                  <button type="button" class="btn btn-xs btn-secondary" onclick="Billing._addPaymentSplitRow()">+ Add Tender Line</button>
+                </div>
+              </div>
+              <table class="table table-sm" style="font-size:.82rem;margin-bottom:10px">
+                <thead>
+                  <tr style="background:var(--bg)">
+                    <th style="width:30%">Tender Mode</th>
+                    <th style="width:30%">Amount (₹)</th>
+                    <th style="width:30%">UTR / Reference #</th>
+                    <th style="width:10%;text-align:center"></th>
+                  </tr>
+                </thead>
+                <tbody id="payment-splits-tbody">
+                  <!-- Populated by Billing._renderSplitRows() -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Live Cash Return / Change Calculator Box -->
+            <div id="cash-change-box" style="display:${(!doc || doc?.paymentMethod === 'Cash' || (doc?.payments && doc.payments.some(p => p.method === 'Cash'))) ? 'flex' : 'none'};justify-content:space-between;align-items:center;background:hsl(142,76%,96%);border:1px solid hsl(142,76%,80%);border-radius:var(--radius-sm);padding:10px 14px;margin-top:10px;flex-wrap:wrap;gap:10px">
+              <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                <div>
+                  <span style="font-size:.75rem;font-weight:700;color:hsl(142,76%,25%);text-transform:uppercase;display:block">Cash Tendered by Customer</span>
+                  <div style="display:flex;align-items:center;gap:6px;margin-top:2px">
+                    <span style="font-weight:700;font-size:1.1rem;color:hsl(142,76%,25%)">₹</span>
+                    <input type="number" id="cash-tendered-input" step="1" min="0" value="${doc?.cashTendered || ''}" placeholder="e.g. 2000" style="width:120px;font-weight:800;font-size:1.05rem;padding:4px 8px;border:1px solid hsl(142,76%,60%);border-radius:4px" oninput="Billing._calcCashChange()">
+                  </div>
+                </div>
+                <div style="display:flex;gap:4px;align-items:center;margin-top:14px">
+                  <button type="button" class="btn btn-xs btn-ghost" style="border:1px solid hsl(142,76%,70%);color:hsl(142,76%,25%);background:#fff" onclick="Billing._addTenderedCash(100)">+₹100</button>
+                  <button type="button" class="btn btn-xs btn-ghost" style="border:1px solid hsl(142,76%,70%);color:hsl(142,76%,25%);background:#fff" onclick="Billing._addTenderedCash(200)">+₹200</button>
+                  <button type="button" class="btn btn-xs btn-ghost" style="border:1px solid hsl(142,76%,70%);color:hsl(142,76%,25%);background:#fff" onclick="Billing._addTenderedCash(500)">+₹500</button>
+                  <button type="button" class="btn btn-xs btn-ghost" style="border:1px solid hsl(142,76%,70%);color:hsl(142,76%,25%);background:#fff" onclick="Billing._exactTenderedCash()">Exact</button>
+                </div>
+              </div>
+              <div style="text-align:right">
+                <span style="font-size:.75rem;font-weight:700;color:hsl(142,76%,25%);text-transform:uppercase">Change to Return</span>
+                <div id="cash-change-return" style="font-size:1.3rem;font-weight:900;color:hsl(142,76%,25%)">${doc?.changeReturned ? fmtCurrency(doc.changeReturned) : '₹0.00'}</div>
+              </div>
+            </div>
+
+            <!-- Payment Live Reconciliation Summary -->
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:12px;background:var(--bg);padding:8px 12px;border-radius:var(--radius-sm);text-align:center;font-size:.82rem">
+              <div>
+                <span style="color:var(--text-secondary);font-size:.72rem">NET INVOICE TOTAL</span>
+                <div id="pay-sum-total" style="font-weight:800;font-size:1rem;color:var(--text-primary)">₹0.00</div>
+              </div>
+              <div>
+                <span style="color:var(--text-secondary);font-size:.72rem">TOTAL PAID NOW</span>
+                <div id="pay-sum-paid" style="font-weight:800;font-size:1rem;color:var(--success)">₹0.00</div>
+              </div>
+              <div>
+                <span style="color:var(--text-secondary);font-size:.72rem">BALANCE DUE (CREDIT)</span>
+                <div id="pay-sum-due" style="font-weight:800;font-size:1rem;color:var(--danger)">₹0.00</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        ` : ''}
+
         <!-- Totals & Notes -->
         <div class="invoice-summary-wrap">
           <div class="invoice-notes">
@@ -465,6 +581,15 @@ const Billing = {
 
     this._renderRows();
     this._recalc(biz.stateCode);
+
+    if (isSales) {
+      if (window._paymentTenderMode === 'split') {
+        this._renderSplitRows();
+        this._switchPaymentTenderMode('split');
+      } else {
+        this._switchPaymentTenderMode('single');
+      }
+    }
   },
 
   _getProductOptions(selectedId = '') {
@@ -1136,6 +1261,10 @@ const Billing = {
         <span class="totals-label">⭐ Points to be Earned on this Bill</span>
         <span class="totals-value">+${pointsEarned} pts</span>
       </div>` : ''}`;
+
+    if (isSales && typeof this._recalcPaymentSummary === 'function') {
+      this._recalcPaymentSummary(netTotal);
+    }
   },
 
   _redeemMaxPoints() {
@@ -1170,6 +1299,484 @@ const Billing = {
     if (input) {
       input.value = 0;
       this._recalc();
+    }
+  },
+
+  /* ─────────────────────────────────────────────
+     Countertop POS Split Payments & UPI Engine
+  ───────────────────────────────────────────── */
+  _switchPaymentTenderMode(mode) {
+    window._paymentTenderMode = mode;
+    const singleBtn = document.getElementById('pay-mode-single-btn');
+    const splitBtn = document.getElementById('pay-mode-split-btn');
+    const singleWrap = document.getElementById('pay-single-wrap');
+    const splitWrap = document.getElementById('pay-split-wrap');
+
+    if (mode === 'split') {
+      if (singleBtn) { singleBtn.className = 'btn btn-xs btn-ghost'; }
+      if (splitBtn) { splitBtn.className = 'btn btn-xs btn-primary'; }
+      if (singleWrap) singleWrap.style.display = 'none';
+      if (splitWrap) splitWrap.style.display = 'block';
+
+      if (!window._paymentSplits || window._paymentSplits.length === 0) {
+        const netTotal = this._currentCalc?.netTotal || 0;
+        const half = Math.round((netTotal / 2) * 100) / 100;
+        window._paymentSplits = [
+          { id: 1, method: 'Cash', amount: half, ref: '' },
+          { id: 2, method: 'UPI', amount: Math.max(0, netTotal - half), ref: '' }
+        ];
+      }
+      this._renderSplitRows();
+    } else {
+      if (singleBtn) { singleBtn.className = 'btn btn-xs btn-primary'; }
+      if (splitBtn) { splitBtn.className = 'btn btn-xs btn-ghost'; }
+      if (singleWrap) singleWrap.style.display = 'block';
+      if (splitWrap) splitWrap.style.display = 'none';
+    }
+    this._recalcPaymentSummary();
+  },
+
+  _onPayStatusChange(status) {
+    const amtWrap = document.getElementById('if-pay-amount-wrap');
+    const methodWrap = document.getElementById('if-pay-method-wrap');
+    const refWrap = document.getElementById('if-pay-ref-wrap');
+    const changeBox = document.getElementById('cash-change-box');
+
+    if (status === 'unpaid') {
+      if (amtWrap) amtWrap.style.display = 'none';
+      if (methodWrap) methodWrap.style.display = 'none';
+      if (refWrap) refWrap.style.display = 'none';
+      if (changeBox) changeBox.style.display = 'none';
+    } else if (status === 'partial') {
+      if (amtWrap) amtWrap.style.display = 'block';
+      if (methodWrap) methodWrap.style.display = 'block';
+      if (refWrap) refWrap.style.display = 'block';
+      const m = document.getElementById('if-pay-method')?.value;
+      if (changeBox) changeBox.style.display = m === 'Cash' ? 'flex' : 'none';
+    } else {
+      if (amtWrap) amtWrap.style.display = 'none';
+      if (methodWrap) methodWrap.style.display = 'block';
+      if (refWrap) refWrap.style.display = 'block';
+      const m = document.getElementById('if-pay-method')?.value;
+      if (changeBox) changeBox.style.display = m === 'Cash' ? 'flex' : 'none';
+    }
+    this._recalcPaymentSummary();
+  },
+
+  _onPayMethodChange(method) {
+    const changeBox = document.getElementById('cash-change-box');
+    if (changeBox) {
+      changeBox.style.display = method === 'Cash' ? 'flex' : 'none';
+    }
+    this._recalcPaymentSummary();
+  },
+
+  _renderSplitRows() {
+    const tbody = document.getElementById('payment-splits-tbody');
+    if (!tbody) return;
+    const splits = window._paymentSplits || [];
+
+    if (splits.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:12px;color:var(--text-secondary)">No tenders added. Click "+ Add Tender Line" above.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = splits.map((s, idx) => `
+      <tr>
+        <td>
+          <select class="form-control" style="font-size:.82rem;padding:3px 6px" onchange="Billing._updateSplitRow(${idx}, 'method', this.value)">
+            ${PAYMENT_METHODS.map(m => `<option value="${m}" ${s.method === m ? 'selected' : ''}>${m}</option>`).join('')}
+          </select>
+        </td>
+        <td>
+          <div style="display:flex;gap:4px;align-items:center">
+            <span style="font-weight:700">₹</span>
+            <input type="number" class="form-control" style="font-size:.82rem;font-weight:700;padding:3px 6px;width:100%" value="${s.amount != null ? s.amount : 0}" step="0.01" min="0" oninput="Billing._updateSplitRow(${idx}, 'amount', parseFloat(this.value)||0)">
+            <button type="button" class="btn btn-xs btn-ghost" onclick="Billing._autoBalanceSplitRow(${idx})" title="Auto-fill with remaining due balance" style="padding:2px 4px;font-size:.7rem;border:1px solid var(--border)">Bal</button>
+          </div>
+        </td>
+        <td>
+          <input type="text" class="form-control" style="font-size:.82rem;padding:3px 6px" value="${(s.ref || '').replace(/"/g, '&quot;')}" placeholder="e.g. UTR / Auth Code" oninput="Billing._updateSplitRow(${idx}, 'ref', this.value)">
+        </td>
+        <td style="text-align:center">
+          <button type="button" class="btn btn-xs btn-ghost" onclick="Billing._deleteSplitRow(${idx})" style="color:var(--danger)">
+            <span class="material-icons" style="font-size:14px">close</span>
+          </button>
+        </td>
+      </tr>
+    `).join('');
+
+    const hasCash = splits.some(s => s.method === 'Cash' && s.amount > 0);
+    const changeBox = document.getElementById('cash-change-box');
+    if (changeBox) changeBox.style.display = hasCash ? 'flex' : 'none';
+  },
+
+  _addPaymentSplitRow(method = 'UPI', amount = 0, ref = '') {
+    if (!window._paymentSplits) window._paymentSplits = [];
+    const netTotal = this._currentCalc?.netTotal || 0;
+    const currentPaid = window._paymentSplits.reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0);
+    const balance = Math.max(0, Math.round((netTotal - currentPaid) * 100) / 100);
+
+    window._paymentSplits.push({
+      id: Date.now(),
+      method: method,
+      amount: amount || balance,
+      ref: ref
+    });
+    this._renderSplitRows();
+    this._recalcPaymentSummary();
+  },
+
+  _updateSplitRow(idx, field, value) {
+    if (!window._paymentSplits || !window._paymentSplits[idx]) return;
+    window._paymentSplits[idx][field] = value;
+    if (field === 'method') {
+      const hasCash = window._paymentSplits.some(s => s.method === 'Cash' && s.amount > 0);
+      const changeBox = document.getElementById('cash-change-box');
+      if (changeBox) changeBox.style.display = hasCash ? 'flex' : 'none';
+    }
+    this._recalcPaymentSummary();
+  },
+
+  _autoBalanceSplitRow(idx) {
+    if (!window._paymentSplits || !window._paymentSplits[idx]) return;
+    const netTotal = this._currentCalc?.netTotal || 0;
+    let otherPaid = 0;
+    window._paymentSplits.forEach((s, i) => {
+      if (i !== idx) otherPaid += (parseFloat(s.amount) || 0);
+    });
+    const balance = Math.max(0, Math.round((netTotal - otherPaid) * 100) / 100);
+    window._paymentSplits[idx].amount = balance;
+    this._renderSplitRows();
+    this._recalcPaymentSummary();
+  },
+
+  _deleteSplitRow(idx) {
+    if (!window._paymentSplits) return;
+    window._paymentSplits.splice(idx, 1);
+    this._renderSplitRows();
+    this._recalcPaymentSummary();
+  },
+
+  _quickSplitPreset(type) {
+    const netTotal = this._currentCalc?.netTotal || 0;
+    if (type === 'cash_upi') {
+      const half = Math.round((netTotal / 2) * 100) / 100;
+      window._paymentSplits = [
+        { id: 1, method: 'Cash', amount: half, ref: '' },
+        { id: 2, method: 'UPI', amount: Math.max(0, Math.round((netTotal - half) * 100) / 100), ref: '' }
+      ];
+      this._renderSplitRows();
+      this._recalcPaymentSummary();
+    }
+  },
+
+  _calcCashChange() {
+    const tendered = parseFloat(document.getElementById('cash-tendered-input')?.value) || 0;
+    const tenderMode = window._paymentTenderMode || 'single';
+    let cashAllocated = 0;
+
+    if (tenderMode === 'single') {
+      const method = document.getElementById('if-pay-method')?.value;
+      if (method === 'Cash') {
+        const payStatus = document.getElementById('if-pay-status')?.value;
+        const netTotal = this._currentCalc?.netTotal || 0;
+        if (payStatus === 'paid') cashAllocated = netTotal;
+        else if (payStatus === 'partial') cashAllocated = parseFloat(document.getElementById('if-paid-amount')?.value) || 0;
+      }
+    } else {
+      const splits = window._paymentSplits || [];
+      splits.forEach(s => {
+        if (s.method === 'Cash') cashAllocated += (parseFloat(s.amount) || 0);
+      });
+    }
+
+    const returnEl = document.getElementById('cash-change-return');
+    if (!returnEl) return;
+
+    if (tendered >= cashAllocated) {
+      const change = tendered - cashAllocated;
+      returnEl.textContent = fmtCurrency(change);
+      returnEl.style.color = 'hsl(142,76%,25%)';
+    } else {
+      const diff = cashAllocated - tendered;
+      returnEl.textContent = `Short ₹${diff.toFixed(2)}`;
+      returnEl.style.color = 'hsl(0,84%,45%)';
+    }
+  },
+
+  _addTenderedCash(delta) {
+    const input = document.getElementById('cash-tendered-input');
+    if (!input) return;
+    const cur = parseFloat(input.value) || 0;
+    input.value = cur + delta;
+    this._calcCashChange();
+  },
+
+  _exactTenderedCash() {
+    const input = document.getElementById('cash-tendered-input');
+    if (!input) return;
+    const tenderMode = window._paymentTenderMode || 'single';
+    let cashAllocated = 0;
+    if (tenderMode === 'single') {
+      const payStatus = document.getElementById('if-pay-status')?.value;
+      const netTotal = this._currentCalc?.netTotal || 0;
+      if (payStatus === 'paid') cashAllocated = netTotal;
+      else if (payStatus === 'partial') cashAllocated = parseFloat(document.getElementById('if-paid-amount')?.value) || 0;
+    } else {
+      (window._paymentSplits || []).forEach(s => {
+        if (s.method === 'Cash') cashAllocated += (parseFloat(s.amount) || 0);
+      });
+    }
+    input.value = Math.round(cashAllocated);
+    this._calcCashChange();
+  },
+
+  _recalcPaymentSummary(passedNetTotal = null) {
+    const netTotal = passedNetTotal != null ? passedNetTotal : (this._currentCalc?.netTotal || 0);
+    const tenderMode = window._paymentTenderMode || 'single';
+    let paidAmount = 0;
+
+    if (tenderMode === 'single') {
+      const payStatus = document.getElementById('if-pay-status')?.value || 'paid';
+      if (payStatus === 'paid') {
+        paidAmount = netTotal;
+        const paidInput = document.getElementById('if-paid-amount');
+        if (paidInput) paidInput.value = netTotal.toFixed(2);
+      } else if (payStatus === 'partial') {
+        paidAmount = parseFloat(document.getElementById('if-paid-amount')?.value) || 0;
+      } else {
+        paidAmount = 0;
+      }
+    } else {
+      (window._paymentSplits || []).forEach(s => {
+        paidAmount += (parseFloat(s.amount) || 0);
+      });
+    }
+
+    const dueAmount = Math.max(0, Math.round((netTotal - paidAmount) * 100) / 100);
+
+    const totalEl = document.getElementById('pay-sum-total');
+    const paidEl = document.getElementById('pay-sum-paid');
+    const dueEl = document.getElementById('pay-sum-due');
+
+    if (totalEl) totalEl.textContent = fmtCurrency(netTotal);
+    if (paidEl) paidEl.textContent = fmtCurrency(paidAmount);
+    if (dueEl) {
+      dueEl.textContent = fmtCurrency(dueAmount);
+      dueEl.style.color = dueAmount > 0 ? 'var(--danger)' : 'var(--success)';
+    }
+
+    this._calcCashChange();
+  },
+
+  _getUnpaidBalance(total) {
+    const tenderMode = window._paymentTenderMode || 'single';
+    let paid = 0;
+    if (tenderMode === 'single') {
+      const payStatus = document.getElementById('if-pay-status')?.value;
+      if (payStatus === 'partial') paid = parseFloat(document.getElementById('if-paid-amount')?.value) || 0;
+      else if (payStatus === 'unpaid') paid = 0;
+      else paid = total;
+    } else {
+      (window._paymentSplits || []).forEach(s => paid += (parseFloat(s.amount) || 0));
+    }
+    return Math.max(0, Math.round((total - paid) * 100) / 100);
+  },
+
+  showCountertopUpiQr() {
+    const biz = DB.getBiz();
+    const upiId = biz.upiId || 'shraban@okaxis';
+    const bizName = biz.name || 'ShopPulse Electronics';
+
+    const calc = this._currentCalc || {};
+    const grandTotal = calc.netTotal != null ? calc.netTotal : 0;
+    const due = this._getUnpaidBalance(grandTotal);
+    const amountToPay = due > 0 ? due : (grandTotal > 0 ? grandTotal : 100);
+
+    const invoiceNo = document.getElementById('if-no')?.value || 'BILL';
+    const upiUri = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(bizName)}&am=${amountToPay.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Bill ' + invoiceNo)}`;
+    const qrDataUrl = genUPIQrDataUrl(upiUri, 5);
+
+    const bodyHtml = `
+      <div style="text-align:center;padding:10px 0">
+        <div style="font-size:0.75rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px">
+          Scan to Pay via Any UPI App (GPay / PhonePe / Paytm / BHIM)
+        </div>
+        <div style="font-size:1.6rem;font-weight:900;color:var(--primary);margin:6px 0">
+          ${fmtCurrency(amountToPay)}
+        </div>
+        <div style="background:#fff;display:inline-block;padding:12px;border-radius:12px;border:2px solid var(--border);box-shadow:0 4px 14px rgba(0,0,0,0.08);margin:8px 0">
+          <img src="${qrDataUrl}" style="width:200px;height:200px;display:block;margin:0 auto" alt="UPI QR">
+        </div>
+        <div style="font-size:0.85rem;font-weight:700;color:var(--text-primary);margin-top:4px">
+          ${biz.name}
+        </div>
+        <div style="font-size:0.8rem;color:var(--primary);font-family:monospace;font-weight:600">
+          ${upiId}
+        </div>
+
+        <div style="margin-top:14px;background:var(--bg);padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);text-align:left">
+          <label style="font-size:0.75rem;font-weight:700;display:block;margin-bottom:4px">Customer UTR / Transaction Reference (Optional)</label>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="counter-utr-input" placeholder="e.g. 429188123456" maxlength="24" style="flex:1;font-family:monospace;font-weight:700;padding:6px 10px;border:1px solid var(--border);border-radius:4px">
+            <button type="button" class="btn btn-primary btn-sm" onclick="Billing._confirmCounterUpiPayment(${amountToPay})">
+              ✅ Confirm &amp; Apply
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    App.modal('📲 Countertop UPI Payment QR', bodyHtml, `
+      <button class="btn btn-secondary" onclick="App.closeModal()">Close</button>
+    `, 'modal-sm');
+  },
+
+  _confirmCounterUpiPayment(amount) {
+    const utr = (document.getElementById('counter-utr-input')?.value || '').trim();
+    this._playScanBeep();
+
+    const tenderMode = window._paymentTenderMode || 'single';
+    if (tenderMode === 'single') {
+      const statusSel = document.getElementById('if-pay-status');
+      const methodSel = document.getElementById('if-pay-method');
+      const refInput = document.getElementById('if-pay-ref');
+      if (statusSel) statusSel.value = 'paid';
+      if (methodSel) methodSel.value = 'UPI';
+      if (refInput) refInput.value = utr;
+      this._onPayStatusChange('paid');
+    } else {
+      if (!window._paymentSplits) window._paymentSplits = [];
+      const existingUpi = window._paymentSplits.find(s => s.method === 'UPI');
+      if (existingUpi) {
+        existingUpi.amount = amount;
+        if (utr) existingUpi.ref = utr;
+      } else {
+        window._paymentSplits.push({
+          id: Date.now(),
+          method: 'UPI',
+          amount: amount,
+          ref: utr
+        });
+      }
+      this._renderSplitRows();
+    }
+
+    this._recalcPaymentSummary();
+    App.closeModal();
+    App.toast(`✅ UPI Payment of ${fmtCurrency(amount)} recorded!`, 'success');
+  },
+
+  showOverdueUpiQr(saleId) {
+    const doc = DB.getSaleById(saleId);
+    if (!doc) return;
+    const biz = DB.getBiz();
+    const upiId = biz.upiId || 'shraban@okaxis';
+    const bizName = biz.name || 'ShopPulse Electronics';
+    const dueAmount = DB.getDocDueAmount(doc);
+    const amountToPay = dueAmount > 0 ? dueAmount : (doc.total || 100);
+
+    const upiUri = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(bizName)}&am=${amountToPay.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Bill ' + doc.invoiceNo)}`;
+    const qrDataUrl = genUPIQrDataUrl(upiUri, 5);
+
+    const bodyHtml = `
+      <div style="text-align:center;padding:10px 0">
+        <div style="font-size:0.75rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px">
+          Scan to Pay Outstanding Due via UPI
+        </div>
+        <div style="font-size:1.6rem;font-weight:900;color:var(--primary);margin:6px 0">
+          ${fmtCurrency(amountToPay)}
+        </div>
+        <div style="background:#fff;display:inline-block;padding:12px;border-radius:12px;border:2px solid var(--border);box-shadow:0 4px 14px rgba(0,0,0,0.08);margin:8px 0">
+          <img src="${qrDataUrl}" style="width:200px;height:200px;display:block;margin:0 auto" alt="UPI QR">
+        </div>
+        <div style="font-size:0.85rem;font-weight:700;color:var(--text-primary);margin-top:4px">
+          ${biz.name} (${doc.invoiceNo})
+        </div>
+        <div style="font-size:0.8rem;color:var(--primary);font-family:monospace;font-weight:600">
+          ${upiId}
+        </div>
+
+        <div style="margin-top:14px;background:var(--bg);padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);text-align:left">
+          <label style="font-size:0.75rem;font-weight:700;display:block;margin-bottom:4px">Customer UTR / Transaction Reference (Optional)</label>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="overdue-utr-input" placeholder="e.g. 429188123456" maxlength="24" style="flex:1;font-family:monospace;font-weight:700;padding:6px 10px;border:1px solid var(--border);border-radius:4px">
+            <button type="button" class="btn btn-primary btn-sm" onclick="Billing._confirmOverdueUpiPayment('${saleId}', ${amountToPay})">
+              ✅ Confirm &amp; Apply
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    App.modal('📲 Countertop UPI Payment QR', bodyHtml, `
+      <button class="btn btn-secondary" onclick="Billing.markPaid('${saleId}','sales')">Back to Payment</button>
+    `, 'modal-sm');
+  },
+
+  _confirmOverdueUpiPayment(saleId, amount) {
+    const utr = (document.getElementById('overdue-utr-input')?.value || '').trim();
+    this._playScanBeep();
+    App.closeModal();
+    this.markPaid(saleId, 'sales');
+    setTimeout(() => {
+      const amtEl = document.getElementById('pay-amount');
+      const methodEl = document.getElementById('pay-method');
+      const refEl = document.getElementById('pay-ref');
+      if (amtEl) amtEl.value = amount;
+      if (methodEl) methodEl.value = 'UPI';
+      if (refEl) refEl.value = utr;
+      const calc = document.getElementById('mark-paid-cash-calc');
+      if (calc) calc.style.display = 'none';
+      App.toast(`✅ UPI details loaded (${fmtCurrency(amount)}). Click 'Save Payment' to complete.`, 'info');
+    }, 200);
+  },
+
+  _quickMarkPaidCash(delta) {
+    const el = document.getElementById('mark-paid-cash-tendered');
+    if (!el) return;
+    const cur = parseFloat(el.value) || 0;
+    el.value = cur + delta;
+    this._calcMarkPaidChange();
+  },
+
+  _exactMarkPaidCash() {
+    const payAmt = parseFloat(document.getElementById('pay-amount')?.value) || 0;
+    const el = document.getElementById('mark-paid-cash-tendered');
+    if (!el) return;
+    el.value = payAmt;
+    this._calcMarkPaidChange();
+  },
+
+  _calcMarkPaidChange() {
+    const payAmt = parseFloat(document.getElementById('pay-amount')?.value) || 0;
+    const tendered = parseFloat(document.getElementById('mark-paid-cash-tendered')?.value) || 0;
+    const changeBox = document.getElementById('mark-paid-change-box');
+    if (!changeBox) return;
+
+    if (tendered > 0) {
+      const change = Math.max(0, Math.round((tendered - payAmt) * 100) / 100);
+      if (tendered < payAmt) {
+        changeBox.innerHTML = `
+          <span style="font-size:.7rem;color:var(--text-secondary);display:block">Tender Short</span>
+          <strong style="font-size:1rem;color:var(--danger)">Short: ₹${(payAmt - tendered).toFixed(2)}</strong>
+        `;
+      } else {
+        changeBox.innerHTML = `
+          <span style="font-size:.7rem;color:var(--text-secondary);display:block">Change to Return</span>
+          <strong style="font-size:1rem;color:var(--success)">₹${change.toFixed(2)}</strong>
+        `;
+        const notesEl = document.getElementById('pay-notes');
+        if (notesEl && (!notesEl.value || notesEl.value.startsWith('Cash Tendered:'))) {
+          notesEl.value = `Cash Tendered: ₹${tendered}, Change: ₹${change.toFixed(2)}`;
+        }
+      }
+    } else {
+      changeBox.innerHTML = `
+        <span style="font-size:.7rem;color:var(--text-secondary);display:block">Change to Return</span>
+        <strong style="font-size:1rem;color:var(--text-muted)">₹0.00</strong>
+      `;
     }
   },
 
@@ -1236,10 +1843,105 @@ const Billing = {
       const pointsEarned = calc.pointsEarned || 0;
       const netTotal = calc.netTotal != null ? calc.netTotal : t.total;
 
+      // POS Payment Tender & Split Settlement
+      let payments = [];
+      let paidAmount = 0;
+      let primaryMethod = 'Cash';
+      let primaryRef = '';
+      let cashTendered = 0;
+      let changeReturned = 0;
+      let docStatus = 'sent';
+
+      if (!isDraft) {
+        const tenderMode = window._paymentTenderMode || 'single';
+        if (tenderMode === 'single') {
+          const payStatus = document.getElementById('if-pay-status')?.value || 'paid';
+          const payMethod = document.getElementById('if-pay-method')?.value || 'Cash';
+          const payRef = (document.getElementById('if-pay-ref')?.value || '').trim();
+
+          if (payStatus === 'paid') {
+            paidAmount = netTotal;
+          } else if (payStatus === 'partial') {
+            paidAmount = Math.max(0, parseFloat(document.getElementById('if-paid-amount')?.value) || 0);
+          } else {
+            paidAmount = 0;
+          }
+
+          if (payMethod === 'Cash') {
+            cashTendered = Math.max(0, parseFloat(document.getElementById('cash-tendered-input')?.value) || 0);
+            if (cashTendered >= paidAmount && paidAmount > 0) {
+              changeReturned = Math.max(0, Math.round((cashTendered - paidAmount) * 100) / 100);
+            }
+          }
+
+          primaryMethod = payMethod;
+          primaryRef = payRef;
+
+          if (paidAmount > 0) {
+            payments = [{
+              id: genId('PAY'),
+              date: date,
+              amount: paidAmount,
+              method: payMethod,
+              ref: payRef,
+              notes: payMethod === 'Cash' && cashTendered > 0 ? `Cash Tendered: ₹${cashTendered}, Change: ₹${changeReturned}` : ''
+            }];
+          }
+        } else {
+          // Split Mode
+          const rawSplits = window._paymentSplits || [];
+          rawSplits.forEach(s => {
+            const amt = Math.max(0, parseFloat(s.amount) || 0);
+            if (amt > 0) {
+              payments.push({
+                id: s.id || genId('PAY'),
+                date: date,
+                amount: amt,
+                method: s.method || 'Cash',
+                ref: (s.ref || '').trim(),
+                notes: ''
+              });
+              paidAmount += amt;
+            }
+          });
+          paidAmount = Math.round(paidAmount * 100) / 100;
+
+          const cashSplit = payments.find(p => p.method === 'Cash');
+          if (cashSplit) {
+            cashTendered = Math.max(0, parseFloat(document.getElementById('cash-tendered-input')?.value) || 0);
+            if (cashTendered >= cashSplit.amount) {
+              changeReturned = Math.max(0, Math.round((cashTendered - cashSplit.amount) * 100) / 100);
+              cashSplit.notes = `Cash Tendered: ₹${cashTendered}, Change: ₹${changeReturned}`;
+            }
+          }
+
+          if (payments.length === 1) {
+            primaryMethod = payments[0].method;
+            primaryRef = payments[0].ref;
+          } else if (payments.length > 1) {
+            primaryMethod = `Split (${payments.map(p => `${p.method}: ${fmtCurrency(p.amount)}`).join(', ')})`;
+            primaryRef = payments.map(p => p.ref).filter(Boolean).join(', ');
+          } else {
+            primaryMethod = 'Credit / Unpaid';
+            primaryRef = '';
+          }
+        }
+
+        if (paidAmount >= (netTotal - 0.01)) {
+          docStatus = 'paid';
+        } else if (paidAmount > 0) {
+          docStatus = 'partial';
+        } else {
+          docStatus = 'sent';
+        }
+      } else {
+        docStatus = 'draft';
+      }
+
       const data = {
         ...(existingDoc || {}),
         invoiceNo: existingDoc ? existingDoc.invoiceNo : DB.nextInvoiceNo(),
-        date, dueDate, status: existingDoc ? existingDoc.status : status,
+        date, dueDate, status: docStatus,
         customerId: party.id, customerName: party.name,
         customerGstin: party.gstin || '',
         customerAddress: `${party.address || ''}, ${party.city || ''} - ${party.pincode || ''}`,
@@ -1260,6 +1962,12 @@ const Billing = {
         pointsRedeemed,
         loyaltyDiscount,
         pointsEarned,
+        payments,
+        paidAmount,
+        paymentMethod: primaryMethod,
+        paymentRef: primaryRef,
+        cashTendered: cashTendered > 0 ? cashTendered : null,
+        changeReturned: changeReturned > 0 ? changeReturned : 0,
         ...t,
         total: netTotal,
       };
@@ -1621,9 +2329,16 @@ const Billing = {
 
       <!-- Add New / Partial Payment Form -->
       <div style="padding:12px;background:#f8fafc;border:1px solid var(--border);border-radius:var(--radius-sm)">
-        <strong style="font-size:.85rem;color:var(--primary);display:flex;align-items:center;gap:6px;margin-bottom:10px">
-          <span class="material-icons" style="font-size:16px">add_card</span> Add Payment Entry (Partial / Split Mode)
-        </strong>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px">
+          <strong style="font-size:.85rem;color:var(--primary);display:flex;align-items:center;gap:6px">
+            <span class="material-icons" style="font-size:16px">add_card</span> Add Payment Entry (Partial / Split Mode)
+          </strong>
+          ${isSales && dueAmount > 0 ? `
+          <button type="button" class="btn btn-xs btn-primary" onclick="Billing.showOverdueUpiQr('${id}')" title="Display live UPI QR Code for customer to scan on screen">
+            <span class="material-icons" style="font-size:14px">qr_code_2</span> 📲 Show UPI QR
+          </button>
+          ` : ''}
+        </div>
 
         <div class="form-grid" style="font-size:.85rem">
           <div class="form-group form-full">
@@ -1631,19 +2346,19 @@ const Billing = {
               <label style="margin:0">Amount to Pay (₹) <span class="required">*</span></label>
               ${dueAmount > 0 ? `
               <div style="display:flex;gap:4px">
-                <button type="button" class="btn btn-xs btn-ghost" onclick="document.getElementById('pay-amount').value = ${Math.min(100, dueAmount)};">₹100</button>
-                <button type="button" class="btn btn-xs btn-ghost" onclick="document.getElementById('pay-amount').value = ${Math.min(500, dueAmount)};">₹500</button>
-                <button type="button" class="btn btn-xs btn-ghost" onclick="document.getElementById('pay-amount').value = ${Math.min(1000, dueAmount)};">₹1,000</button>
-                <button type="button" class="btn btn-xs btn-primary" onclick="document.getElementById('pay-amount').value = ${dueAmount};">Full (₹${dueAmount})</button>
+                <button type="button" class="btn btn-xs btn-ghost" onclick="document.getElementById('pay-amount').value = ${Math.min(100, dueAmount)};Billing._calcMarkPaidChange()">₹100</button>
+                <button type="button" class="btn btn-xs btn-ghost" onclick="document.getElementById('pay-amount').value = ${Math.min(500, dueAmount)};Billing._calcMarkPaidChange()">₹500</button>
+                <button type="button" class="btn btn-xs btn-ghost" onclick="document.getElementById('pay-amount').value = ${Math.min(1000, dueAmount)};Billing._calcMarkPaidChange()">₹1,000</button>
+                <button type="button" class="btn btn-xs btn-primary" onclick="document.getElementById('pay-amount').value = ${dueAmount};Billing._calcMarkPaidChange()">Full (₹${dueAmount})</button>
               </div>
               ` : ''}
             </div>
-            <input id="pay-amount" type="number" step="0.01" value="${dueAmount > 0 ? dueAmount : ''}" placeholder="e.g. 100 or 1000" style="font-size:1.1rem;font-weight:700">
+            <input id="pay-amount" type="number" step="0.01" value="${dueAmount > 0 ? dueAmount : ''}" placeholder="e.g. 100 or 1000" style="font-size:1.1rem;font-weight:700" oninput="Billing._calcMarkPaidChange()">
           </div>
 
           <div class="form-group">
             <label>Payment Method <span class="required">*</span></label>
-            <select id="pay-method">
+            <select id="pay-method" onchange="const c = document.getElementById('mark-paid-cash-calc'); if (c) c.style.display = (this.value === 'Cash' ? 'block' : 'none');">
               ${PAYMENT_METHODS.map(m => `<option value="${m}">${m}</option>`).join('')}
             </select>
           </div>
@@ -1651,6 +2366,28 @@ const Billing = {
           <div class="form-group">
             <label>Payment Date <span class="required">*</span></label>
             <input id="pay-date" type="date" value="${today}">
+          </div>
+
+          <!-- Cash Received & Change Return Calculator -->
+          <div id="mark-paid-cash-calc" class="form-full" style="background:#f1f5f9;padding:10px;border-radius:var(--radius-sm);border:1px dashed #cbd5e1;display:block">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <span style="font-size:.78rem;font-weight:700;color:var(--text-secondary)">Cash Received &amp; Return Calculator</span>
+              <div style="display:flex;gap:4px">
+                <button type="button" class="btn btn-xs btn-secondary" onclick="Billing._quickMarkPaidCash(100)">+₹100</button>
+                <button type="button" class="btn btn-xs btn-secondary" onclick="Billing._quickMarkPaidCash(200)">+₹200</button>
+                <button type="button" class="btn btn-xs btn-secondary" onclick="Billing._quickMarkPaidCash(500)">+₹500</button>
+                <button type="button" class="btn btn-xs btn-ghost" onclick="Billing._exactMarkPaidCash()">Exact</button>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <div style="flex:1">
+                <input type="number" id="mark-paid-cash-tendered" placeholder="Cash Tendered (₹)" style="font-size:1rem;font-weight:700;width:100%" oninput="Billing._calcMarkPaidChange()">
+              </div>
+              <div id="mark-paid-change-box" style="padding:6px 10px;background:#fff;border-radius:4px;border:1px solid #cbd5e1;min-width:140px;text-align:right">
+                <span style="font-size:.7rem;color:var(--text-secondary);display:block">Change to Return</span>
+                <strong style="font-size:1rem;color:var(--success)">₹0.00</strong>
+              </div>
+            </div>
           </div>
 
           <div class="form-group form-full">
@@ -2054,6 +2791,25 @@ body { font-family: 'Courier New', Courier, monospace, sans-serif; font-size: 8.
   ${doc.isIntra ? `<tr><td>CGST + SGST:</td><td class="pos-right">${fmtCurrency(doc.totalCgst + doc.totalSgst)}</td></tr>` : `<tr><td>IGST:</td><td class="pos-right">${fmtCurrency(doc.totalIgst)}</td></tr>`}
   ${doc.pointsRedeemed > 0 ? `<tr><td>Loyalty Discount (${doc.pointsRedeemed} pts):</td><td class="pos-right">-₹${(doc.loyaltyDiscount || doc.pointsRedeemed).toFixed(2)}</td></tr>` : ''}
   <tr class="pos-grand"><td><strong>${doc.pointsRedeemed > 0 ? 'NET PAYABLE:' : 'NET TOTAL:'}</strong></td><td class="pos-right"><strong>${fmtCurrency(doc.total)}</strong></td></tr>
+  ${(() => {
+    const docPayments = DB.getDocPayments(doc);
+    if (!docPayments || docPayments.length === 0) {
+      return isSales ? `<tr><td>Payment Status:</td><td class="pos-right" style="font-weight:700;color:#c0392b">UNPAID / CREDIT</td></tr>` : '';
+    }
+    const totalPaid = docPayments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+    const balDue = Math.max(0, Math.round((doc.total - totalPaid) * 100) / 100);
+    let splitLines = '';
+    if (docPayments.length > 1) {
+      splitLines = docPayments.map(p => `<tr><td style="font-size:7pt;padding-left:4px;color:#444">• ${p.method}${p.ref ? ` (${p.ref})` : ''}:</td><td class="pos-right" style="font-size:7pt">${fmtCurrency(p.amount)}</td></tr>`).join('');
+    }
+    return `
+      <tr><td><strong>Amount Paid:</strong></td><td class="pos-right"><strong>${fmtCurrency(totalPaid)}</strong></td></tr>
+      ${splitLines}
+      ${doc.cashTendered > 0 ? `<tr><td style="font-size:7.5pt">Cash Tendered:</td><td class="pos-right" style="font-size:7.5pt">${fmtCurrency(doc.cashTendered)}</td></tr>` : ''}
+      ${doc.changeReturned > 0 ? `<tr><td style="font-size:7.5pt;font-weight:700">Change Returned:</td><td class="pos-right" style="font-size:7.5pt;font-weight:700">${fmtCurrency(doc.changeReturned)}</td></tr>` : ''}
+      ${balDue > 0 ? `<tr><td style="color:#c0392b;font-weight:700">Balance Due:</td><td class="pos-right" style="color:#c0392b;font-weight:700">${fmtCurrency(balDue)}</td></tr>` : (docPayments.length === 1 ? `<tr><td style="font-size:7pt">Paid via:</td><td class="pos-right" style="font-size:7pt">${docPayments[0].method}${docPayments[0].ref ? ` (${docPayments[0].ref})` : ''}</td></tr>` : '')}
+    `;
+  })()}
   ${doc.pointsEarned > 0 ? `<tr><td style="font-size:7.5pt;padding-top:2px">⭐ Points Earned Today:</td><td class="pos-right" style="font-size:7.5pt;font-weight:700;padding-top:2px">+${doc.pointsEarned} pts</td></tr>` : ''}
 </table>
 ${isSales && (biz.bankName || biz.bankAccount || biz.upiId) ? `
@@ -2342,6 +3098,25 @@ table.items .rate, table.items .amount { text-align: right; }
         <tr><td style="color:#d97706;font-weight:700">⭐ Loyalty Discount (${doc.pointsRedeemed} pts)</td><td style="color:#d97706;font-weight:700">-₹${(doc.loyaltyDiscount || doc.pointsRedeemed).toFixed(2)}</td></tr>
         ` : ''}
         <tr class="grand-total"><td>${doc.pointsRedeemed > 0 ? 'NET PAYABLE' : 'GRAND TOTAL'}</td><td>${fmtCurrency(doc.total)}</td></tr>
+        ${(() => {
+          const docPayments = DB.getDocPayments(doc);
+          if (!docPayments || docPayments.length === 0) {
+            return isSales ? `<tr><td style="color:#c0392b;font-weight:700">Payment Status</td><td style="color:#c0392b;font-weight:700">UNPAID / CREDIT</td></tr>` : '';
+          }
+          const totalPaid = docPayments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+          const balDue = Math.max(0, Math.round((doc.total - totalPaid) * 100) / 100);
+          let splitLines = '';
+          if (docPayments.length > 1) {
+            splitLines = docPayments.map(p => `<tr><td style="font-size:7.5pt;padding-left:10px;color:#555">• ${p.method}${p.ref ? ` (${p.ref})` : ''}</td><td style="font-size:7.5pt">${fmtCurrency(p.amount)}</td></tr>`).join('');
+          }
+          return `
+            <tr style="background:#f1f5f9;font-weight:700"><td>Amount Paid</td><td>${fmtCurrency(totalPaid)}</td></tr>
+            ${splitLines}
+            ${doc.cashTendered > 0 ? `<tr><td style="font-size:8pt;color:#555">Cash Tendered</td><td style="font-size:8pt">${fmtCurrency(doc.cashTendered)}</td></tr>` : ''}
+            ${doc.changeReturned > 0 ? `<tr><td style="font-size:8pt;color:#059669;font-weight:700">Change Returned</td><td style="font-size:8pt;color:#059669;font-weight:700">${fmtCurrency(doc.changeReturned)}</td></tr>` : ''}
+            ${balDue > 0 ? `<tr style="background:#fee2e2;color:#991b1b;font-weight:700"><td>Balance Due</td><td>${fmtCurrency(balDue)}</td></tr>` : (docPayments.length === 1 ? `<tr><td style="font-size:8pt;color:#555">Paid via ${docPayments[0].method}${docPayments[0].ref ? ` (${docPayments[0].ref})` : ''}</td><td style="font-size:8pt;color:#059669;font-weight:700">PAID IN FULL</td></tr>` : '')}
+          `;
+        })()}
         ${isSales && doc.pointsEarned > 0 ? `
         <tr><td style="font-size:8pt;color:#059669;font-weight:600">⭐ Loyalty Points Earned</td><td style="font-size:8pt;font-weight:700;color:#059669">+${doc.pointsEarned} pts</td></tr>
         ` : ''}

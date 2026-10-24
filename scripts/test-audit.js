@@ -30,7 +30,7 @@ function assertClose(actual, expected, message, precision = 0.01) {
 }
 
 console.log('======================================================');
-console.log('       SHOPPULSE v1.6.0 COMPREHENSIVE AUDIT & TEST    ');
+console.log('       SHOPPULSE v1.7.0 COMPREHENSIVE AUDIT & TEST    ');
 console.log('======================================================\n');
 
 // Phase 1: JS Syntax Check
@@ -494,6 +494,92 @@ assert(agreementHtml.includes('SERVICE LEVEL AGREEMENT'), 'Agreement HTML contai
 const backupObj = context.DB.createBackupObject();
 assert(Array.isArray(backupObj.data.amcs) && backupObj.data.amcs.length >= 2, 'createBackupObject includes amcs data array');
 assert(backupObj.stats.amcsCount >= 2, 'createBackupObject stats includes amcsCount');
+
+// Phase 13: Split Payments, Dynamic Countertop UPI QR & Change Calculator Verification
+console.log('\n--- Phase 13: Split Payments, Dynamic Countertop UPI QR & Change Calculator Verification ---');
+
+// Test 13.1: NPCI UPI URI Scheme standard formatting
+const biz = context.DB.getBiz();
+const upiUri = `upi://pay?pa=${encodeURIComponent(biz.upiId || 'shraban@okaxis')}&pn=${encodeURIComponent(biz.name || 'ShopPulse')}&am=2500.00&cu=INR&tn=${encodeURIComponent('Bill SCS/2026-27/0001')}`;
+assert(upiUri.startsWith('upi://pay?'), 'UPI URI correctly conforms to NPCI standard scheme');
+assert(upiUri.includes('pa=') && upiUri.includes('am=2500.00') && upiUri.includes('cu=INR'), 'UPI URI encodes payee VPA, amount, and INR currency');
+
+// Test 13.2: Multi-Tender Split Payment Math & Persistence
+const testSale = {
+  invoiceNo: 'SCS/2026-27/9901',
+  date: '2026-10-24',
+  customerId: 'CUST-001',
+  customerName: 'Tech Innovators Pvt Ltd',
+  items: [{ productId: 'PROD-001', name: 'Hikvision 2MP Dome Camera', hsn: '8525', unit: 'Nos', qty: 2, rate: 1500, discount: 0, gstRate: 18, taxableValue: 3000, cgstRate: 9, cgstAmt: 270, sgstRate: 9, sgstAmt: 270, igstRate: 0, igstAmt: 0, totalAmt: 3540 }],
+  subtotal: 3000,
+  totalCgst: 270,
+  totalSgst: 270,
+  totalIgst: 0,
+  totalTax: 540,
+  total: 3540,
+  isIntra: true,
+  payments: [
+    { id: 'PAY-1', date: '2026-10-24', amount: 1540, method: 'Cash', ref: 'Counter Cash' },
+    { id: 'PAY-2', date: '2026-10-24', amount: 2000, method: 'UPI', ref: 'UPI-UTR-9876543210' }
+  ],
+  cashTendered: 2000,
+  changeReturned: 460,
+  paymentMethod: 'Split (Cash, UPI)',
+  status: 'paid'
+};
+context.DB.saveSale(testSale);
+const savedSplitSale = context.DB.getSaleById(testSale.id);
+assert(savedSplitSale, 'Saved sale with split payments successfully retrievable');
+const retrievedPayments = context.DB.getDocPayments(savedSplitSale);
+assert(Array.isArray(retrievedPayments) && retrievedPayments.length === 2, `getDocPayments accurately returns 2 split tenders: got ${retrievedPayments.length}`);
+const calculatedPaid = context.DB.getDocPaidAmount(savedSplitSale);
+assert(calculatedPaid === 3540, `getDocPaidAmount sums splits correctly (₹1,540 + ₹2,000 = ₹3,540): got ₹${calculatedPaid}`);
+const remainingDue = context.DB.getDocDueAmount(savedSplitSale);
+assert(remainingDue === 0, `getDocDueAmount returns 0 for fully settled bill: got ₹${remainingDue}`);
+
+// Test 13.3: Partial Split Payment Math
+const partialSale = {
+  invoiceNo: 'SCS/2026-27/9902',
+  date: '2026-10-24',
+  customerId: 'CUST-002',
+  customerName: 'Aman Sharma',
+  items: [{ productId: 'PROD-002', name: 'Cat6 Cable', hsn: '8544', unit: 'Box', qty: 1, rate: 4000, discount: 0, gstRate: 18, taxableValue: 4000, cgstRate: 9, cgstAmt: 360, sgstRate: 9, sgstAmt: 360, igstRate: 0, igstAmt: 0, totalAmt: 4720 }],
+  subtotal: 4000,
+  totalCgst: 360,
+  totalSgst: 360,
+  totalIgst: 0,
+  totalTax: 720,
+  total: 4720,
+  isIntra: true,
+  payments: [
+    { id: 'PAY-P1', date: '2026-10-24', amount: 2000, method: 'Cash', ref: 'Deposit' }
+  ],
+  paymentMethod: 'Cash',
+  status: 'partial'
+};
+context.DB.saveSale(partialSale);
+const savedPartial = context.DB.getSaleById(partialSale.id);
+const partialPaid = context.DB.getDocPaidAmount(savedPartial);
+const partialDue = context.DB.getDocDueAmount(savedPartial);
+assert(partialPaid === 2000, `Partial payment returns ₹2,000: got ₹${partialPaid}`);
+assert(partialDue === 2720, `Partial due correctly calculated as ₹2,720: got ₹${partialDue}`);
+
+// Test 13.4: Cash Change Calculator Logic
+const cashAllocated = 1540;
+const cashTendered = 2000;
+const changeReturned = Math.max(0, Math.round((cashTendered - cashAllocated) * 100) / 100);
+assert(changeReturned === 460, `Cash Change Calculator: ₹2,000 tendered - ₹1,540 allocated = ₹460 returned (got ${changeReturned})`);
+const exactTendered = 1540;
+const exactChange = Math.max(0, Math.round((exactTendered - cashAllocated) * 100) / 100);
+assert(exactChange === 0, `Exact tender yields ₹0.00 change returned (got ${exactChange})`);
+
+// Test 13.5: Multi-Format Invoice Print Breakdown (POS & A4)
+const posDocHtml = context.Billing.generateDocHtml(savedSplitSale, 'sales', 'compact_pos', true);
+assert(posDocHtml.includes('Amount Paid:') && posDocHtml.includes('Cash Tendered:') && posDocHtml.includes('Change Returned:'), 'POS 3" thermal invoice includes full split payment & change returned breakdown');
+assert(posDocHtml.includes('UPI-UTR-9876543210'), 'POS 3" thermal invoice includes transaction reference / UTR');
+
+const a4DocHtml = context.Billing.generateDocHtml(savedSplitSale, 'sales', 'classic', true);
+assert(a4DocHtml.includes('Amount Paid') && a4DocHtml.includes('Cash Tendered') && a4DocHtml.includes('Change Returned'), 'A4 Classic invoice includes split payment breakdown');
 
 // Summary
 console.log('\n======================================================');

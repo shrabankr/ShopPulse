@@ -6,6 +6,16 @@
 
 ---
 
+## 🌟 What's New in v1.7.0 — Split Payments, Dynamic Countertop UPI QR & Change Calculator
+- 💳 **Split Payments & Multi-Tender Support**: Cashiers can now settle bills across multiple tenders simultaneously (e.g., ₹2,000 Cash + ₹8,500 UPI + ₹1,500 Store Credit/Receivable) with live breakdown and auto-balancing line items.
+- 📲 **Dynamic Countertop UPI QR Modal**: Live high-resolution QR modal generated on-screen with exact payable amounts encoded via standard NPCI UPI URI (`upi://pay?pa=...&am=...`), with 12-digit UTR confirmation input to auto-apply transactions without any external network dependency.
+- 💵 **Cash Received & Change Return Calculator**: Interactive cash-tendered calculator with quick denomination buttons (`+₹100`, `+₹200`, `+₹500`, `Exact`) and bold real-time Change to Return / Tender Short alerts.
+- 🧾 **Multi-Format Invoice Payment Breakdown**: Both 3" POS thermal slips and A4 standard templates (Classic, Modern, Executive) print comprehensive tender breakdowns (Cash, UPI, Cheque, Card), cash tendered, change returned, and remaining balance due.
+- ⚡ **Overdue Debt Collection Countertop UPI QR**: Record Payment modal in Receivables and Invoices includes instant UPI QR generation for outstanding dues with 1-click UTR verification.
+- 🧪 **115-Point Automated Test Suite**: Expanded verification covering multi-tender splits, change return math, NPCI UPI URI schemes, and template print rendering.
+
+---
+
 ## 🌟 What's New in v1.6.0 — AMC Contracts & Warranty Renewal Engine
 - 🤝 **Comprehensive AMC Contract Management**: Dedicated lifecycle manager for Annual Maintenance Contracts (AMCs) tailored for IT, CCTV surveillance, networking, and hardware service providers.
 - 🏢 **Multi-Category & Scope Support**: Register contracts for CCTV Surveillance, Computers & IT Hardware, Networking & Firewall, Biometric & Intercom, and Complete IT Infrastructure with equipment inventories, device counts, and site addresses.
