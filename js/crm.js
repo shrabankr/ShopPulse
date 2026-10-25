@@ -1133,35 +1133,64 @@ const CRM = {
   },
 
   /* ═══════════════════════════════════════════
-     SHARE STATEMENT VIA WHATSAPP
+     SHARE STATEMENT VIA WHATSAPP (1-CLICK DISPATCH)
   ═══════════════════════════════════════════ */
-  shareLedgerWhatsApp(contactId, type, fromDate, toDate) {
-    const ledger = this.computeLedger(contactId, type, fromDate, toDate);
+  shareLedgerWhatsApp(contactId, type = 'customers', fromDate, toDate) {
+    const isCustomerType = type === 'customer' || type === 'customers';
+    const normalizedType = isCustomerType ? 'customers' : 'suppliers';
+    const ledger = this.computeLedger(contactId, normalizedType, fromDate, toDate);
     if (!ledger) return;
     const biz = DB.getBiz();
     const c = ledger.contact;
     const isCustomer = ledger.isCustomer;
     const closing = ledger.closingBalance;
     const isDue = closing > 0;
+    const partyPhone = c.whatsapp || c.phone || '';
 
     const periodText = fromDate && toDate ? `${fmtDate(fromDate)} to ${fmtDate(toDate)}` : (fromDate ? `Since ${fmtDate(fromDate)}` : 'Complete Account History');
+    const greeting = biz.waGreeting ? `${biz.waGreeting}\n\n` : '';
+    const footer = biz.waFooter ? `\n\n${biz.waFooter}` : `\n\n📞 Support / Accounts Desk: ${biz.phone || ''}\n_ShopPulse CRM_`;
 
-    const text = `*STATEMENT OF ACCOUNT (LEDGER)*\n` +
-      `🏢 *Store:* ${biz.name}\n` +
+    // Preset 1: Full Statement
+    const statementMsg = `${greeting}📊 *STATEMENT OF ACCOUNT (LEDGER) — ${biz.name}*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
       `👤 *Account of:* ${c.name}\n` +
-      `📅 *Period:* ${periodText}\n\n` +
+      `📅 *Period:* ${periodText}\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
       `🔹 *Opening Balance:* ₹${Math.abs(ledger.openingBalance).toFixed(2)} ${ledger.openingBalance >= 0 ? (isCustomer ? 'Dr' : 'Cr') : 'Cr'}\n` +
-      `➕ *Total Billed / Invoiced:* ₹${(isCustomer ? ledger.totalDebits : ledger.totalCredits).toFixed(2)}\n` +
-      `➖ *Total Payments / Credits:* ₹${(isCustomer ? ledger.totalCredits : ledger.totalDebits).toFixed(2)}\n` +
-      `──────────────────────────\n` +
+      `➕ *Total Invoiced:* ₹${(isCustomer ? ledger.totalDebits : ledger.totalCredits).toFixed(2)}\n` +
+      `➖ *Total Payments:* ₹${(isCustomer ? ledger.totalCredits : ledger.totalDebits).toFixed(2)}\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
       `${isDue ? `🔴 *NET OUTSTANDING DUE: ₹${Math.abs(closing).toFixed(2)}*` : `🟢 *NET BALANCE: ₹${Math.abs(closing).toFixed(2)} (Settled)*`}\n` +
-      `──────────────────────────\n` +
-      `${isDue && biz.bankAccount ? `\n*Bank Transfer / Payment Details:*\nBank: ${biz.bankName || ''}\nA/C No: ${biz.bankAccount}\nIFSC: ${biz.bankIFSC}\nUPI ID: ${biz.upiId || '—'}\n` : ''}` +
-      `\nPlease contact us at ${biz.phone || ''} for any billing queries. Thank you!`;
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `${isDue && biz.upiId ? `📲 *Pay Instantly via UPI:* ${biz.upiId}\n` : ''}` +
+      `${isDue && biz.bankAccount ? `🏦 *Bank Transfer:* ${biz.bankName || ''} | A/C: ${biz.bankAccount} | IFSC: ${biz.bankIFSC || ''}\n` : ''}` +
+      footer;
 
-    const phone = (c.whatsapp || c.phone || '').replace(/[^0-9]/g, '');
-    const cleanPhone = phone.length === 10 ? '91' + phone : phone;
-    const url = cleanPhone ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}` : `https://wa.me/?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
+    // Preset 2: Friendly Payment Reminder
+    const reminderMsg = `${greeting}🔔 *PAYMENT REMINDER — ${biz.name}*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `Dear *${c.name}*,\n\n` +
+      `This is a gentle reminder that a balance of *₹${Math.abs(closing).toFixed(2)}* is currently pending on your account.\n\n` +
+      `${biz.upiId ? `📲 *Quick UPI Payment:*\nUPI ID: *${biz.upiId}*\n\n` : ''}` +
+      `${biz.bankAccount ? `🏦 *Bank Transfer Details:*\nBank: ${biz.bankName || ''}\nA/C No: ${biz.bankAccount}\nIFSC: ${biz.bankIFSC || ''}\n\n` : ''}` +
+      `Kindly arrange payment at your earliest convenience. If already paid, please ignore this notice.\n` +
+      `Thank you for your business!` +
+      footer;
+
+    const presets = [
+      { label: 'Full Statement', text: statementMsg },
+      { label: 'Payment Reminder', text: reminderMsg }
+    ];
+
+    App.openWhatsAppModal({
+      title: `Ledger Statement WhatsApp — ${c.name}`,
+      phone: partyPhone,
+      partyName: c.name,
+      messageText: isDue ? reminderMsg : statementMsg,
+      docType: 'ledger',
+      docId: contactId,
+      presets: isDue ? [presets[1], presets[0]] : presets
+    });
   }
 };

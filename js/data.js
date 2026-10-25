@@ -45,7 +45,7 @@ const GST_RATES = [0, 0.1, 0.25, 1, 1.5, 3, 5, 7.5, 12, 18, 28];
 const PAYMENT_METHODS = ['Cash', 'Bank Transfer', 'UPI', 'Cheque', 'NEFT', 'RTGS', 'Credit Card', 'Other'];
 const UNITS = ['Nos', 'Pcs', 'Box', 'Pack', 'Set', 'Roll', 'Mtr', 'Job', 'Visit', 'License', 'Year', 'Month'];
 const DECIMAL_UNITS = ['Mtr', 'Roll'];
-const APP_VERSION = '1.9.0';
+const APP_VERSION = '2.0.0';
 
 function isDecimalUnit(unit) {
   return DECIMAL_UNITS.includes(unit);
@@ -391,7 +391,7 @@ const DB = {
 
   /* Business */
   getBiz() {
-    return this._get(this.K.BIZ) || {
+    const b = this._get(this.K.BIZ) || {
       name: 'AndroPCSoft Technologies', tagline: 'IT Solutions & CCTV Security Systems', logo: '', gstin: '27AABCA1234F1Z5', pan: 'AABCA1234F',
       address: 'Shop 104, Tech Arcade, Station Road', city: 'Pune', state: 'Maharashtra', stateCode: '27',
       pincode: '411001', phone: '+91 98000 12345', whatsapp: '+91 98000 12345', email: 'shraban@andropcsoft.com', website: 'www.andropcsoft.com',
@@ -404,7 +404,14 @@ const DB = {
       jobPrefix: 'JOB', jobCounter: 4,
       enableLoyalty: true, loyaltySpendRate: 100, loyaltyPointValue: 1, loyaltyMinRedeem: 10, referralBonusPoints: 50,
       defaultPaymentTerms: 30, signatory: 'Shraban Kumar Mahato', termsAndConditions: 'Goods once sold will not be taken back.\nWarranty as per manufacturer terms.\nInterest @18% p.a. will be charged on delayed payments.',
+      waGreeting: 'Dear Valued Customer,', waFooter: '', waDirectSend: false
     };
+    if (b) {
+      if (b.waGreeting === undefined) b.waGreeting = 'Dear Valued Customer,';
+      if (b.waFooter === undefined) b.waFooter = '';
+      if (b.waDirectSend === undefined) b.waDirectSend = false;
+    }
+    return b;
   },
   setBiz(b) { this._set(this.K.BIZ, b); },
 

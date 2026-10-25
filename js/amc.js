@@ -1034,43 +1034,88 @@ const AMC = {
   },
 
   /* ─────────────────────────────────────────────────────────────
-     WhatsApp Renewal Reminder
+     WhatsApp Renewal & PM Reminder (1-Click Dispatch)
   ───────────────────────────────────────────────────────────── */
-  shareWhatsApp(amcId) {
+  shareWhatsApp(amcId, action = '') {
     const amc = DB.getAmcById(amcId);
     if (!amc) return;
 
     const biz = DB.getBiz();
-    const phone = (amc.customerPhone || '').replace(/[^0-9]/g, '');
-
+    const phone = amc.customerPhone || '';
     const visits = amc.pmVisits || [];
     const doneCount = visits.filter(v => v.status === 'completed').length;
+    const nextPendingVisit = visits.find(v => v.status === 'pending');
 
-    let msg = `*AMC SERVICE UPDATE — ${biz.name}*\n\n`;
-    msg += `Dear *${amc.customerName}*,\n\n`;
-    msg += `Here is the status summary for your Annual Maintenance Contract:\n`;
-    msg += `• *Contract No:* ${amc.amcNo}\n`;
-    msg += `• *Category:* ${amc.deviceCategory} (${amc.contractType})\n`;
-    msg += `• *Coverage:* ${amc.equipmentSummary}\n`;
-    msg += `• *Validity Period:* ${fmtDate(amc.startDate)} to *${fmtDate(amc.endDate)}*\n`;
-    msg += `• *Preventive Maintenance:* ${doneCount}/${visits.length} scheduled visits completed\n`;
+    const greeting = biz.waGreeting ? `${biz.waGreeting}\n\n` : '';
+    const footer = biz.waFooter ? `\n\n${biz.waFooter}` : `\n\n📞 Support / SLA Desk: ${biz.phone || ''}\n_ShopPulse AMC Services_`;
+
+    // Preset 1: Status & Renewal Notice
+    let renewalMsg = `${greeting}🛡️ *AMC CONTRACT UPDATE — ${biz.name}*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `• *Contract No:* ${amc.amcNo}\n` +
+      `• *Category:* ${amc.deviceCategory} (${amc.contractType})\n` +
+      `• *Coverage:* ${amc.equipmentSummary}\n` +
+      `• *Validity Period:* ${fmtDate(amc.startDate)} to *${fmtDate(amc.endDate)}*\n` +
+      `• *PM Visits Completed:* ${doneCount}/${visits.length}\n`;
 
     if (amc.status === 'expiring_soon' && amc._daysRemaining !== null) {
-      msg += `\n⚠️ *Renewal Notice:* Your contract is expiring in *${amc._daysRemaining} days*. Please approve renewal to ensure uninterrupted SLA response.\n`;
+      renewalMsg += `\n⚠️ *Renewal Notice:* Your contract is expiring in *${amc._daysRemaining} days*. Please approve renewal to ensure uninterrupted SLA response.\n`;
     } else if (amc.status === 'expired') {
-      msg += `\n🔴 *Contract Expired:* Your AMC expired on ${fmtDate(amc.endDate)}. Please renew to resume warranty & emergency support.\n`;
+      renewalMsg += `\n🔴 *Contract Expired:* Your AMC expired on ${fmtDate(amc.endDate)}. Please renew to resume warranty & emergency support.\n`;
     } else {
-      msg += `\n✅ *Status:* Active under 24/7 SLA monitoring.\n`;
+      renewalMsg += `\n✅ *Status:* Active under 24/7 SLA monitoring.\n`;
+    }
+    renewalMsg += footer;
+
+    // Preset 2: Scheduled PM Visit Notice
+    const pmVisitDate = nextPendingVisit?.scheduledDate ? fmtDate(nextPendingVisit.scheduledDate) : 'upcoming week';
+    const pmVisitMsg = `${greeting}📅 *PREVENTIVE MAINTENANCE (PM) VISIT SCHEDULED — ${biz.name}*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `• *AMC Contract No:* ${amc.amcNo}\n` +
+      `• *Customer / Site:* ${amc.customerName}\n` +
+      `• *Equipment:* ${amc.equipmentSummary}\n` +
+      `• *Scheduled Inspection Date:* *${pmVisitDate}*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `Our certified technician will visit your premises to perform standard camera angle inspection, NVR storage health check, lens cleaning, and power supply verification.\n` +
+      `Kindly ensure site access.` +
+      footer;
+
+    // Preset 3: PM Visit Completed
+    const pmDoneMsg = `${greeting}✅ *PM MAINTENANCE VISIT COMPLETED — ${biz.name}*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `• *AMC Contract No:* ${amc.amcNo}\n` +
+      `• *Equipment Verified:* ${amc.equipmentSummary}\n` +
+      `• *Inspection Status:* All systems operational & recording verified.\n` +
+      `• *Total Visits Completed:* ${doneCount + (nextPendingVisit ? 1 : 0)}/${visits.length}\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `Thank you for entrusting your IT & security infrastructure to us!` +
+      footer;
+
+    const presets = [
+      { label: 'Status & Renewal', text: renewalMsg },
+      { label: 'PM Visit Notice', text: pmVisitMsg },
+      { label: 'PM Completed', text: pmDoneMsg }
+    ];
+
+    let defaultText = renewalMsg;
+    if (action === 'pm_scheduled') {
+      defaultText = pmVisitMsg;
+      presets.sort((a, b) => a.label === 'PM Visit Notice' ? -1 : 1);
+    } else if (action === 'pm_completed') {
+      defaultText = pmDoneMsg;
+      presets.sort((a, b) => a.label === 'PM Completed' ? -1 : 1);
     }
 
-    msg += `\nThank you for choosing *${biz.name}*!\nPhone: ${biz.phone || ''}`;
-
-    const url = phone.length >= 10
-      ? `https://api.whatsapp.com/send?phone=91${phone.slice(-10)}&text=${encodeURIComponent(msg)}`
-      : `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
-
-    window.open(url, '_blank');
-    App.toast(`Opening WhatsApp for ${amc.amcNo}…`, 'success');
+    App.openWhatsAppModal({
+      title: `AMC Contract WhatsApp — ${amc.amcNo}`,
+      phone: phone,
+      partyName: amc.customerName,
+      messageText: defaultText,
+      docType: 'amc',
+      docId: amcId,
+      docNo: amc.amcNo,
+      presets: presets
+    });
   },
 
   /* ─────────────────────────────────────────────────────────────

@@ -2111,6 +2111,229 @@ ${JSON.stringify(data, null, 2)}
     setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3500);
   },
 
+  /* ─── WhatsApp 1-Click Zero-Cost Dispatch Engine ─── */
+  sanitizePhone(raw) {
+    if (!raw) return '';
+    let str = String(raw).trim();
+    str = str.replace(/[^\d+]/g, '');
+    if (str.startsWith('+')) str = str.substring(1);
+    while (str.startsWith('0')) {
+      str = str.substring(1);
+    }
+    if (str.length === 10) {
+      str = '91' + str;
+    }
+    return str;
+  },
+
+  openWhatsApp(phone, text) {
+    const cleanPhone = this.sanitizePhone(phone);
+    const url = cleanPhone
+      ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(text)}`
+      : `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    if (typeof window !== 'undefined' && window.open) {
+      window.open(url, '_blank');
+    }
+    return url;
+  },
+
+  formatWaPreview(txt) {
+    if (!txt) return '';
+    let esc = String(txt)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    esc = esc.replace(/\*([^\*\n]+)\*/g, '<strong>$1</strong>');
+    esc = esc.replace(/_([^_\n]+)_/g, '<em>$1</em>');
+    esc = esc.replace(/```([^`]+)```/g, '<pre style="background:#f1f5f9;padding:4px 6px;border-radius:4px;font-size:.8rem;margin:4px 0">$1</pre>');
+    esc = esc.replace(/\n/g, '<br>');
+    return esc;
+  },
+
+  openWhatsAppModal(cfg = {}) {
+    const {
+      title = 'WhatsApp Dispatch',
+      phone = '',
+      partyName = '',
+      messageText = '',
+      docType = '',
+      docId = '',
+      docNo = '',
+      presets = [],
+      pdfAction = null
+    } = cfg;
+
+    const biz = DB.getBiz();
+    if (biz.waDirectSend && phone) {
+      this.openWhatsApp(phone, messageText);
+      this.toast(`Opening WhatsApp for ${docNo || partyName || 'recipient'}…`, 'success');
+      return;
+    }
+
+    const cleanPhone = this.sanitizePhone(phone);
+    const displayPhone = cleanPhone.startsWith('91') && cleanPhone.length === 12
+      ? cleanPhone.slice(2)
+      : cleanPhone;
+
+    window._activeWaPresets = presets;
+
+    const body = `
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <!-- Recipient Number Card -->
+        <div style="background:#f8fafc;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius-sm)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <label style="font-size:.82rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.02em">
+              📱 Recipient WhatsApp Number ${partyName ? `<span style="color:var(--primary);font-weight:600">(${partyName})</span>` : ''}
+            </label>
+            <span style="font-size:.72rem;color:var(--text-muted)">Editable before sending</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span style="background:#e2e8f0;font-weight:700;padding:8px 12px;border-radius:var(--radius-sm);color:var(--text-primary);font-size:.88rem;white-space:nowrap">
+              🇮🇳 +91
+            </span>
+            <input id="wa-recipient-phone" class="form-control" type="tel" value="${displayPhone}" placeholder="9823001122" style="font-size:1.02rem;font-weight:700;letter-spacing:.02em;flex:1;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;background:#fff">
+          </div>
+        </div>
+
+        ${presets && presets.length > 0 ? `
+        <!-- Scenario Presets / Quick Chips -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <span style="font-size:.76rem;font-weight:700;color:var(--text-secondary);margin-right:2px">Message Presets:</span>
+          ${presets.map((p, i) => `
+            <button type="button" class="btn btn-xs ${i === 0 ? 'btn-primary' : 'btn-secondary'} wa-preset-chip" onclick="App._selectWaPreset(${i})" style="border-radius:14px;padding:3px 10px;font-size:.75rem">
+              ${p.label}
+            </button>
+          `).join('')}
+        </div>
+        ` : ''}
+
+        <!-- Message Preview Card -->
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <label style="font-size:.8rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.02em">
+              💬 Message Preview (WhatsApp Format)
+            </label>
+            <button type="button" class="btn btn-xs btn-ghost" onclick="App._toggleWaTextEdit()" style="font-size:.75rem;padding:2px 6px">
+              <span class="material-icons" style="font-size:13px;vertical-align:middle">edit</span> <span id="wa-edit-toggle-lbl">Edit Text</span>
+            </button>
+          </div>
+          
+          <div id="wa-bubble-view" style="background:#dcf8c6;border:1px solid #c7f1a8;border-radius:10px;padding:14px;color:#111b21;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:.85rem;line-height:1.45;max-height:240px;overflow-y:auto;box-shadow:inset 0 1px 3px rgba(0,0,0,0.05);white-space:normal">
+            ${this.formatWaPreview(messageText)}
+          </div>
+
+          <textarea id="wa-raw-text" style="display:none;width:100%;height:180px;font-family:monospace;font-size:.82rem;padding:10px;border:1px solid var(--border);border-radius:var(--radius-sm);resize:vertical;background:#fff">${messageText}</textarea>
+        </div>
+
+        <!-- Help Info Banner -->
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--radius-sm);padding:8px 12px;font-size:.78rem;color:#166534;display:flex;align-items:center;gap:8px">
+          <span class="material-icons" style="font-size:18px;color:#22c55e">verified</span>
+          <span><strong>100% Free Zero-Cost Desktop Dispatch:</strong> Launches directly in WhatsApp Web or Windows WhatsApp Desktop with pre-filled message. Zero monthly API fees!</span>
+        </div>
+      </div>
+    `;
+
+    const footer = `
+      <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+      <button class="btn btn-secondary" onclick="App._copyWaModalText()" title="Copy text to clipboard">
+        <span class="material-icons" style="font-size:15px">content_copy</span> Copy Text
+      </button>
+      ${docType === 'sales' && docId ? `
+      <button class="btn btn-secondary" onclick="Billing.exportPDF('${docId}', 'sales')" title="Save PDF to attach in WhatsApp">
+        <span class="material-icons" style="font-size:15px;color:#ef4444">picture_as_pdf</span> Save PDF
+      </button>
+      ` : ''}
+      <button class="btn btn-success" onclick="App._dispatchWaModal()" style="background:#25d366;border-color:#25d366;font-weight:700">
+        <span class="material-icons" style="font-size:16px">chat</span> Send via WhatsApp
+      </button>
+    `;
+
+    this.modal(
+      `<span style="display:inline-flex;align-items:center;gap:8px"><span class="material-icons" style="color:#25d366">chat</span> ${title}</span>`,
+      body,
+      footer,
+      'modal-lg'
+    );
+  },
+
+  _toggleWaTextEdit() {
+    const bubble = document.getElementById('wa-bubble-view');
+    const raw = document.getElementById('wa-raw-text');
+    const lbl = document.getElementById('wa-edit-toggle-lbl');
+    if (!bubble || !raw) return;
+    if (raw.style.display === 'none') {
+      raw.style.display = 'block';
+      bubble.style.display = 'none';
+      if (lbl) lbl.textContent = 'Preview';
+    } else {
+      bubble.innerHTML = this.formatWaPreview(raw.value);
+      raw.style.display = 'none';
+      bubble.style.display = 'block';
+      if (lbl) lbl.textContent = 'Edit Text';
+    }
+  },
+
+  _selectWaPreset(idx) {
+    if (!window._activeWaPresets || !window._activeWaPresets[idx]) return;
+    const preset = window._activeWaPresets[idx];
+    const raw = document.getElementById('wa-raw-text');
+    const bubble = document.getElementById('wa-bubble-view');
+    if (raw) raw.value = preset.text;
+    if (bubble) bubble.innerHTML = this.formatWaPreview(preset.text);
+    const chips = document.querySelectorAll('#modal-overlay .wa-preset-chip');
+    chips.forEach((c, i) => {
+      if (i === idx) {
+        c.classList.add('btn-primary');
+        c.classList.remove('btn-secondary');
+      } else {
+        c.classList.remove('btn-primary');
+        c.classList.add('btn-secondary');
+      }
+    });
+  },
+
+  _copyWaModalText() {
+    const raw = document.getElementById('wa-raw-text');
+    const text = raw ? raw.value : '';
+    if (!text) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        this.toast('WhatsApp message copied to clipboard! 📋', 'success');
+      }).catch(() => {
+        if (raw) {
+          raw.style.display = 'block';
+          raw.select();
+          document.execCommand('copy');
+          raw.style.display = 'none';
+          this.toast('WhatsApp message copied! 📋', 'success');
+        }
+      });
+    } else {
+      if (raw) {
+        raw.style.display = 'block';
+        raw.select();
+        document.execCommand('copy');
+        raw.style.display = 'none';
+        this.toast('WhatsApp message copied! 📋', 'success');
+      }
+    }
+  },
+
+  _dispatchWaModal() {
+    const phoneInput = document.getElementById('wa-recipient-phone');
+    const raw = document.getElementById('wa-raw-text');
+    const phone = phoneInput ? phoneInput.value.trim() : '';
+    const text = raw ? raw.value : '';
+    if (!phone) {
+      this.toast('Please enter a valid recipient WhatsApp number', 'warning');
+      if (phoneInput) phoneInput.focus();
+      return;
+    }
+    this.openWhatsApp(phone, text);
+    this.toast('Opening WhatsApp…', 'success');
+    this.closeModal();
+  },
+
   /* ─── Settings ─── */
   renderSettings(container) {
     const b = DB.getBiz();
@@ -2202,6 +2425,40 @@ ${JSON.stringify(data, null, 2)}
                 <input id="s-upi" value="${b.upiId || ''}" placeholder="e.g. yourshop@okaxis, 9823001122@upi, syscare@icici">
                 <div class="form-hint" style="font-size:.75rem;color:var(--text-secondary);margin-top:4px">
                   ⚡ <strong>Licensed Feature:</strong> A dynamic UPI QR Code will print on unpaid/due invoices so customers can scan with PhonePe, Google Pay, Paytm, or BHIM to pay instantly. Once marked Paid, the QR code is automatically hidden.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="border-left:4px solid #25d366">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+            <h3><span class="material-icons" style="vertical-align:middle;font-size:20px;color:#25d366">chat</span> WhatsApp 1-Click Dispatch Settings</h3>
+            <span class="badge" style="background:#dcf8c6;color:#075e54;font-weight:700">100% Free / Zero-Cost</span>
+          </div>
+          <div class="card-body">
+            <p style="font-size:.85rem;color:var(--text-secondary);margin-bottom:14px">
+              Configure your pre-formatted 1-click WhatsApp dispatch templates for sales invoices, payment receipts, repair tokens, and khata balance reminders.
+            </p>
+            <div class="form-grid">
+              <div class="form-group form-full">
+                <label>Default Customer Greeting</label>
+                <input id="s-wa-greeting" value="${b.waGreeting || 'Dear Valued Customer,'}" placeholder="e.g. Dear Valued Customer,">
+              </div>
+              <div class="form-group form-full">
+                <label>Shop WhatsApp Signature / Message Footer</label>
+                <textarea id="s-wa-footer" rows="2" placeholder="e.g. Thank you for choosing us! For emergency CCTV/IT support, call 9800012345.">${b.waFooter || ''}</textarea>
+                <div class="form-hint" style="font-size:.75rem;color:var(--text-secondary);margin-top:3px">
+                  This footer text is automatically appended at the bottom of all dispatched WhatsApp messages.
+                </div>
+              </div>
+              <div class="form-group form-full">
+                <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-weight:600">
+                  <input type="checkbox" id="s-wa-direct-send" ${b.waDirectSend ? 'checked' : ''} style="width:18px;height:18px">
+                  <span>Enable Instant 1-Click Send (Skip preview modal and launch WhatsApp directly)</span>
+                </label>
+                <div class="form-hint" style="font-size:.75rem;color:var(--text-secondary);margin-top:3px">
+                  Leave unchecked (recommended) to review and edit customer mobile numbers before launching.
                 </div>
               </div>
             </div>
@@ -2850,6 +3107,9 @@ ${JSON.stringify(data, null, 2)}
       bankIFSC: document.getElementById('s-ifsc').value.trim(),
       bankBranch: document.getElementById('s-branch').value.trim(),
       upiId: document.getElementById('s-upi')?.value.trim() || '',
+      waGreeting: document.getElementById('s-wa-greeting')?.value.trim() || 'Dear Valued Customer,',
+      waFooter: document.getElementById('s-wa-footer')?.value.trim() || '',
+      waDirectSend: !!document.getElementById('s-wa-direct-send')?.checked,
       pdfSaveDir: document.getElementById('s-pdf-dir')?.value.trim() || DB.getBiz().pdfSaveDir || '',
       backupDir: document.getElementById('s-backup-dir')?.value.trim() || DB.getBiz().backupDir || '',
       invoicePrefix: document.getElementById('s-invpfx').value.trim() || 'INV',

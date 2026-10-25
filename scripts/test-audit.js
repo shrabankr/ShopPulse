@@ -30,7 +30,7 @@ function assertClose(actual, expected, message, precision = 0.01) {
 }
 
 console.log('======================================================');
-console.log('       SHOPPULSE v1.9.0 COMPREHENSIVE AUDIT & TEST    ');
+console.log('       SHOPPULSE v2.0.0 COMPREHENSIVE AUDIT & TEST    ');
 console.log('======================================================\n');
 
 // Phase 1: JS Syntax Check
@@ -137,6 +137,7 @@ const mockWindow = {
   Date: Date,
   Math: Math,
   JSON: JSON,
+  requestAnimationFrame: (cb) => { if (typeof cb === 'function') cb(); },
   desktopApp: {
     isDesktop: true,
     savePdf: () => Promise.resolve({ success: true, filePath: 'C:\\test.pdf' }),
@@ -689,6 +690,79 @@ assert(gstr1.doc_issue.doc_det.some(d => d.doc_num === 1), 'Table 13 doc_issue i
 const valReport = context.Reports.validateGSTR1('2026-10');
 assert(valReport && typeof valReport.isValid === 'boolean', 'validateGSTR1 returns validation report');
 assert(valReport.stats.b2bCount >= 1 && valReport.stats.hsnCount >= 1, 'validateGSTR1 stats correctly reflect populated sections');
+
+// Phase 16: Enhanced 1-Click Zero-Cost WhatsApp Dispatch Engine Verification
+console.log('\n--- Phase 16: Enhanced 1-Click Zero-Cost WhatsApp Dispatch Engine Verification ---');
+
+// Test 16.1: Indian Phone Number Sanitizer
+assert(context.App.sanitizePhone('9823001122') === '919823001122', 'sanitizePhone: 10-digit mobile prepends 91');
+assert(context.App.sanitizePhone('+91 98230 01122') === '919823001122', 'sanitizePhone: handles +91 with spaces');
+assert(context.App.sanitizePhone('09823001122') === '919823001122', 'sanitizePhone: strips leading zero and prepends 91');
+assert(context.App.sanitizePhone('+91-98230-01122') === '919823001122', 'sanitizePhone: handles dashes and plus symbol');
+assert(context.App.sanitizePhone('919823001122') === '919823001122', 'sanitizePhone: preserves valid 12-digit 91 prefix');
+assert(context.App.sanitizePhone('') === '', 'sanitizePhone: empty input safely returns empty');
+
+// Test 16.2: WhatsApp Protocol URL Generator & Markdown Previewer
+const sampleWaUrl = context.App.openWhatsApp('9823001122', 'Invoice Total: ₹1,000');
+assert(sampleWaUrl.startsWith('https://api.whatsapp.com/send?phone=919823001122'), 'openWhatsApp generates valid api.whatsapp.com URL with sanitized phone');
+assert(sampleWaUrl.includes(encodeURIComponent('Invoice Total: ₹1,000')), 'openWhatsApp correctly encodes message text & symbols');
+
+const previewHtml = context.App.formatWaPreview('*TAX INVOICE* for _Suresh Patil_\nAmount: ₹5,000');
+assert(previewHtml.includes('<strong>TAX INVOICE</strong>') && previewHtml.includes('<em>Suresh Patil</em>') && previewHtml.includes('<br>'), 'formatWaPreview correctly transforms WhatsApp bold (*), italic (_), and linebreaks');
+
+// Test 16.3: WhatsApp Modal Hook & Invoice Dispatch
+const origLimits = context.DB.getTrialLimits;
+context.DB.getTrialLimits = () => ({ isTrial: false, isGrace: false, daysLeft: 365, canExportPDF: true });
+let capturedWaModal = null;
+context.App.openWhatsAppModal = function(cfg) {
+  capturedWaModal = cfg;
+};
+
+// Dispatch invoice via WhatsApp
+context.Billing.shareWhatsApp(b2bSale.id, 'sales');
+assert(capturedWaModal !== null, 'Billing.shareWhatsApp opens WhatsApp Dispatch Modal');
+assert(capturedWaModal.title.includes('APS/2026-27/0088'), 'Modal title reflects correct invoice number');
+assert(capturedWaModal.partyName === 'Tech Innovators Pvt Ltd', 'Modal party name is correctly populated');
+assert(capturedWaModal.messageText.includes('Hikvision 4MP IP Dome Camera'), 'Invoice WhatsApp message lists purchased line items');
+assert(capturedWaModal.messageText.includes('10,620'), 'Invoice WhatsApp message contains grand total');
+assert(capturedWaModal.messageText.includes('PAID IN FULL'), 'Invoice WhatsApp message reflects paid status');
+context.DB.getTrialLimits = origLimits;
+
+// Test 16.4: Payment Receipt WhatsApp Dispatch
+capturedWaModal = null;
+context.Billing.sharePaymentReceiptWhatsApp(b2bSale.id, 'sales');
+assert(capturedWaModal !== null, 'Billing.sharePaymentReceiptWhatsApp opens WhatsApp Dispatch Modal');
+assert(capturedWaModal.docType === 'receipt', 'Payment receipt carries correct docType');
+assert(capturedWaModal.messageText.includes('PAYMENT RECEIPT'), 'Receipt message carries PAYMENT RECEIPT header');
+assert(capturedWaModal.messageText.includes('APS/2026-27/0088'), 'Receipt message references invoice number');
+
+// Test 16.5: Service & Repair Job Multi-Scenario WhatsApp Presets
+capturedWaModal = null;
+context.Services.shareWhatsApp(savedJob.id);
+assert(capturedWaModal !== null && Array.isArray(capturedWaModal.presets), 'Services.shareWhatsApp opens modal with presets');
+assert(capturedWaModal.presets.length === 4, `Services WhatsApp provides 4 scenario presets (got ${capturedWaModal.presets.length})`);
+const presetLabels = capturedWaModal.presets.map(p => p.label);
+assert(presetLabels.includes('Intake Token') && presetLabels.includes('Ready Alert') && presetLabels.includes('Approval Request') && presetLabels.includes('Status Update'), 'Presets include Intake Token, Ready Alert, Approval Request, and Status Update');
+assert(capturedWaModal.presets.find(p => p.label === 'Intake Token').text.includes(savedJob.jobNo), 'Intake token message contains claim token number');
+
+// Test 16.6: AMC Maintenance & PM Visit WhatsApp Presets
+capturedWaModal = null;
+const activeAmcsList = context.DB.getAmcs();
+if (activeAmcsList.length > 0) {
+  context.AMC.shareWhatsApp(activeAmcsList[0].id);
+  assert(capturedWaModal !== null && Array.isArray(capturedWaModal.presets), 'AMC.shareWhatsApp opens modal with presets');
+  const amcLabels = capturedWaModal.presets.map(p => p.label);
+  assert(amcLabels.includes('Status & Renewal') && amcLabels.includes('PM Visit Notice') && amcLabels.includes('PM Completed'), 'AMC presets include Status & Renewal, PM Visit Notice, and PM Completed');
+  assert(capturedWaModal.messageText.includes(activeAmcsList[0].amcNo), 'AMC message contains contract number');
+}
+
+// Test 16.7: CRM Customer Ledger / Khata Balance WhatsApp Presets
+capturedWaModal = null;
+context.CRM.shareLedgerWhatsApp(testCust.id, 'customer');
+assert(capturedWaModal !== null && Array.isArray(capturedWaModal.presets), 'CRM.shareLedgerWhatsApp opens modal with presets');
+const crmLabels = capturedWaModal.presets.map(p => p.label);
+assert(crmLabels.includes('Full Statement') && crmLabels.includes('Payment Reminder'), 'CRM presets include Full Statement and Payment Reminder');
+assert(capturedWaModal.partyName === 'Sharma Electronics', 'CRM modal has customer name');
 
 // Summary
 console.log('\n======================================================');

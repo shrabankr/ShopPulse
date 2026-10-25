@@ -6,6 +6,32 @@
 
 ---
 
+## 🌟 What's New in v2.0.0 — Enhanced 1-Click Zero-Cost WhatsApp Dispatch Engine
+- 💬 **100% Free Zero-Cost Desktop WhatsApp Dispatch**: Requires zero monthly subscription fees, zero third-party gateway charges (Wati/UltraMsg), and no Meta Cloud API verification. Operates entirely offline or via standard browser/desktop protocol links.
+- 📱 **Interactive WhatsApp Dispatch Center (`App.openWhatsAppModal()`)**:
+  - Live formatted WhatsApp message preview bubble showing styled text, bold headers, and emojis.
+  - Live recipient phone number field with smart Indian mobile normalizer (`+91`, spaces, dashes, leading `0` converted seamlessly to `91XXXXXXXXXX`). Cashiers can verify or edit the number on the spot.
+  - **"Send via WhatsApp" Button**: 1-click launch in WhatsApp Web or Windows WhatsApp Desktop with pre-filled message.
+  - **"Copy Message Text" Button**: Fast clipboard copy shortcut for cashiers running WhatsApp Desktop side-by-side.
+  - **"Save PDF" Shortcut**: Instant 1-click button to export and save invoice PDF, allowing cashiers to easily drag-and-drop the PDF file into WhatsApp.
+- 🧾 **Multi-Scenario Triggers & Scenario Presets**:
+  - **Sales Invoices & POS Billing**: Detailed line items, warranty info, split payment tender details (Cash/UPI), shop UPI ID, and due dates.
+  - **Payment Receipts / Vouchers**: Instant receipt confirmation upon recording full or split payments: *"Payment Received: ₹... on Bill #... via Cash/UPI. Remaining Balance: ₹..."*.
+  - **Service & Repair Job Sheets**: 4 distinct scenario presets:
+    1. *Intake Token Voucher* (device specs, problem, token #, expected date).
+    2. *Estimate Approval Request* (repair quotation and diagnosis).
+    3. *Ready for Pickup Alert* (final amount, advance paid, counter timings).
+    4. *General Status Update*.
+  - **AMC Maintenance Contracts**: Contract status overview, upcoming Preventive Maintenance (PM) inspection visit notifications, and visit completion reports.
+  - **Customer Ledger / Khata Statements**: Full detailed statement of account or friendly overdue payment reminder with shop UPI ID.
+- ⚙️ **Customizable WhatsApp Templates in Settings**:
+  - Customize shop greeting (*"Dear Valued Customer,"*).
+  - Customize shop signature / message footer (e.g., *"Thank you for trusting Royal Computers! For emergency CCTV support call 9800012345"*).
+  - Toggle between Interactive Preview Modal vs Instant 1-Click Send.
+- 🧪 **176-Point Automated Test Suite**: Expanded comprehensive verification covering phone sanitizer, protocol URL generation, message markdown parsing, and multi-scenario presets.
+
+---
+
 ## 🌟 What's New in v1.9.0 — Official GSTR-1 JSON Generator for Direct GST Portal Upload
 - 🏛️ **Official GSTN GSTR-1 JSON Generation (`Reports.generateGSTR1Json()`)**: Compiles 100% government-compliant `.json` return files ready to upload directly on the Indian GST Portal (`services.gst.gov.in`) under **Returns Dashboard $\rightarrow$ GSTR-1 $\rightarrow$ Prepare Offline $\rightarrow$ Upload**.
 - 📑 **Complete Statutory GSTN Tables Coverage**:

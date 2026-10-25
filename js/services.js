@@ -1002,9 +1002,9 @@ const Services = {
   },
 
   /* ═══════════════════════════════════════════
-     SHARE STATUS VIA WHATSAPP
+     SHARE STATUS VIA WHATSAPP (1-CLICK DISPATCH)
   ═══════════════════════════════════════════ */
-  shareWhatsApp(jobId) {
+  shareWhatsApp(jobId, action = '') {
     const job = DB.getJobById(jobId);
     if (!job) return;
     const biz = DB.getBiz();
@@ -1012,22 +1012,98 @@ const Services = {
     const advPaid = parseFloat(job.advancePaid) || 0;
     const balanceDue = Math.max(0, estCost - advPaid);
     const statusLabel = this.getStatusBadge(job.status).label;
+    const partyPhone = job.customerPhone || '';
 
-    const text = `Hello *${job.customerName}*,\n\nYour service request update from *${biz.name}*:\n\n` +
-      `🛠️ *Job Sheet No:* ${job.jobNo}\n` +
-      `💻 *Device:* ${job.deviceType} - ${job.brandModel}\n` +
+    const greeting = biz.waGreeting ? `${biz.waGreeting}\n\n` : '';
+    const footer = biz.waFooter ? `\n\n${biz.waFooter}` : `\n\n📞 For inquiries, contact: ${biz.phone || ''}\n_ShopPulse Service Desk_`;
+
+    // Preset 1: Intake Token Receipt
+    const intakeMsg = `${greeting}🛠️ *SERVICE INTAKE RECEIPT — ${biz.name}*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🎫 *Claim Token #:* ${job.jobNo}\n` +
+      `📅 *Date Received:* ${fmtDate(job.date)}\n` +
+      `👤 *Customer:* ${job.customerName || 'Walk-in Customer'}\n` +
+      `💻 *Device:* ${job.deviceType || 'Hardware'} - ${job.brandModel || '—'}\n` +
       `${job.serialNo ? `🔢 *Serial No:* ${job.serialNo}\n` : ''}` +
-      `⚠️ *Reported Issue:* ${job.problemReported}\n` +
-      `📌 *Current Status:* ${statusLabel}\n` +
-      `💰 *Estimated Cost:* ₹${estCost} (Advance Paid: ₹${advPaid})\n` +
-      `${balanceDue > 0 ? `💵 *Balance Due:* ₹${balanceDue}\n` : ''}` +
-      `${job.expectedDeliveryDate ? `📅 *Expected Delivery:* ${fmtDate(job.expectedDeliveryDate)}\n` : ''}` +
-      `\nFor any inquiries, please contact us at ${biz.phone || ''}. Thank you!`;
+      `⚠️ *Reported Issue:* ${job.problemReported || 'Inspection required'}\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `💰 *Estimated Cost:* ₹${estCost.toLocaleString('en-IN')}\n` +
+      `💵 *Advance Paid:* ₹${advPaid.toLocaleString('en-IN')}\n` +
+      `${balanceDue > 0 ? `⏳ *Balance on Delivery:* ₹${balanceDue.toLocaleString('en-IN')}\n` : ''}` +
+      `${job.expectedDeliveryDate ? `📅 *Expected Ready:* ${fmtDate(job.expectedDeliveryDate)}\n` : ''}` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `📌 *Important:* Please present this Token # (${job.jobNo}) when collecting your device.` +
+      footer;
 
-    const phone = (job.customerPhone || '').replace(/[^0-9]/g, '');
-    const cleanPhone = phone.length === 10 ? '91' + phone : phone;
-    const url = cleanPhone ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}` : `https://wa.me/?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
+    // Preset 2: Ready for Pickup
+    const readyMsg = `${greeting}🎉 *DEVICE READY FOR PICKUP — ${biz.name}*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `Good news! Your device has been serviced and is tested & ready for counter pickup:\n\n` +
+      `🎫 *Job Token #:* ${job.jobNo}\n` +
+      `💻 *Device:* ${job.deviceType || 'Hardware'} - ${job.brandModel || '—'}\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `💰 *Total Final Charges:* ₹${estCost.toLocaleString('en-IN')}\n` +
+      `💵 *Advance Paid:* ₹${advPaid.toLocaleString('en-IN')}\n` +
+      `${balanceDue > 0 ? `🔴 *Amount to Pay at Counter:* ₹${balanceDue.toLocaleString('en-IN')}\n` : `🟢 *Paid in Full (Zero Balance)*\n`}` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🏢 *Store Address:* ${biz.address || ''}, ${biz.city || ''}\n` +
+      `⏰ Please visit our counter to test and collect your device.` +
+      footer;
+
+    // Preset 3: Repair Estimate Approval Request
+    const approvalMsg = `${greeting}🔧 *REPAIR ESTIMATE APPROVAL REQUEST — ${biz.name}*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🎫 *Job Token #:* ${job.jobNo}\n` +
+      `💻 *Device:* ${job.deviceType || 'Hardware'} - ${job.brandModel || '—'}\n` +
+      `⚠️ *Diagnosed Issue:* ${job.diagnosticsNotes || job.problemReported || 'Component Repair'}\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `💰 *Estimated Repair Charges:* ₹${estCost.toLocaleString('en-IN')}\n` +
+      `${job.expectedDeliveryDate ? `📅 *Estimated Completion:* ${fmtDate(job.expectedDeliveryDate)}\n` : ''}` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `💬 Kindly reply *YES* to approve this repair quotation and proceed.` +
+      footer;
+
+    // Preset 4: General Status Update
+    const statusMsg = `${greeting}📋 *SERVICE STATUS UPDATE — ${biz.name}*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🎫 *Job Token #:* ${job.jobNo}\n` +
+      `💻 *Device:* ${job.deviceType || 'Hardware'} - ${job.brandModel || '—'}\n` +
+      `📌 *Current Status:* ${statusLabel}\n` +
+      `${job.diagnosticsNotes ? `🔧 *Diagnostics:* ${job.diagnosticsNotes}\n` : ''}` +
+      `💰 *Estimated Cost:* ₹${estCost.toLocaleString('en-IN')} (Advance: ₹${advPaid.toLocaleString('en-IN')})\n` +
+      `${balanceDue > 0 ? `💵 *Balance Due:* ₹${balanceDue.toLocaleString('en-IN')}\n` : ''}` +
+      `${job.expectedDeliveryDate ? `📅 *Expected Ready:* ${fmtDate(job.expectedDeliveryDate)}\n` : ''}` +
+      footer;
+
+    const presets = [
+      { label: 'Intake Token', text: intakeMsg },
+      { label: 'Ready Alert', text: readyMsg },
+      { label: 'Approval Request', text: approvalMsg },
+      { label: 'Status Update', text: statusMsg }
+    ];
+
+    let defaultText = intakeMsg;
+    if (action === 'ready' || job.status === 'ready') {
+      defaultText = readyMsg;
+      presets.sort((a, b) => a.label === 'Ready Alert' ? -1 : 1);
+    } else if (action === 'approval' || job.status === 'waiting_approval') {
+      defaultText = approvalMsg;
+      presets.sort((a, b) => a.label === 'Approval Request' ? -1 : 1);
+    } else if (action === 'status' || job.status === 'in_progress') {
+      defaultText = statusMsg;
+      presets.sort((a, b) => a.label === 'Status Update' ? -1 : 1);
+    }
+
+    App.openWhatsAppModal({
+      title: `Service Job WhatsApp — ${job.jobNo}`,
+      phone: partyPhone,
+      partyName: job.customerName,
+      messageText: defaultText,
+      docType: 'job',
+      docId: jobId,
+      docNo: job.jobNo,
+      presets: presets
+    });
   },
 
   /* ═══════════════════════════════════════════
