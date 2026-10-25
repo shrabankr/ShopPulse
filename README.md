@@ -6,29 +6,42 @@
 
 ---
 
-## 🌟 What's New in v2.0.0 — Enhanced 1-Click Zero-Cost WhatsApp Dispatch Engine
-- 💬 **100% Free Zero-Cost Desktop WhatsApp Dispatch**: Requires zero monthly subscription fees, zero third-party gateway charges (Wati/UltraMsg), and no Meta Cloud API verification. Operates entirely offline or via standard browser/desktop protocol links.
-- 📱 **Interactive WhatsApp Dispatch Center (`App.openWhatsAppModal()`)**:
-  - Live formatted WhatsApp message preview bubble showing styled text, bold headers, and emojis.
-  - Live recipient phone number field with smart Indian mobile normalizer (`+91`, spaces, dashes, leading `0` converted seamlessly to `91XXXXXXXXXX`). Cashiers can verify or edit the number on the spot.
-  - **"Send via WhatsApp" Button**: 1-click launch in WhatsApp Web or Windows WhatsApp Desktop with pre-filled message.
-  - **"Copy Message Text" Button**: Fast clipboard copy shortcut for cashiers running WhatsApp Desktop side-by-side.
-  - **"Save PDF" Shortcut**: Instant 1-click button to export and save invoice PDF, allowing cashiers to easily drag-and-drop the PDF file into WhatsApp.
-- 🧾 **Multi-Scenario Triggers & Scenario Presets**:
-  - **Sales Invoices & POS Billing**: Detailed line items, warranty info, split payment tender details (Cash/UPI), shop UPI ID, and due dates.
-  - **Payment Receipts / Vouchers**: Instant receipt confirmation upon recording full or split payments: *"Payment Received: ₹... on Bill #... via Cash/UPI. Remaining Balance: ₹..."*.
-  - **Service & Repair Job Sheets**: 4 distinct scenario presets:
-    1. *Intake Token Voucher* (device specs, problem, token #, expected date).
-    2. *Estimate Approval Request* (repair quotation and diagnosis).
-    3. *Ready for Pickup Alert* (final amount, advance paid, counter timings).
-    4. *General Status Update*.
-  - **AMC Maintenance Contracts**: Contract status overview, upcoming Preventive Maintenance (PM) inspection visit notifications, and visit completion reports.
-  - **Customer Ledger / Khata Statements**: Full detailed statement of account or friendly overdue payment reminder with shop UPI ID.
-- ⚙️ **Customizable WhatsApp Templates in Settings**:
-  - Customize shop greeting (*"Dear Valued Customer,"*).
-  - Customize shop signature / message footer (e.g., *"Thank you for trusting Royal Computers! For emergency CCTV support call 9800012345"*).
-  - Toggle between Interactive Preview Modal vs Instant 1-Click Send.
-- 🧪 **176-Point Automated Test Suite**: Expanded comprehensive verification covering phone sanitizer, protocol URL generation, message markdown parsing, and multi-scenario presets.
+## 🌟 What's New in v2.0.0 — Unified Enterprise Release: Delivery Challan, Barcode POS, Aging Khata & WhatsApp Engine
+
+### 1. 🚚 GST Delivery Challan & Dispatch Gate Pass (Material Outward Slip — Rule 55)
+- 📜 **Statutory GST Rule 55 Delivery Challan**: Fully compliant outward transport and delivery challan for moving goods without a tax invoice (goods sent on approval, delivery after service, site installation, or job work).
+- ⚡ **1-Click Generation**: Direct 1-click trigger from any Sales Invoice (`Billing.viewDoc`) or Service & Repair Job Sheet (`Services.viewJob`). Automatically carries forward customer data, product line items, quantities, serial numbers (S/N), and warranty terms.
+- 📄 **Dual Document Layouts**:
+  - **A4 Official Delivery Challan**: Includes business letterhead, consignee destination, transportation metadata (Mode of Transport, Vehicle Number, Transporter Name, LR/Docket Number, E-Way Bill Number), itemized hardware list with serial numbers, statutory declaration, and **Physical Receiver Acknowledgment Block** with Name, Phone, Designation (`Self`, `Store Manager`, `IT Staff`, `Security Desk`, `Project Engineer`), and Physical Signature & Rubber Stamp boxes.
+  - **3" Thermal POS Gate Pass Slip**: Compact 80mm roll slip for counter checkout checkpoints, delivery van driver handovers, or security gate outward verification.
+- 📋 **Dedicated Management Hub (`#challans`)**: Filter by Sales deliveries, Service hardware returns, or Manual outward dispatches, search by vehicle/customer/challan number, and reprint/export anytime.
+- 📲 **1-Click WhatsApp Dispatch Notification**: Send complete delivery notices with vehicle numbers, tracking numbers, and item lists to consignees.
+
+### 2. ⚡ Rapid USB Barcode Scanner POS Mode
+- 🔫 **Continuous Zero-Touch Scan-to-Cart**: Plug any standard USB or wireless 1D/2D barcode gun (Honeywell, TVS, Zebra, Datalogic, Inateck, etc.) into your PC and scan item barcodes consecutively.
+- 📦 **Automated Quantity Increment**: If a scanned item is already in the bill, its quantity automatically increments by 1 with instant visual feedback highlight.
+- 🔊 **Zero-Dependency Synthesizer Audio Beep**: Uses browser Web Audio API (`window.AudioContext`) to generate a crisp 800Hz POS confirmation chime without loading external MP3 files.
+- ⌨️ **Instant F2 POS Keyboard Shortcut**: Press `F2` from anywhere in ShopPulse to instantly focus the barcode scanner input or open a new sales invoice.
+
+### 3. 📊 Aging Khata & Credit Overdue Analysis Dashboard
+- 🗓️ **4 Standard Indian Credit Aging Buckets**:
+  - **0–30 Days (Current / Not Due)**: Healthy customer credit.
+  - **31–60 Days (Overdue Alert)**: Polite payment follow-up window.
+  - **61–90 Days (Critical Overdue)**: Urgent notice with Shop UPI ID.
+  - **90+ Days (High Risk / Bad Debt)**: Formal settlement demand notice.
+- 🎯 **Interactive Filter Cards**: 1-click KPI cards in `#receivables` and `#payables` filter customer outstanding lists immediately.
+- 📲 **Tiered WhatsApp Payment Reminder Presets**: Automatically suggests the right tone based on overdue days:
+  - *Gentle Reminder (1–30d)*: Courteous reminder with invoice date, amount, and due date.
+  - *Urgent Follow-up (31–60d)*: Explicit warning of credit hold with instant Countertop UPI ID and bank details.
+  - *Final Settlement Notice (60+d)*: Formal legal demand to prevent suspension of warranty, AMC, and credit facilities.
+- 📥 **1-Click Aging CSV Export**: Download complete receivables aging reports with party contact details, credit terms, and overdue days.
+
+### 4. 💬 Enhanced 1-Click Zero-Cost WhatsApp Dispatch Engine
+- 💰 **100% Free Desktop Dispatch**: Zero monthly subscription fees, zero third-party gateway charges (Wati/UltraMsg), and no Meta Cloud API verification.
+- 📱 **Interactive WhatsApp Dispatch Center (`App.openWhatsAppModal()`)**: Live styled preview bubble, Indian mobile normalizer (`+91` auto-fix), direct launch in WhatsApp Web / Desktop, copy to clipboard, and instant PDF export.
+- 🧾 **Multi-Scenario Triggers**: Covers Sales Invoices, Payment Receipts, Service Tickets (Intake, Estimate, Ready, Status), AMC Contracts, and CRM Customer Khata Statements.
+- ⚙️ **Customizable Templates in Settings**: Custom greeting, custom shop signature footer, and prefix management.
+- 🧪 **200-Point Automated Test Suite**: 100% test pass rate across all 17 phases.
 
 ---
 

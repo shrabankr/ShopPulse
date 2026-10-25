@@ -594,6 +594,10 @@ const Billing = {
       } else {
         this._switchPaymentTenderMode('single');
       }
+      setTimeout(() => {
+        const scanField = document.getElementById('barcode-quick-scan');
+        if (scanField) scanField.focus();
+      }, 150);
     }
   },
 
@@ -2064,6 +2068,11 @@ const Billing = {
 
     const actionButtons = `
       <button class="btn btn-ghost" onclick="App.closeModal()">Close</button>
+      ${isSales ? `
+      <button class="btn btn-secondary" onclick="App.closeModal();Billing.openNewChallan('sales','${id}')" title="Create GST Delivery Challan &amp; Gate Pass">
+        <span class="material-icons" style="color:var(--primary)">local_shipping</span> Delivery Challan
+      </button>
+      ` : ''}
       <button class="btn btn-warning" onclick="App.closeModal();Billing.openReturnForm('${type}','${id}')" title="${isSales ? 'Issue Customer Return (Credit Note)' : 'Return to Supplier (Debit Note)'}">
         <span class="material-icons">assignment_return</span> ${isSales ? 'Return (Credit Note)' : 'Return (Debit Note)'}
       </button>
@@ -3299,40 +3308,70 @@ ${showWatermark ? `
   },
 
   /* ═══════════════════════════════════════════
-     RECEIVABLES
+     RECEIVABLES (AGING KHATA & OVERDUE ANALYSIS)
   ═══════════════════════════════════════════ */
   renderReceivables(container) {
     const sales = DB.getSales().filter(s => s.status !== 'paid' && s.status !== 'draft');
     const today = new Date();
+    const activeFilter = window._receivablesAgingFilter || 'all';
 
     const aging = {
+      all: sales,
       current: sales.filter(s => daysBetween(today, new Date(s.dueDate)) >= 0),
       d30: sales.filter(s => { const d = daysBetween(today, new Date(s.dueDate)); return d < 0 && d >= -30; }),
       d60: sales.filter(s => { const d = daysBetween(today, new Date(s.dueDate)); return d < -30 && d >= -60; }),
       d90: sales.filter(s => daysBetween(today, new Date(s.dueDate)) < -60),
     };
 
+    const displayedSales = aging[activeFilter] || sales;
+
     container.innerHTML = `
-      <div class="page-header-row"><h2>Receivables (Unpaid Invoices)</h2></div>
+      <div class="page-header-row">
+        <div>
+          <h2>Receivables &amp; Aging Khata Analysis</h2>
+          <div style="font-size:.82rem;color:var(--text-secondary)">Track customer credit, aging risk brackets, and dispatch 1-click WhatsApp payment nudges.</div>
+        </div>
+        <div class="actions">
+          <button class="btn btn-secondary" onclick="Billing.exportReceivablesCSV()"><span class="material-icons">download</span> Export Aging CSV</button>
+        </div>
+      </div>
+
+      <!-- Aging Buckets KPI Grid -->
       <div class="aging-grid">
         ${[
-      { label: 'Not Due', cls: 'aging-current', items: aging.current },
-      { label: '1–30 Days Overdue', cls: 'aging-30', items: aging.d30 },
-      { label: '31–60 Days Overdue', cls: 'aging-60', items: aging.d60 },
-      { label: '60+ Days Overdue', cls: 'aging-90', items: aging.d90 },
-    ].map(a => `
-          <div class="aging-card ${a.cls}">
-            <div class="aging-label">${a.label}</div>
-            <div class="aging-amount">${fmtCurrency(a.items.reduce((s, i) => s + i.total, 0))}</div>
+          { key: 'all', label: 'All Outstanding', cls: 'aging-all', items: aging.all },
+          { key: 'current', label: 'Not Due (0–30 Days)', cls: 'aging-current', items: aging.current },
+          { key: 'd30', label: '1–30 Days Overdue', cls: 'aging-30', items: aging.d30 },
+          { key: 'd60', label: '31–60 Days Overdue', cls: 'aging-60', items: aging.d60 },
+          { key: 'd90', label: '60+ Days (High Risk)', cls: 'aging-90', items: aging.d90 },
+        ].map(a => `
+          <div class="aging-card ${a.cls} ${activeFilter === a.key ? 'active' : ''}" style="cursor:pointer;border:${activeFilter === a.key ? '2px solid var(--primary)' : '1px solid var(--border)'};background:${activeFilter === a.key ? '#f0f9ff' : 'var(--card)'}" onclick="Billing._filterReceivablesAging('${a.key}')" title="Click to filter by ${a.label}">
+            <div class="aging-label" style="display:flex;justify-content:space-between;align-items:center">
+              <span>${a.label}</span>
+              ${activeFilter === a.key ? '<span class="badge badge-info" style="font-size:.65rem">ACTIVE</span>' : ''}
+            </div>
+            <div class="aging-amount">${fmtCurrency(a.items.reduce((s, i) => s + DB.getDocDueAmount(i), 0))}</div>
             <div class="aging-count">${a.items.length} invoice${a.items.length !== 1 ? 's' : ''}</div>
           </div>`).join('')}
       </div>
+
       <div class="table-wrap">
         <table class="table">
-          <thead><tr><th>Invoice No</th><th>Customer</th><th>Invoice Date</th><th>Due Date</th><th>Days Overdue</th><th class="text-right">Balance Due</th><th>Status</th><th></th></tr></thead>
+          <thead>
+            <tr>
+              <th>Invoice No</th>
+              <th>Customer</th>
+              <th>Invoice Date</th>
+              <th>Due Date</th>
+              <th>Aging Status</th>
+              <th class="text-right">Balance Due</th>
+              <th>Status</th>
+              <th class="text-right" style="width:230px">Actions</th>
+            </tr>
+          </thead>
           <tbody>
-            ${sales.length === 0 ? `<tr><td colspan="8"><div class="table-empty"><span class="material-icons">check_circle</span><p>All invoices are paid! 🎉</p></div></td></tr>` :
-        sales.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).map(s => {
+            ${displayedSales.length === 0 ? `<tr><td colspan="8"><div class="table-empty"><span class="material-icons">check_circle</span><p>No invoices in selected aging bucket (${activeFilter})! 🎉</p></div></td></tr>` :
+        displayedSales.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).map(s => {
           const daysOver = -daysBetween(today, new Date(s.dueDate));
           const isOver = daysOver > 0;
           const dueAmt = DB.getDocDueAmount(s);
@@ -3340,24 +3379,161 @@ ${showWatermark ? `
           let badge = `<span class="badge badge-${s.status}">${s.status}</span>`;
           if (s.status === 'partial') badge = `<span class="badge badge-partial">Partial (${fmtCurrency(paidAmt)})</span>`;
 
+          let agingBadge = '<span class="badge badge-success">Not due</span>';
+          if (daysOver > 60) {
+            agingBadge = `<span class="badge badge-danger">🔴 ${daysOver}d (Severe)</span>`;
+          } else if (daysOver > 30) {
+            agingBadge = `<span class="badge badge-warning" style="background:#fff7ed;color:#c2410c">🟠 ${daysOver}d (Critical)</span>`;
+          } else if (daysOver > 0) {
+            agingBadge = `<span class="badge badge-overdue">🟡 ${daysOver}d Overdue</span>`;
+          }
+
           return `<tr onclick="Billing.viewDoc('${s.id}','sales')" style="cursor:pointer">
                 <td><span class="mono">${s.invoiceNo}</span></td>
                 <td><div style="font-weight:600">${s.customerName}</div><div style="font-size:.72rem;color:var(--text-secondary);font-family:monospace">${s.customerGstin || 'Unregistered'}</div></td>
                 <td>${fmtDate(s.date)}</td>
                 <td style="${isOver ? 'color:var(--danger);font-weight:600' : ''}">${fmtDate(s.dueDate)}</td>
-                <td>${isOver ? `<span class="badge badge-overdue">${daysOver} days</span>` : '<span class="badge badge-success">Not due</span>'}</td>
+                <td>${agingBadge}</td>
                 <td class="text-right amount-cell ${isOver ? 'due' : ''}">
-                  <div>${fmtCurrency(dueAmt)}</div>
+                  <div style="font-weight:700">${fmtCurrency(dueAmt)}</div>
                   ${paidAmt > 0 ? `<div style="font-size:.7rem;color:var(--text-secondary)">Total: ${fmtCurrency(s.total)}</div>` : ''}
                 </td>
                 <td>${badge}</td>
-                <td class="action-col" onclick="event.stopPropagation()"><button class="btn btn-xs btn-success" onclick="Billing.markPaid('${s.id}','sales')"><span class="material-icons" style="font-size:13px">payments</span> Record Payment</button></td>
+                <td class="action-col" onclick="event.stopPropagation()" style="text-align:right;white-space:nowrap">
+                  <button class="btn btn-xs btn-secondary" onclick="Billing.sendAgingReminderWhatsApp('${s.id}')" title="Send WhatsApp Overdue Nudge" style="color:#25d366;margin-right:4px">
+                    <span class="material-icons" style="font-size:13px">chat</span> WhatsApp
+                  </button>
+                  <button class="btn btn-xs btn-success" onclick="Billing.markPaid('${s.id}','sales')">
+                    <span class="material-icons" style="font-size:13px">payments</span> Record
+                  </button>
+                </td>
               </tr>`;
         }).join('')}
           </tbody>
-          ${sales.length > 0 ? `<tfoot><tr><td colspan="5" class="text-right">Total Outstanding Due</td><td colspan="2" class="text-right font-bold">${fmtCurrency(sales.reduce((s, i) => s + DB.getDocDueAmount(i), 0))}</td><td></td></tr></tfoot>` : ''}
+          ${displayedSales.length > 0 ? `<tfoot><tr><td colspan="5" class="text-right">Total Outstanding Balance (${displayedSales.length} Invoices)</td><td class="text-right font-bold">${fmtCurrency(displayedSales.reduce((s, i) => s + DB.getDocDueAmount(i), 0))}</td><td colspan="2"></td></tr></tfoot>` : ''}
         </table>
       </div>`;
+  },
+
+  _filterReceivablesAging(key) {
+    window._receivablesAgingFilter = key;
+    const c = document.getElementById('page-content');
+    if (c) this.renderReceivables(c);
+  },
+
+  exportReceivablesCSV() {
+    const sales = DB.getSales().filter(s => s.status !== 'paid' && s.status !== 'draft');
+    if (!sales.length) {
+      App.toast('No outstanding receivables to export.', 'info');
+      return;
+    }
+    const today = new Date();
+    const headers = ['Invoice No', 'Customer Name', 'Customer Phone', 'Customer GSTIN', 'Invoice Date', 'Due Date', 'Days Overdue', 'Aging Bucket', 'Total Amount', 'Paid Amount', 'Balance Due'];
+    const rows = sales.map(s => {
+      const daysOver = Math.max(0, -daysBetween(today, new Date(s.dueDate)));
+      let bucket = 'Not Due';
+      if (daysOver > 60) bucket = '60+ Days';
+      else if (daysOver > 30) bucket = '31-60 Days';
+      else if (daysOver > 0) bucket = '1-30 Days';
+
+      return [
+        `"${s.invoiceNo}"`,
+        `"${s.customerName || ''}"`,
+        `"${s.customerPhone || ''}"`,
+        `"${s.customerGstin || ''}"`,
+        s.date,
+        s.dueDate,
+        daysOver,
+        `"${bucket}"`,
+        s.total || 0,
+        DB.getDocPaidAmount(s),
+        DB.getDocDueAmount(s)
+      ];
+    });
+
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Receivables_Aging_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    App.toast('Receivables Aging CSV downloaded successfully!');
+  },
+
+  sendAgingReminderWhatsApp(saleId) {
+    const sale = DB.getSaleById(saleId);
+    if (!sale) return;
+    const biz = DB.getBiz();
+    const customer = DB.getCustomerById(sale.customerId);
+    const phone = sale.customerWhatsapp || customer?.whatsapp || sale.customerPhone || customer?.phone || '';
+    const dueAmount = DB.getDocDueAmount(sale);
+    const today = new Date();
+    const daysOver = Math.max(0, -daysBetween(today, new Date(sale.dueDate)));
+
+    const greeting = biz.waGreeting ? `${biz.waGreeting}\n\n` : '';
+    const footer = biz.waFooter ? `\n\n${biz.waFooter}` : `\n\n📞 Accounts Desk: ${biz.phone || ''}\n_ShopPulse Accounts_`;
+
+    // Presets based on aging
+    // 1. Gentle Reminder (1-30d)
+    const gentleMsg = `${greeting}🔔 *PAYMENT REMINDER — ${biz.name}*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `Dear *${sale.customerName}*,\n\n` +
+      `This is a gentle reminder that invoice *#${sale.invoiceNo}* dated ${fmtDate(sale.date)} for *₹${dueAmount.toLocaleString('en-IN')}* was due on ${fmtDate(sale.dueDate)}${daysOver > 0 ? ` (${daysOver} days ago)` : ''}.\n\n` +
+      `${biz.upiId ? `📲 *Pay Instantly via UPI:*\nUPI ID: *${biz.upiId}*\n\n` : ''}` +
+      `${biz.bankAccount ? `🏦 *Bank Transfer Details:*\nBank: ${biz.bankName || ''}\nA/C: ${biz.bankAccount} | IFSC: ${biz.bankIFSC || ''}\n\n` : ''}` +
+      `If you have already processed payment, please ignore this note. Thank you for your continued partnership!` +
+      footer;
+
+    // 2. Urgent Follow-up (31-60d)
+    const urgentMsg = `${greeting}⚠️ *URGENT OVERDUE PAYMENT NOTICE — ${biz.name}*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `Dear *${sale.customerName}*,\n\n` +
+      `Your account shows an overdue balance of *₹${dueAmount.toLocaleString('en-IN')}* against invoice *#${sale.invoiceNo}* which is now *${daysOver} DAYS OVERDUE* (Due Date: ${fmtDate(sale.dueDate)}).\n\n` +
+      `Please clear this balance today to avoid credit hold on further orders or service visits.\n\n` +
+      `${biz.upiId ? `📲 *Immediate UPI Payment:*\nUPI ID: *${biz.upiId}*\n\n` : ''}` +
+      `${biz.bankAccount ? `🏦 *Bank A/C:* ${biz.bankName || ''} | A/C No: ${biz.bankAccount} | IFSC: ${biz.bankIFSC || ''}\n\n` : ''}` +
+      `Kindly share transaction reference once paid.` +
+      footer;
+
+    // 3. Final Notice (60+d)
+    const finalMsg = `${greeting}🚨 *FINAL NOTICE: OVERDUE ACCOUNT SETTLEMENT — ${biz.name}*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `Attention: Accounts Department / *${sale.customerName}*,\n\n` +
+      `Invoice *#${sale.invoiceNo}* for amount *₹${dueAmount.toLocaleString('en-IN')}* is now severely overdue by *${daysOver} DAYS*.\n\n` +
+      `Immediate settlement is required to prevent suspension of your warranty, AMC support, and credit facilities.\n\n` +
+      `📲 UPI ID: *${biz.upiId || '—'}*\n` +
+      `🏦 Bank A/C: ${biz.bankName || ''} | A/C: ${biz.bankAccount || ''} | IFSC: ${biz.bankIFSC || ''}\n\n` +
+      `Please contact our finance office immediately at ${biz.phone || ''}.` +
+      footer;
+
+    const presets = [
+      { label: 'Gentle (1-30d)', text: gentleMsg },
+      { label: 'Urgent (31-60d)', text: urgentMsg },
+      { label: 'Final (60+d)', text: finalMsg }
+    ];
+
+    let defaultText = gentleMsg;
+    if (daysOver > 60) {
+      defaultText = finalMsg;
+      presets.sort((a, b) => a.label.includes('Final') ? -1 : 1);
+    } else if (daysOver > 30) {
+      defaultText = urgentMsg;
+      presets.sort((a, b) => a.label.includes('Urgent') ? -1 : 1);
+    }
+
+    App.openWhatsAppModal({
+      title: `Overdue Payment Nudge (${daysOver}d overdue) — ${sale.invoiceNo}`,
+      phone: phone,
+      partyName: sale.customerName,
+      messageText: defaultText,
+      docType: 'sales',
+      docId: sale.id,
+      docNo: sale.invoiceNo,
+      presets: presets,
+      pdfAction: () => Billing.exportPDF(sale.id, 'sales')
+    });
   },
 
   /* ═══════════════════════════════════════════
@@ -6131,5 +6307,964 @@ body { font-family: 'Inter', Arial, sans-serif; font-size: 8.5pt; color: #1e293b
         </div>
       `;
     }).join('');
+  },
+
+  /* ═══════════════════════════════════════════
+     DELIVERY CHALLANS & GATE PASSES (GST RULE 55)
+  ═══════════════════════════════════════════ */
+  renderChallans(container) {
+    const challans = DB.getChallans();
+    const activeFilter = window._challanFilter || 'all';
+    const searchQuery = (window._challanSearch || '').toLowerCase().trim();
+
+    let filtered = challans;
+    if (activeFilter === 'sales') {
+      filtered = filtered.filter(c => c.type === 'sales' || (c.sourceRefNo && c.sourceRefNo.includes('SCS')));
+    } else if (activeFilter === 'service') {
+      filtered = filtered.filter(c => c.type === 'service' || (c.sourceRefNo && c.sourceRefNo.includes('JOB')));
+    } else if (activeFilter === 'manual') {
+      filtered = filtered.filter(c => !c.sourceRefNo || c.type === 'manual');
+    }
+
+    if (searchQuery) {
+      filtered = filtered.filter(c => 
+        (c.challanNo && c.challanNo.toLowerCase().includes(searchQuery)) ||
+        (c.customerName && c.customerName.toLowerCase().includes(searchQuery)) ||
+        (c.customerPhone && c.customerPhone.includes(searchQuery)) ||
+        (c.sourceRefNo && c.sourceRefNo.toLowerCase().includes(searchQuery)) ||
+        (c.dispatch?.vehicleNo && c.dispatch.vehicleNo.toLowerCase().includes(searchQuery)) ||
+        (c.receiver?.receiverName && c.receiver.receiverName.toLowerCase().includes(searchQuery))
+      );
+    }
+
+    container.innerHTML = `
+      <div class="page-header-row">
+        <div>
+          <h2>Delivery Challans &amp; Gate Passes</h2>
+          <div style="font-size:.82rem;color:var(--text-secondary)">Material outward dispatch slips, physical acknowledgment handover receipts, and 3" POS gate passes under GST Rule 55.</div>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" onclick="Billing.openNewChallan()">
+            <span class="material-icons">add</span> + New Delivery Challan
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick KPI Summary Grid -->
+      <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">
+        <div class="kpi-card kpi-primary" style="cursor:pointer" onclick="Billing._filterChallans('all')">
+          <div class="kpi-label">Total Challans</div>
+          <div class="kpi-value">${challans.length}</div>
+          <div class="kpi-sub">All outward dispatches</div>
+        </div>
+        <div class="kpi-card kpi-success" style="cursor:pointer" onclick="Billing._filterChallans('sales')">
+          <div class="kpi-label">Sales Invoices Outward</div>
+          <div class="kpi-value">${challans.filter(c => c.type === 'sales' || (c.sourceRefNo && c.sourceRefNo.includes('SCS'))).length}</div>
+          <div class="kpi-sub">Customer billing dispatches</div>
+        </div>
+        <div class="kpi-card kpi-warning" style="cursor:pointer" onclick="Billing._filterChallans('service')">
+          <div class="kpi-label">Service Hardware Returns</div>
+          <div class="kpi-value">${challans.filter(c => c.type === 'service' || (c.sourceRefNo && c.sourceRefNo.includes('JOB'))).length}</div>
+          <div class="kpi-sub">Repaired equipment dispatches</div>
+        </div>
+        <div class="kpi-card" style="background:#f8fafc;border:1px solid var(--border);cursor:pointer" onclick="Billing._filterChallans('manual')">
+          <div class="kpi-label">Direct / Stock Outward</div>
+          <div class="kpi-value">${challans.filter(c => !c.sourceRefNo || c.type === 'manual').length}</div>
+          <div class="kpi-sub">Demo, branch &amp; direct slips</div>
+        </div>
+      </div>
+
+      <!-- Search & Filter Bar -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-body" style="padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+          <div style="flex:1;min-width:240px;position:relative">
+            <input type="text" id="challan-search-input" value="${window._challanSearch || ''}" placeholder="Search by Challan #, Customer, Phone, Vehicle #, or Ref Doc..." style="width:100%;padding-left:32px" oninput="Billing._onChallanSearchInput(this.value)">
+            <span class="material-icons" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:18px;color:var(--text-secondary)">search</span>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-xs ${activeFilter === 'all' ? 'btn-primary' : 'btn-ghost'}" onclick="Billing._filterChallans('all')">All</button>
+            <button class="btn btn-xs ${activeFilter === 'sales' ? 'btn-primary' : 'btn-ghost'}" onclick="Billing._filterChallans('sales')">Sales Deliveries</button>
+            <button class="btn btn-xs ${activeFilter === 'service' ? 'btn-primary' : 'btn-ghost'}" onclick="Billing._filterChallans('service')">Service Returns</button>
+            <button class="btn btn-xs ${activeFilter === 'manual' ? 'btn-primary' : 'btn-ghost'}" onclick="Billing._filterChallans('manual')">Manual / Direct</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Challans Table -->
+      <div class="card">
+        <div class="table-wrap">
+          <table class="table" style="font-size:.84rem">
+            <thead>
+              <tr>
+                <th style="width:130px">Challan No</th>
+                <th style="width:105px">Date</th>
+                <th>Consignee / Customer</th>
+                <th>Source Ref</th>
+                <th>Vehicle / Mode</th>
+                <th>Receiver Handover</th>
+                <th style="width:70px" class="text-right">Items</th>
+                <th class="action-col" style="width:170px">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filtered.length === 0 ? `
+                <tr><td colspan="8"><div class="table-empty"><span class="material-icons">local_shipping</span><p>No delivery challans found</p><button class="btn btn-primary btn-sm" onclick="Billing.openNewChallan()"><span class="material-icons">add</span> Create Delivery Challan</button></div></td></tr>
+              ` : filtered.map(c => {
+                const totalQty = (c.items || []).reduce((s, it) => s + (parseFloat(it.qty) || 0), 0);
+                return `
+                <tr>
+                  <td>
+                    <a href="javascript:void(0)" onclick="Billing.viewChallan('${c.id}', 'a4')" class="mono" style="font-weight:700;color:var(--primary)">${c.challanNo}</a>
+                    <div style="font-size:.7rem;color:var(--text-secondary)">Rule 55 Slip</div>
+                  </td>
+                  <td style="white-space:nowrap">${fmtDate(c.date)}</td>
+                  <td>
+                    <div style="font-weight:600">${c.customerName || 'Direct Counter Client'}</div>
+                    <div style="font-size:.72rem;color:var(--text-secondary)">${c.customerPhone ? '📞 ' + c.customerPhone : (c.customerAddress || '—')}</div>
+                  </td>
+                  <td>
+                    ${c.sourceRefNo ? `
+                      <span class="mono badge badge-info" style="font-size:.72rem">${c.sourceRefNo}</span>
+                      <div style="font-size:.7rem;color:var(--text-secondary);text-transform:capitalize">${c.type || 'Document'}</div>
+                    ` : '<span class="text-muted" style="font-size:.75rem">Direct / Manual</span>'}
+                  </td>
+                  <td>
+                    <div style="font-weight:600">${c.dispatch?.vehicleNo || 'Direct Handover'}</div>
+                    <div style="font-size:.72rem;color:var(--text-secondary)">${c.dispatch?.mode || 'Staff Delivery'}</div>
+                  </td>
+                  <td>
+                    <div style="font-weight:600">${c.receiver?.receiverName || 'Physical Handover'}</div>
+                    <div style="font-size:.72rem;color:var(--text-secondary)">${c.receiver?.designation ? '[' + c.receiver.designation + ']' : ''} ${c.receiver?.receiverPhone ? '• ' + c.receiver.receiverPhone : ''}</div>
+                  </td>
+                  <td class="text-right">
+                    <span class="font-bold" style="color:var(--text-primary)">${totalQty}</span> <span style="font-size:.7rem;color:var(--text-secondary)">units</span>
+                  </td>
+                  <td class="action-col" style="white-space:nowrap">
+                    <button class="btn btn-xs btn-secondary" onclick="Billing.viewChallan('${c.id}', 'a4')" title="View A4 Delivery Challan"><span class="material-icons" style="font-size:14px">description</span> A4</button>
+                    <button class="btn btn-xs btn-secondary" onclick="Billing.viewChallan('${c.id}', 'compact_pos')" title="View 3 inch POS Gate Pass Slip"><span class="material-icons" style="font-size:14px">confirmation_number</span> 3"</button>
+                    <button class="btn btn-xs btn-secondary" onclick="Billing.printChallan('${c.id}', 'a4')" title="Print Official Challan"><span class="material-icons" style="font-size:14px">print</span></button>
+                    <button class="btn btn-xs btn-secondary" onclick="Billing.shareChallanWhatsApp('${c.id}')" title="WhatsApp Dispatch Notification"><span class="material-icons" style="font-size:14px;color:#25d366">chat</span></button>
+                    ${DB.getRole() !== 'staff' ? `<button class="btn btn-xs btn-ghost" onclick="Billing.deleteChallan('${c.id}')" title="Delete Challan"><span class="material-icons" style="font-size:14px;color:var(--danger)">delete</span></button>` : ''}
+                  </td>
+                </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  },
+
+  _filterChallans(filter) {
+    window._challanFilter = filter;
+    const c = document.getElementById('page-content');
+    if (c) this.renderChallans(c);
+  },
+
+  _onChallanSearchInput(val) {
+    window._challanSearch = val;
+    const c = document.getElementById('page-content');
+    if (c) this.renderChallans(c);
+  },
+
+  openNewChallan(sourceType = null, sourceId = null) {
+    const biz = DB.getBiz();
+    const customers = DB.getCustomers();
+    const products = DB.getProducts();
+    const nextNo = DB.nextChallanNo();
+    const today = new Date().toISOString().split('T')[0];
+
+    let prefillCustomerId = '';
+    let prefillCustomerName = '';
+    let prefillCustomerPhone = '';
+    let prefillCustomerAddress = '';
+    let prefillCustomerGstin = '';
+    let prefillRefNo = '';
+    let prefillType = sourceType || 'manual';
+    let prefillItems = [];
+    let defaultReceiverName = '';
+    let defaultReceiverPhone = '';
+
+    if (sourceType === 'sales' && sourceId) {
+      const sale = DB.getSaleById(sourceId);
+      if (sale) {
+        prefillCustomerId = sale.customerId || '';
+        prefillCustomerName = sale.customerName || '';
+        prefillCustomerPhone = sale.customerPhone || '';
+        prefillCustomerAddress = sale.customerAddress || '';
+        prefillCustomerGstin = sale.customerGstin || '';
+        prefillRefNo = sale.invoiceNo || '';
+        defaultReceiverName = sale.customerName || '';
+        defaultReceiverPhone = sale.customerPhone || '';
+        prefillItems = (sale.items || []).map(it => ({
+          productId: it.productId || '',
+          name: it.name || '',
+          hsn: it.hsn || '',
+          unit: it.unit || 'Nos',
+          qty: it.qty || 1,
+          rate: it.rate || 0,
+          serialNo: it.serialNo || '',
+          warranty: it.warranty || 'Standard Warranty'
+        }));
+      }
+    } else if (sourceType === 'service' && sourceId) {
+      const job = DB.getJobById ? DB.getJobById(sourceId) : null;
+      if (job) {
+        prefillCustomerId = job.customerId || '';
+        prefillCustomerName = job.customerName || '';
+        prefillCustomerPhone = job.customerPhone || '';
+        prefillCustomerAddress = job.customerAddress || '';
+        prefillRefNo = job.jobNo || '';
+        defaultReceiverName = job.customerName || '';
+        defaultReceiverPhone = job.customerPhone || '';
+        prefillItems = [
+          {
+            productId: '',
+            name: `${job.brandModel || 'Hardware Unit'} (${job.deviceType || 'Device'}) — Repaired & Serviced`,
+            hsn: '998731',
+            unit: 'Nos',
+            qty: 1,
+            rate: job.charges?.total || 0,
+            serialNo: job.serialNo || '',
+            warranty: 'Service Warranty (30 Days)'
+          }
+        ];
+      }
+    }
+
+    if (!prefillItems.length) {
+      prefillItems.push({
+        productId: '',
+        name: '',
+        hsn: '8525',
+        unit: 'Nos',
+        qty: 1,
+        rate: 0,
+        serialNo: '',
+        warranty: '1 Year Warranty'
+      });
+    }
+
+    window._challanWorkingItems = prefillItems;
+    window._challanSourceType = prefillType;
+    window._challanSourceId = sourceId;
+
+    App.modal(
+      `<span class="material-icons" style="color:var(--primary);vertical-align:middle;margin-right:6px">local_shipping</span> Create Delivery Challan &amp; Gate Pass (GST Rule 55)`,
+      `
+      <div id="challan-form-content">
+        <!-- Top Meta Row -->
+        <div class="form-grid-3" style="margin-bottom:14px">
+          <div class="form-group">
+            <label>Challan No <span class="required">*</span></label>
+            <input id="cf-no" value="${nextNo}" readonly style="font-weight:700;background:var(--bg)">
+          </div>
+          <div class="form-group">
+            <label>Dispatch Date <span class="required">*</span></label>
+            <input id="cf-date" type="date" value="${today}">
+          </div>
+          <div class="form-group">
+            <label>Source Reference (Invoice / Job #)</label>
+            <input id="cf-ref" value="${prefillRefNo}" placeholder="e.g. SCS/2024-25/0001 or JOB/...">
+          </div>
+        </div>
+
+        <!-- Consignee Details -->
+        <div class="card" style="margin-bottom:14px;border:1px solid var(--border)">
+          <div class="card-header" style="padding:8px 14px;background:#f8fafc;font-size:.82rem;font-weight:700;display:flex;align-items:center;gap:6px">
+            <span class="material-icons" style="font-size:16px;color:var(--primary)">person_pin</span> Consignee (Deliver To)
+          </div>
+          <div class="card-body" style="padding:12px 14px">
+            <div class="form-grid" style="margin-bottom:10px">
+              <div class="form-group">
+                <label>Customer Name <span class="required">*</span></label>
+                <div style="display:flex;gap:6px">
+                  <input id="cf-cust-name" value="${prefillCustomerName}" placeholder="Enter Consignee / Client Name" style="flex:1">
+                  <select id="cf-cust-select" onchange="Billing._onChallanCustomerSelect(this.value)" style="width:140px;font-size:.78rem">
+                    <option value="">— Pick CRM —</option>
+                    ${customers.map(c => `<option value="${c.id}" ${c.id === prefillCustomerId ? 'selected' : ''}>${c.name}</option>`).join('')}
+                  </select>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Consignee Phone</label>
+                <input id="cf-cust-phone" value="${prefillCustomerPhone}" placeholder="10-digit mobile number">
+              </div>
+            </div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Delivery Site / Destination Address</label>
+                <input id="cf-cust-addr" value="${prefillCustomerAddress}" placeholder="Street, Area, City, Pin Code">
+              </div>
+              <div class="form-group">
+                <label>Consignee GSTIN (Optional)</label>
+                <input id="cf-cust-gstin" value="${prefillCustomerGstin}" placeholder="15-digit GSTIN (if registered)" style="font-family:monospace;text-transform:uppercase">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Transportation & Dispatch Metadata -->
+        <div class="card" style="margin-bottom:14px;border:1px solid var(--border)">
+          <div class="card-header" style="padding:8px 14px;background:#f8fafc;font-size:.82rem;font-weight:700;display:flex;align-items:center;gap:6px">
+            <span class="material-icons" style="font-size:16px;color:var(--primary)">local_shipping</span> Transport &amp; Vehicle Details (GST Rule 55 Requirements)
+          </div>
+          <div class="card-body" style="padding:12px 14px">
+            <div class="form-grid-3" style="margin-bottom:10px">
+              <div class="form-group">
+                <label>Mode of Transport</label>
+                <select id="cf-dispatch-mode">
+                  <option value="Direct Staff Delivery" selected>Direct Staff Delivery</option>
+                  <option value="Customer Pickup / Self">Customer Pickup / Self Handover</option>
+                  <option value="Store Van / Vehicle">Store Van / Service Vehicle</option>
+                  <option value="Two-Wheeler / Courier">Two-Wheeler / Bike Courier</option>
+                  <option value="Transporter / Cargo">Transporter / Cargo Truck</option>
+                  <option value="Courier / Speed Post">Courier / Speed Post</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Vehicle / Reg Number</label>
+                <input id="cf-dispatch-vehicle" placeholder="e.g. MH 12 AB 5504" style="text-transform:uppercase;font-weight:700">
+              </div>
+              <div class="form-group">
+                <label>Driver / Transporter Name</label>
+                <input id="cf-dispatch-transporter" placeholder="e.g. Ramesh (Store Executive)">
+              </div>
+            </div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>LR / Bilty / Courier Tracking No</label>
+                <input id="cf-dispatch-lr" placeholder="e.g. TRK-8891290" style="font-family:monospace">
+              </div>
+              <div class="form-group">
+                <label>E-Way Bill Number (if consignment &gt; ₹50,000)</label>
+                <input id="cf-dispatch-eway" placeholder="12-digit E-Way Bill Number" style="font-family:monospace">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dispatched Line Items (Hardware, Serial Numbers, Warranties) -->
+        <div class="invoice-section-title" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-weight:700;font-size:.88rem;display:flex;align-items:center;gap:6px">
+            <span class="material-icons" style="font-size:18px;color:var(--primary)">inventory_2</span> Dispatched Items &amp; Hardware Serial Numbers
+          </span>
+          <button type="button" class="btn btn-xs btn-secondary" onclick="Billing._addChallanRow()">
+            <span class="material-icons" style="font-size:14px">add</span> + Add Item Row
+          </button>
+        </div>
+
+        <div class="table-wrap" style="margin-bottom:14px">
+          <table class="table" style="font-size:.82rem">
+            <thead>
+              <tr>
+                <th style="min-width:200px">Item Description</th>
+                <th style="width:85px">HSN/SAC</th>
+                <th style="width:70px">Qty</th>
+                <th style="width:75px">Unit</th>
+                <th style="min-width:180px">Serial / IMEI Numbers (S/N)</th>
+                <th style="width:130px">Warranty Term</th>
+                <th style="width:40px"></th>
+              </tr>
+            </thead>
+            <tbody id="challan-items-tbody"></tbody>
+          </table>
+        </div>
+
+        <!-- Physical Receiver Handover & Statutory Declarations -->
+        <div class="card" style="margin-bottom:12px;border:1px solid #bfdbfe;background:#eff6ff">
+          <div class="card-header" style="padding:8px 14px;background:#dbeafe;font-size:.82rem;font-weight:700;display:flex;align-items:center;gap:6px;color:#1e40af">
+            <span class="material-icons" style="font-size:16px">verified_user</span> Receiver Handover &amp; Physical Signature Record
+          </div>
+          <div class="card-body" style="padding:12px 14px">
+            <div class="form-grid-3" style="margin-bottom:10px">
+              <div class="form-group">
+                <label>Receiver Full Name <span class="required">*</span></label>
+                <input id="cf-rcv-name" value="${defaultReceiverName}" placeholder="Name of person receiving goods">
+              </div>
+              <div class="form-group">
+                <label>Receiver Phone Number</label>
+                <input id="cf-rcv-phone" value="${defaultReceiverPhone}" placeholder="Contact mobile number">
+              </div>
+              <div class="form-group">
+                <label>Designation / Role in Organization</label>
+                <select id="cf-rcv-desig">
+                  <option value="Self (Purchaser)" selected>Self (Purchaser / Owner)</option>
+                  <option value="Store Manager">Store / Warehouse Manager</option>
+                  <option value="IT Staff / Administrator">IT Staff / System Administrator</option>
+                  <option value="Security / Gate Reception">Security / Reception Desk</option>
+                  <option value="Project Engineer">Project / CCTV Site Engineer</option>
+                  <option value="Accounts / Office Staff">Accounts / Office Staff</option>
+                  <option value="Authorized Representative">Authorized Representative</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Handover Remarks / Delivery Condition</label>
+              <input id="cf-rcv-remarks" placeholder="e.g. Received in good order, boxes sealed with complete accessories and cables">
+            </div>
+          </div>
+        </div>
+
+        <!-- Statutory Notes -->
+        <div class="form-group">
+          <label>Challan Terms &amp; Declarations</label>
+          <textarea id="cf-notes" rows="2" style="font-size:.8rem">Issued under GST Rule 55 for transport of goods without tax invoice. Receiver acknowledges taking custody of items in undamaged condition with all accessories.</textarea>
+        </div>
+      </div>
+      `,
+      `
+      <button class="btn btn-ghost" onclick="App.closeModal()">Cancel</button>
+      <button class="btn btn-secondary" onclick="Billing._saveChallanForm('compact_pos')">
+        <span class="material-icons">confirmation_number</span> Save &amp; Print 3" Gate Pass
+      </button>
+      <button class="btn btn-primary" onclick="Billing._saveChallanForm('a4')">
+        <span class="material-icons">check_circle</span> Save &amp; Open A4 Challan
+      </button>
+      `,
+      'modal-xl'
+    );
+
+    const tbody = document.getElementById('challan-items-tbody');
+    if (tbody) {
+      tbody.innerHTML = '';
+      window._challanWorkingItems.forEach(it => this._addChallanRow(it));
+    }
+  },
+
+  _onChallanCustomerSelect(customerId) {
+    if (!customerId) return;
+    const c = DB.getCustomerById(customerId);
+    if (!c) return;
+    const nameEl = document.getElementById('cf-cust-name');
+    const phoneEl = document.getElementById('cf-cust-phone');
+    const addrEl = document.getElementById('cf-cust-addr');
+    const gstinEl = document.getElementById('cf-cust-gstin');
+    const rcvNameEl = document.getElementById('cf-rcv-name');
+    const rcvPhoneEl = document.getElementById('cf-rcv-phone');
+
+    if (nameEl) nameEl.value = c.name || '';
+    if (phoneEl) phoneEl.value = c.phone || '';
+    if (addrEl) addrEl.value = [c.address, c.city].filter(Boolean).join(', ');
+    if (gstinEl) gstinEl.value = c.gstin || '';
+    if (rcvNameEl && !rcvNameEl.value) rcvNameEl.value = c.name || '';
+    if (rcvPhoneEl && !rcvPhoneEl.value) rcvPhoneEl.value = c.phone || '';
+  },
+
+  _addChallanRow(data = null) {
+    const tbody = document.getElementById('challan-items-tbody');
+    if (!tbody) return;
+
+    const products = DB.getProducts();
+    const productOpts = products.map(p => 
+      `<option value="${p.id}" data-hsn="${p.hsn || ''}" data-unit="${p.unit || 'Nos'}" data-warr="${p.warranty || '1 Year'}">${p.name}</option>`
+    ).join('');
+
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>
+        <input class="citem-name" value="${data?.name || ''}" placeholder="Product description or select" style="width:100%;margin-bottom:3px">
+        <select class="citem-prod" onchange="Billing._onChallanProductPick(this)" style="width:100%;font-size:.74rem">
+          <option value="">— Or Select from Catalog —</option>
+          ${productOpts}
+        </select>
+      </td>
+      <td><input class="citem-hsn mono" value="${data?.hsn || ''}" placeholder="HSN" style="width:100%"></td>
+      <td><input type="number" class="citem-qty" value="${data?.qty !== undefined ? data.qty : 1}" min="0.001" step="any" style="width:100%;font-weight:700"></td>
+      <td>
+        <select class="citem-unit" style="width:100%">
+          ${UNITS.map(u => `<option value="${u}" ${data?.unit === u ? 'selected' : ''}>${u}</option>`).join('')}
+        </select>
+      </td>
+      <td><input class="citem-sn mono" value="${data?.serialNo || ''}" placeholder="Serial / IMEI numbers (comma separated)" style="width:100%"></td>
+      <td><input class="citem-warr" value="${data?.warranty || 'Standard Warranty'}" placeholder="Warranty" style="width:100%"></td>
+      <td style="text-align:center;padding-top:10px">
+        <button type="button" class="btn btn-xs btn-ghost" onclick="this.closest('tr').remove()" style="color:var(--danger)">✕</button>
+      </td>
+    `;
+
+    if (data?.productId) {
+      const sel = row.querySelector('.citem-prod');
+      if (sel) sel.value = data.productId;
+    }
+
+    tbody.appendChild(row);
+  },
+
+  _onChallanProductPick(selectEl) {
+    const prodId = selectEl.value;
+    if (!prodId) return;
+    const p = DB.getProductById(prodId);
+    if (!p) return;
+    const tr = selectEl.closest('tr');
+    if (!tr) return;
+
+    const nameInput = tr.querySelector('.citem-name');
+    const hsnInput = tr.querySelector('.citem-hsn');
+    const unitSelect = tr.querySelector('.citem-unit');
+    const warrInput = tr.querySelector('.citem-warr');
+
+    if (nameInput) nameInput.value = p.name;
+    if (hsnInput) hsnInput.value = p.hsn || '';
+    if (unitSelect) unitSelect.value = p.unit || 'Nos';
+    if (warrInput) warrInput.value = p.warranty || '1 Year Warranty';
+  },
+
+  _saveChallanForm(targetFormat = 'a4') {
+    const challanNo = document.getElementById('cf-no')?.value?.trim();
+    const date = document.getElementById('cf-date')?.value;
+    const custName = document.getElementById('cf-cust-name')?.value?.trim();
+    const custSelect = document.getElementById('cf-cust-select')?.value;
+    const rcvName = document.getElementById('cf-rcv-name')?.value?.trim();
+
+    if (!challanNo) {
+      App.toast('Challan number is required', 'warning');
+      return;
+    }
+    if (!custName) {
+      App.toast('Consignee / Customer name is required', 'warning');
+      document.getElementById('cf-cust-name')?.focus();
+      return;
+    }
+
+    const rows = Array.from(document.querySelectorAll('#challan-items-tbody tr'));
+    const items = [];
+    rows.forEach(tr => {
+      const name = tr.querySelector('.citem-name')?.value?.trim();
+      const hsn = tr.querySelector('.citem-hsn')?.value?.trim() || '';
+      const qty = parseFloat(tr.querySelector('.citem-qty')?.value) || 0;
+      const unit = tr.querySelector('.citem-unit')?.value || 'Nos';
+      const serialNo = tr.querySelector('.citem-sn')?.value?.trim() || '';
+      const warranty = tr.querySelector('.citem-warr')?.value?.trim() || '';
+      const productId = tr.querySelector('.citem-prod')?.value || '';
+
+      if (name && qty > 0) {
+        items.push({ productId, name, hsn, qty, unit, serialNo, warranty });
+      }
+    });
+
+    if (!items.length) {
+      App.toast('Please add at least one line item with quantity > 0', 'warning');
+      return;
+    }
+
+    const challan = {
+      challanNo,
+      date: date || new Date().toISOString().split('T')[0],
+      type: window._challanSourceType || 'manual',
+      sourceRefNo: document.getElementById('cf-ref')?.value?.trim() || '',
+      customerId: custSelect || '',
+      customerName: custName,
+      customerPhone: document.getElementById('cf-cust-phone')?.value?.trim() || '',
+      customerAddress: document.getElementById('cf-cust-addr')?.value?.trim() || '',
+      customerGstin: document.getElementById('cf-cust-gstin')?.value?.trim() || '',
+      dispatch: {
+        mode: document.getElementById('cf-dispatch-mode')?.value || 'Direct Staff Delivery',
+        vehicleNo: document.getElementById('cf-dispatch-vehicle')?.value?.trim() || '',
+        transporterName: document.getElementById('cf-dispatch-transporter')?.value?.trim() || '',
+        lrTrackingNo: document.getElementById('cf-dispatch-lr')?.value?.trim() || '',
+        eWayBillNo: document.getElementById('cf-dispatch-eway')?.value?.trim() || ''
+      },
+      receiver: {
+        receiverName: rcvName || custName,
+        receiverPhone: document.getElementById('cf-rcv-phone')?.value?.trim() || '',
+        designation: document.getElementById('cf-rcv-desig')?.value || 'Self',
+        remarks: document.getElementById('cf-rcv-remarks')?.value?.trim() || ''
+      },
+      items,
+      notes: document.getElementById('cf-notes')?.value?.trim() || ''
+    };
+
+    const saved = DB.saveChallan(challan, true);
+    App.closeModal();
+    App.toast(`✅ Delivery Challan #${saved.challanNo} issued successfully!`, 'success');
+
+    // If currently on #challans, re-render list
+    const pageContent = document.getElementById('page-content');
+    if (pageContent && window.location.hash === '#challans') {
+      this.renderChallans(pageContent);
+    }
+
+    // Open view modal in chosen format
+    setTimeout(() => {
+      this.viewChallan(saved.id, targetFormat);
+    }, 200);
+  },
+
+  viewChallan(id, activeFormat = 'a4') {
+    const challan = DB.getChallanById(id);
+    if (!challan) {
+      App.toast('Delivery Challan not found', 'error');
+      return;
+    }
+
+    window._viewChallanFmt = activeFormat;
+
+    const modalTitle = `
+      <div style="display:flex;align-items:center;justify-content:space-between;width:100%;gap:12px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="material-icons" style="color:var(--primary)">local_shipping</span>
+          <span>Delivery Challan &amp; Gate Pass — <strong>#${challan.challanNo}</strong></span>
+        </div>
+        <div style="display:inline-flex;background:var(--border);padding:2px;border-radius:4px;font-size:.78rem">
+          <button type="button" class="btn btn-xs ${activeFormat === 'a4' ? 'btn-primary' : 'btn-ghost'}" onclick="Billing.viewChallan('${id}','a4')">📄 A4 Official Challan</button>
+          <button type="button" class="btn btn-xs ${activeFormat === 'compact_pos' ? 'btn-primary' : 'btn-ghost'}" onclick="Billing.viewChallan('${id}','compact_pos')">🎫 3" POS Gate Pass</button>
+        </div>
+      </div>
+    `;
+
+    const html = this.generateChallanHtml(challan, activeFormat);
+
+    App.modal(
+      modalTitle,
+      `
+      <div class="doc-view-wrap" style="max-height:75vh;overflow-y:auto;display:flex;justify-content:center;background:#525659;padding:16px 0">
+        <div style="background:#fff;box-shadow:0 4px 16px rgba(0,0,0,.25);width:${activeFormat === 'compact_pos' ? '320px' : '794px'};box-sizing:border-box">
+          ${html}
+        </div>
+      </div>
+      `,
+      `
+      <button class="btn btn-ghost" onclick="App.closeModal()">Close</button>
+      <button class="btn btn-secondary" onclick="Billing.exportChallanPDF('${id}','${activeFormat}')">
+        <span class="material-icons">download</span> Save as PDF
+      </button>
+      <button class="btn btn-secondary" onclick="Billing.shareChallanWhatsApp('${id}')">
+        <span class="material-icons" style="color:#25d366">chat</span> WhatsApp
+      </button>
+      <button class="btn btn-primary" onclick="Billing.printChallan('${id}','${activeFormat}')">
+        <span class="material-icons">print</span> Print ${activeFormat === 'compact_pos' ? 'Gate Pass' : 'Challan'}
+      </button>
+      `,
+      activeFormat === 'compact_pos' ? 'modal-md' : 'modal-xl'
+    );
+  },
+
+  generateChallanHtml(challan, format = 'a4') {
+    if (!challan) return '';
+    const biz = DB.getBiz();
+    const isPOS = format === 'compact_pos';
+
+    // ── 1. 3" THERMAL POS GATE PASS SLIP (80MM ROLL) ──
+    if (isPOS) {
+      return `
+        <div class="pos-receipt challan-pos" style="font-family:'Courier New',Courier,monospace;font-size:12px;color:#000;padding:16px;line-height:1.35">
+          <div style="text-align:center;border-bottom:1px dashed #000;padding-bottom:10px;margin-bottom:10px">
+            <div style="font-size:15px;font-weight:bold;text-transform:uppercase">${biz.name || 'ShopPulse Store'}</div>
+            <div style="font-size:11px">${biz.address || ''} ${biz.city || ''}</div>
+            <div style="font-size:11px">Phone: ${biz.phone || ''}</div>
+            ${biz.gstin ? `<div style="font-size:11px">GSTIN: ${biz.gstin}</div>` : ''}
+            <div style="margin-top:8px;font-size:13px;font-weight:bold;letter-spacing:1px;border:1px solid #000;padding:3px 6px;display:inline-block">
+              *** GATE PASS / OUTWARD SLIP ***
+            </div>
+          </div>
+
+          <div style="font-size:11px;margin-bottom:8px">
+            <div><strong>Challan No:</strong> ${challan.challanNo}</div>
+            <div><strong>Date &amp; Time:</strong> ${fmtDate(challan.date)}</div>
+            ${challan.sourceRefNo ? `<div><strong>Ref Doc:</strong> ${challan.sourceRefNo}</div>` : ''}
+            ${challan.dispatch?.vehicleNo ? `<div><strong>Vehicle No:</strong> ${challan.dispatch.vehicleNo}</div>` : ''}
+            ${challan.dispatch?.mode ? `<div><strong>Mode:</strong> ${challan.dispatch.mode}</div>` : ''}
+          </div>
+
+          <div style="border-top:1px dashed #000;padding-top:6px;margin-bottom:8px">
+            <div style="font-size:11px;font-weight:bold">CONSIGNEE (DELIVER TO):</div>
+            <div style="font-weight:bold">${challan.customerName}</div>
+            ${challan.customerPhone ? `<div>Ph: ${challan.customerPhone}</div>` : ''}
+            ${challan.customerAddress ? `<div style="font-size:10px">${challan.customerAddress}</div>` : ''}
+          </div>
+
+          <div style="border-top:1px dashed #000;border-bottom:1px dashed #000;padding:6px 0;margin-bottom:8px">
+            <table style="width:100%;font-size:11px;border-collapse:collapse">
+              <thead>
+                <tr style="border-bottom:1px solid #000">
+                  <th style="text-align:left">Item / Hardware</th>
+                  <th style="text-align:right;width:45px">Qty</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${(challan.items || []).map((it, idx) => `
+                  <tr>
+                    <td style="padding:4px 0">
+                      <div><strong>${idx + 1}. ${it.name}</strong></div>
+                      ${it.serialNo ? `<div style="font-size:10px;color:#333">S/N: ${it.serialNo}</div>` : ''}
+                      ${it.warranty ? `<div style="font-size:10px;color:#555">Warr: ${it.warranty}</div>` : ''}
+                    </td>
+                    <td style="text-align:right;vertical-align:top;padding:4px 0;font-weight:bold">${it.qty} ${it.unit || 'Nos'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+
+          <div style="font-size:11px;margin-bottom:12px">
+            <div><strong>Total Qty:</strong> ${(challan.items || []).reduce((s, it) => s + (parseFloat(it.qty) || 0), 0)} Units</div>
+            ${challan.receiver?.receiverName ? `<div><strong>Receiver:</strong> ${challan.receiver.receiverName} (${challan.receiver.designation || 'Staff'})</div>` : ''}
+          </div>
+
+          <div style="border:1px solid #000;padding:8px;margin-top:10px;text-align:center;font-size:10px">
+            <div style="font-weight:bold;margin-bottom:4px">RECEIVER'S PHYSICAL SIGNATURE</div>
+            <div style="height:35px;border-bottom:1px solid #000;margin-bottom:4px"></div>
+            <div>Name: ______________________</div>
+            <div style="margin-top:2px">Phone: _____________________</div>
+          </div>
+
+          <div style="text-align:center;font-size:10px;margin-top:10px;color:#555">
+            Issued under GST Rule 55.<br>Goods inspected &amp; dispatched in good order.
+          </div>
+        </div>
+      `;
+    }
+
+    // ── 2. A4 OFFICIAL GST RULE 55 DELIVERY CHALLAN ──
+    const totalQty = (challan.items || []).reduce((s, it) => s + (parseFloat(it.qty) || 0), 0);
+
+    return `
+      <div class="challan-a4" style="font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;padding:36px;box-sizing:border-box;font-size:13px;line-height:1.4">
+        <!-- Top Letterhead -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0f172a;padding-bottom:14px;margin-bottom:14px">
+          <div>
+            <div style="font-size:22px;font-weight:800;color:#0f172a;letter-spacing:-0.5px">${biz.name || 'ShopPulse Store'}</div>
+            <div style="font-size:12px;color:#475569;margin-top:2px">${biz.address || ''}, ${biz.city || ''} ${biz.state ? '— ' + biz.state : ''}</div>
+            <div style="font-size:12px;color:#475569">📞 Phone: ${biz.phone || '—'} | ✉️ Email: ${biz.email || '—'}</div>
+            <div style="font-size:12px;font-weight:700;color:#0f172a;margin-top:3px">GSTIN: ${biz.gstin || 'Unregistered'}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="display:inline-block;padding:6px 12px;background:#0f172a;color:#fff;font-weight:800;font-size:15px;letter-spacing:1px;border-radius:4px;text-transform:uppercase">
+              DELIVERY CHALLAN
+            </div>
+            <div style="font-size:10.5px;color:#64748b;margin-top:4px;font-style:italic">Issued under Rule 55 of CGST/SGST Rules, 2017</div>
+            <div style="font-size:11px;color:#0f172a;font-weight:600;margin-top:2px">Material Outward / Handover Slip</div>
+          </div>
+        </div>
+
+        <!-- Meta Grid: Consignee & Challan Info -->
+        <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:16px;border:1px solid #cbd5e1;border-radius:4px;padding:12px;margin-bottom:14px;background:#f8fafc">
+          <div>
+            <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px">Consignee (Delivered To):</div>
+            <div style="font-size:15px;font-weight:700;color:#0f172a">${challan.customerName}</div>
+            ${challan.customerAddress ? `<div style="font-size:12px;color:#334155;margin-top:2px">${challan.customerAddress}</div>` : ''}
+            <div style="font-size:12px;color:#334155;margin-top:2px">Contact: <strong>${challan.customerPhone || '—'}</strong></div>
+            <div style="font-size:12px;color:#334155;margin-top:2px">Consignee GSTIN: <strong>${challan.customerGstin || 'Unregistered / Consumer'}</strong></div>
+          </div>
+          <div style="border-left:1px solid #e2e8f0;padding-left:16px">
+            <table style="width:100%;font-size:12px;border-collapse:collapse">
+              <tr>
+                <td style="color:#64748b;padding:2px 0">Challan Number:</td>
+                <td style="font-weight:800;color:#0f172a;padding:2px 0;font-family:monospace">${challan.challanNo}</td>
+              </tr>
+              <tr>
+                <td style="color:#64748b;padding:2px 0">Challan Date:</td>
+                <td style="font-weight:700;color:#0f172a;padding:2px 0">${fmtDate(challan.date)}</td>
+              </tr>
+              <tr>
+                <td style="color:#64748b;padding:2px 0">Source Reference:</td>
+                <td style="font-weight:700;color:var(--primary);padding:2px 0;font-family:monospace">${challan.sourceRefNo || 'Direct Outward'}</td>
+              </tr>
+              ${challan.dispatch?.eWayBillNo ? `
+              <tr>
+                <td style="color:#64748b;padding:2px 0">E-Way Bill No:</td>
+                <td style="font-weight:700;color:#0f172a;padding:2px 0;font-family:monospace">${challan.dispatch.eWayBillNo}</td>
+              </tr>` : ''}
+            </table>
+          </div>
+        </div>
+
+        <!-- Transportation Metadata Row -->
+        <div style="border:1px solid #cbd5e1;border-radius:4px;padding:8px 12px;margin-bottom:14px;background:#fff;display:grid;grid-template-columns:repeat(4,1fr);gap:10px;font-size:11.5px">
+          <div>
+            <span style="color:#64748b">Mode of Transport:</span><br>
+            <strong>${challan.dispatch?.mode || 'Direct Delivery'}</strong>
+          </div>
+          <div>
+            <span style="color:#64748b">Vehicle Registration #:</span><br>
+            <strong style="font-family:monospace">${challan.dispatch?.vehicleNo || 'Hand Delivery'}</strong>
+          </div>
+          <div>
+            <span style="color:#64748b">Transporter / Driver:</span><br>
+            <strong>${challan.dispatch?.transporterName || 'Store Staff'}</strong>
+          </div>
+          <div>
+            <span style="color:#64748b">LR / Bilty / Docket #:</span><br>
+            <strong style="font-family:monospace">${challan.dispatch?.lrTrackingNo || '—'}</strong>
+          </div>
+        </div>
+
+        <!-- Items Table -->
+        <table style="width:100%;border-collapse:collapse;margin-bottom:14px;font-size:12px">
+          <thead>
+            <tr style="background:#0f172a;color:#fff">
+              <th style="padding:7px 8px;text-align:center;width:35px">#</th>
+              <th style="padding:7px 8px;text-align:left">Description of Goods / Equipment</th>
+              <th style="padding:7px 8px;text-align:center;width:75px">HSN/SAC</th>
+              <th style="padding:7px 8px;text-align:center;width:60px">Qty</th>
+              <th style="padding:7px 8px;text-align:center;width:55px">Unit</th>
+              <th style="padding:7px 8px;text-align:left;min-width:180px">Serial Numbers (S/N) / IMEI</th>
+              <th style="padding:7px 8px;text-align:left;width:120px">Warranty Term</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(challan.items || []).map((it, idx) => `
+              <tr style="border-bottom:1px solid #e2e8f0;background:${idx % 2 === 0 ? '#fff' : '#f8fafc'}">
+                <td style="padding:8px;text-align:center;color:#64748b;font-weight:600">${idx + 1}</td>
+                <td style="padding:8px">
+                  <div style="font-weight:700;color:#0f172a">${it.name}</div>
+                </td>
+                <td style="padding:8px;text-align:center;font-family:monospace;color:#475569">${it.hsn || '—'}</td>
+                <td style="padding:8px;text-align:center;font-weight:700;color:#0f172a">${it.qty}</td>
+                <td style="padding:8px;text-align:center;color:#475569">${it.unit || 'Nos'}</td>
+                <td style="padding:8px;font-family:monospace;font-size:11px;color:#334155">${it.serialNo || '<span style="color:#94a3b8">Not Recorded</span>'}</td>
+                <td style="padding:8px;font-size:11.5px;color:#334155">${it.warranty || 'Standard Warranty'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+          <tfoot>
+            <tr style="background:#f1f5f9;font-weight:700;border-top:2px solid #cbd5e1">
+              <td colspan="3" style="padding:8px;text-align:right">Total Dispatched Quantity:</td>
+              <td style="padding:8px;text-align:center;font-size:13px">${totalQty}</td>
+              <td colspan="3" style="padding:8px;color:#64748b">Units</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <!-- Terms & Notes -->
+        <div style="font-size:11px;color:#475569;margin-bottom:18px;padding:8px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px">
+          <strong>Statutory Declaration &amp; Notes:</strong>
+          <div>1. Dispatched in good working order and complete condition under Rule 55 of CGST Rules, 2017. Not a tax invoice.</div>
+          <div>2. ${challan.notes || 'Receiver agrees to take full custody of the hardware items listed above.'}</div>
+          ${challan.receiver?.remarks ? `<div style="margin-top:3px;color:#1e40af"><strong>Handover Remarks:</strong> ${challan.receiver.remarks}</div>` : ''}
+        </div>
+
+        <!-- Dual Physical Handover & Signatures Box -->
+        <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:20px;margin-top:24px">
+          <!-- Box 1: Receiver Acknowledgment (Physical Sign & Stamp) -->
+          <div style="border:1.5px solid #0f172a;border-radius:4px;padding:12px;background:#fff">
+            <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:#0f172a;border-bottom:1px solid #cbd5e1;padding-bottom:4px;margin-bottom:8px">
+              Consignee / Receiver's Acknowledgment
+            </div>
+            <div style="font-size:11px;color:#475569;margin-bottom:8px;font-style:italic">
+              "Received the above equipment in good condition, complete with all standard accessories and correct serial numbers."
+            </div>
+            <div style="font-size:11.5px;margin-bottom:4px">Receiver Name: <strong>${challan.receiver?.receiverName || '_______________________________'}</strong></div>
+            <div style="font-size:11.5px;margin-bottom:4px">Designation / Role: <strong>${challan.receiver?.designation || '_______________________________'}</strong></div>
+            <div style="font-size:11.5px;margin-bottom:4px">Contact Phone: <strong>${challan.receiver?.receiverPhone || '_______________________________'}</strong></div>
+            <div style="font-size:11.5px;margin-bottom:12px">Received Date &amp; Time: _______________________________</div>
+            
+            <div style="margin-top:16px;border-top:1px dashed #94a3b8;padding-top:6px;text-align:center">
+              <div style="height:35px"></div>
+              <div style="font-size:11px;font-weight:700;color:#0f172a">Receiver's Physical Signature &amp; Official Rubber Stamp</div>
+            </div>
+          </div>
+
+          <!-- Box 2: Supplier Authorized Signatory -->
+          <div style="border:1.5px solid #cbd5e1;border-radius:4px;padding:12px;display:flex;flex-direction:column;justify-content:space-between;background:#fff">
+            <div>
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:#0f172a;border-bottom:1px solid #cbd5e1;padding-bottom:4px;margin-bottom:8px">
+                For ${biz.name || 'ShopPulse'}
+              </div>
+              <div style="font-size:11.5px;color:#475569">
+                Prepared By: ___________________________<br>
+                Dispatched By: _________________________
+              </div>
+            </div>
+            <div style="border-top:1px dashed #94a3b8;padding-top:6px;text-align:center">
+              <div style="height:45px"></div>
+              <div style="font-size:11px;font-weight:700;color:#0f172a">Authorized Signatory &amp; Store Stamp</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  printChallan(id, format = 'a4') {
+    const challan = DB.getChallanById(id);
+    if (!challan) {
+      App.toast('Challan not found for printing', 'error');
+      return;
+    }
+    const html = this.generateChallanHtml(challan, format);
+    const cleanNo = (challan.challanNo || 'DC').replace(/[\/\\:*?"<>|]/g, '-');
+    const title = `DeliveryChallan_${cleanNo}_${(challan.customerName || 'Client').replace(/[\s\W]+/g, '_')}`;
+    this._executePrint(html, title);
+  },
+
+  async exportChallanPDF(id, format = 'a4') {
+    const challan = DB.getChallanById(id);
+    if (!challan) {
+      App.toast('Challan not found for export', 'error');
+      return;
+    }
+    const html = this.generateChallanHtml(challan, format);
+    const cleanNo = (challan.challanNo || 'DC').replace(/[\/\\:*?"<>|]/g, '-');
+    const title = `DeliveryChallan_${cleanNo}_${(challan.customerName || 'Client').replace(/[\s\W]+/g, '_')}`;
+    const defaultDir = DB.getBiz().pdfSaveDir || '';
+
+    if (window.desktopApp && window.desktopApp.savePdf) {
+      App.toast('Preparing Challan PDF export...', 'info');
+      try {
+        const res = await window.desktopApp.savePdf({ html, title, defaultDir });
+        if (res && res.success) {
+          App.toast(`🎉 Challan PDF Saved: ${res.filePath}`, 'success');
+        }
+      } catch (err) {
+        console.error('PDF export error:', err);
+        this.printChallan(id, format);
+      }
+    } else {
+      this.printChallan(id, format);
+      App.toast('In the print dialog, choose "Save as PDF" 📄', 'info');
+    }
+  },
+
+  shareChallanWhatsApp(id) {
+    const challan = DB.getChallanById(id);
+    if (!challan) return;
+    const biz = DB.getBiz();
+    const phone = challan.customerPhone || challan.receiver?.receiverPhone || '';
+
+    const itemsSummary = (challan.items || []).map(it => `• ${it.name} (Qty: ${it.qty}${it.serialNo ? `, S/N: ${it.serialNo}` : ''})`).join('\n');
+
+    const msg = `🚚 *DISPATCH & DELIVERY NOTICE — ${biz.name}*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `Dear *${challan.customerName}*,\n\n` +
+      `Your consignment has been dispatched under Delivery Challan *#${challan.challanNo}* dated ${fmtDate(challan.date)}.\n\n` +
+      `${challan.sourceRefNo ? `📄 *Reference Invoice / Job:* #${challan.sourceRefNo}\n` : ''}` +
+      `${challan.dispatch?.vehicleNo ? `🚛 *Vehicle / Transport:* ${challan.dispatch.vehicleNo} (${challan.dispatch.mode || 'Direct'})\n` : ''}` +
+      `${challan.dispatch?.lrTrackingNo ? `📦 *Tracking / LR No:* ${challan.dispatch.lrTrackingNo}\n` : ''}` +
+      `👤 *Attn / Receiver:* ${challan.receiver?.receiverName || challan.customerName} (${challan.receiver?.designation || 'Self'})\n\n` +
+      `*Items Dispatched:*\n${itemsSummary}\n\n` +
+      `Please inspect all equipment and accessories upon arrival and provide your signature on the delivery challan.\n\n` +
+      `For any questions, reach our logistics team at ${biz.phone || ''}.\n_ShopPulse Logistics Desk_`;
+
+    App.openWhatsAppModal({
+      title: `Dispatch Notice — Challan #${challan.challanNo}`,
+      phone: phone,
+      partyName: challan.customerName,
+      messageText: msg,
+      docType: 'challan',
+      docId: challan.id,
+      docNo: challan.challanNo,
+      pdfAction: () => Billing.exportChallanPDF(challan.id, 'a4')
+    });
+  },
+
+  deleteChallan(id) {
+    const challan = DB.getChallanById(id);
+    if (!challan) return;
+
+    App.confirm(
+      'Delete Delivery Challan?',
+      `Are you sure you want to delete Delivery Challan <strong>#${challan.challanNo}</strong> issued to <strong>${challan.customerName}</strong>?<br><br>This action cannot be undone.`,
+      () => {
+        DB.deleteChallan(id);
+        App.toast(`Challan #${challan.challanNo} deleted.`, 'info');
+        const c = document.getElementById('page-content');
+        if (c && window.location.hash === '#challans') {
+          this.renderChallans(c);
+        }
+      }
+    );
   }
 };

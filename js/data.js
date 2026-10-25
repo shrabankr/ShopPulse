@@ -370,6 +370,7 @@ const DB = {
     PURCHASES: 'sp_purchases',
     CREDIT_NOTES: 'sp_credit_notes',
     DEBIT_NOTES: 'sp_debit_notes',
+    CHALLANS: 'sp_challans',
     QUOTATIONS: 'sp_quotations',
     SERVICES: 'sp_service_jobs',
     AMCS: 'sp_amcs',
@@ -401,6 +402,7 @@ const DB = {
       creditNotePrefix: 'CN', creditNoteCounter: 1,
       debitNotePrefix: 'DN', debitNoteCounter: 1,
       quotationPrefix: 'QTN', quotationCounter: 1,
+      challanPrefix: 'DC', challanCounter: 1,
       jobPrefix: 'JOB', jobCounter: 4,
       enableLoyalty: true, loyaltySpendRate: 100, loyaltyPointValue: 1, loyaltyMinRedeem: 10, referralBonusPoints: 50,
       defaultPaymentTerms: 30, signatory: 'Shraban Kumar Mahato', termsAndConditions: 'Goods once sold will not be taken back.\nWarranty as per manufacturer terms.\nInterest @18% p.a. will be charged on delayed payments.',
@@ -818,6 +820,37 @@ const DB = {
     const b = this.getBiz();
     const no = `${b.debitNotePrefix || 'DN'}/${getFY()}/${String(b.debitNoteCounter || 1).padStart(4, '0')}`;
     this.setBiz({ ...b, debitNoteCounter: (b.debitNoteCounter || 1) + 1 });
+    return no;
+  },
+
+  /* ─── Delivery Challans (Material Outward / Dispatch Slip) ─── */
+  getChallans() { return this._get(this.K.CHALLANS) || []; },
+  getChallanById(id) { return this.getChallans().find(c => c.id === id); },
+  getDocChallans(refNoOrId) {
+    if (!refNoOrId) return [];
+    return this.getChallans().filter(c => c.sourceRefNo === refNoOrId || c.sourceRefId === refNoOrId);
+  },
+  saveChallan(data, isNew = true) {
+    const list = this.getChallans();
+    if (!isNew) {
+      const i = list.findIndex(c => c.id === data.id);
+      if (i > -1) list[i] = data; else list.unshift(data);
+      this._set(this.K.CHALLANS, list);
+      return data;
+    }
+    data.id = genId('DC');
+    data.createdAt = new Date().toISOString();
+    list.unshift(data);
+    this._set(this.K.CHALLANS, list);
+    return data;
+  },
+  deleteChallan(id) {
+    this._set(this.K.CHALLANS, this.getChallans().filter(c => c.id !== id));
+  },
+  nextChallanNo() {
+    const b = this.getBiz();
+    const no = `${b.challanPrefix || 'DC'}/${getFY()}/${String(b.challanCounter || 1).padStart(4, '0')}`;
+    this.setBiz({ ...b, challanCounter: (b.challanCounter || 1) + 1 });
     return no;
   },
 
@@ -2279,6 +2312,7 @@ const DB = {
         quotationsCount: this.getQuotations().length,
         creditNotesCount: this.getCreditNotes().length,
         debitNotesCount: this.getDebitNotes().length,
+        challansCount: this.getChallans ? this.getChallans().length : 0,
         servicesCount: this.getJobs ? this.getJobs().length : 0,
         amcsCount: this.getAmcs ? this.getAmcs().length : 0,
         registersCount: this.getRegisters ? this.getRegisters().length : 0,
@@ -2299,6 +2333,7 @@ const DB = {
         quotations: this.getQuotations(),
         creditNotes: this.getCreditNotes(),
         debitNotes: this.getDebitNotes(),
+        challans: this.getChallans ? this.getChallans() : [],
         services: this.getJobs ? this.getJobs() : [],
         amcs: this.getAmcs ? this.getAmcs() : [],
         registers: this.getRegisters ? this.getRegisters() : [],
@@ -2370,6 +2405,7 @@ const DB = {
     if (d.quotations) this._set(this.K.QUOTATIONS, d.quotations);
     if (d.creditNotes) this._set(this.K.CREDIT_NOTES, d.creditNotes);
     if (d.debitNotes) this._set(this.K.DEBIT_NOTES, d.debitNotes);
+    if (d.challans) this._set(this.K.CHALLANS, d.challans);
     if (d.services) this._set(this.K.SERVICES, d.services);
     if (d.amcs) this._set(this.K.AMCS, d.amcs);
     if (d.registers) this._set(this.K.REGISTERS, d.registers);
@@ -2697,6 +2733,36 @@ const DB = {
       shippingCharges: 350,
       notes: 'Corporate office workstation quote. Converted to Invoice SCS/2024-25/0005.',
       ...q2Totals
+    }, true);
+
+    // ── Sample Delivery Challan (Material Outward Slip) ──
+    this.saveChallan({
+      challanNo: 'DC/2024-25/0001',
+      date: daysAgo(10),
+      type: 'sales',
+      sourceRefNo: 'SCS/2024-25/0001',
+      customerId: c1.id,
+      customerName: c1.name,
+      customerPhone: c1.phone || '9823001122',
+      customerAddress: `${c1.address || ''}, ${c1.city || ''}`,
+      customerGstin: c1.gstin || '',
+      dispatch: {
+        mode: 'Direct Staff Delivery',
+        vehicleNo: 'MH 12 AB 5504',
+        transporterName: 'Store Van #1',
+        lrTrackingNo: 'DISP-001',
+        eWayBillNo: ''
+      },
+      receiver: {
+        receiverName: 'Suresh Patil',
+        receiverPhone: '9823001122',
+        designation: 'Store Manager',
+        remarks: 'Received 2 units camera sealed and checked'
+      },
+      items: [
+        { productId: p5.id, name: p5.name, hsn: p5.hsn, unit: p5.unit, qty: 2, rate: 4800, serialNo: 'HK-CAM-99201, HK-CAM-99202', warranty: '3 Years Warranty' }
+      ],
+      notes: 'Issued under GST Rule 55 for transport of goods without tax invoice. All goods inspected before dispatch.'
     }, true);
 
     // ── Sample Service Center & Repair Job Sheets ──

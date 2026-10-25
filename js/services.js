@@ -573,6 +573,9 @@ const Services = {
       bodyHtml,
       `
         <button class="btn btn-secondary" onclick="App.closeModal()">Close</button>
+        <button class="btn btn-secondary" onclick="App.closeModal();Billing.openNewChallan('service','${job.id}')" title="Generate Delivery Challan / Gate Pass">
+          <span class="material-icons" style="color:var(--primary)">local_shipping</span> Delivery Challan
+        </button>
         <button class="btn btn-secondary" onclick="Services.shareWhatsApp('${job.id}')" title="Send WhatsApp Update">
           <span class="material-icons" style="color:#25d366">chat</span> WhatsApp
         </button>

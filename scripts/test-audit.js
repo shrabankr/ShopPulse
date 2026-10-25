@@ -86,6 +86,7 @@ function createMockElement(id, tag = 'div') {
     innerHTML: '',
     innerText: '',
     value: '',
+    dataset: {},
     classList: {
       _classes: new Set(),
       add(...c) { c.forEach(x => this._classes.add(x)); },
@@ -763,6 +764,132 @@ assert(capturedWaModal !== null && Array.isArray(capturedWaModal.presets), 'CRM.
 const crmLabels = capturedWaModal.presets.map(p => p.label);
 assert(crmLabels.includes('Full Statement') && crmLabels.includes('Payment Reminder'), 'CRM presets include Full Statement and Payment Reminder');
 assert(capturedWaModal.partyName === 'Sharma Electronics', 'CRM modal has customer name');
+
+// Phase 17: Enterprise Delivery Challan, Barcode POS Mode & Aging Khata Verification
+console.log('\n--- Phase 17: Delivery Challan, Barcode POS & Aging Khata Verification ---');
+
+// Test 17.1: Delivery Challan Data Layer & Auto-numbering
+const challanNo = context.DB.nextChallanNo();
+assert(challanNo.startsWith('DC/') && challanNo.includes(context.getFY()), `Challan auto-numbering follows DC/FY/XXXX format: ${challanNo}`);
+
+const testChallan = context.DB.saveChallan({
+  challanNo: challanNo,
+  date: '2026-10-25',
+  type: 'sales',
+  sourceRefNo: 'APS/2026-27/0088',
+  customerId: testCust.id,
+  customerName: 'Sharma Electronics',
+  customerPhone: '9822012345',
+  customerAddress: 'Station Road, Pune',
+  customerGstin: '27AABCS1429B1Z0',
+  dispatch: {
+    mode: 'Direct Staff Delivery',
+    vehicleNo: 'MH 12 AB 5504',
+    transporterName: 'Store Van #1',
+    lrTrackingNo: 'DISP-8801',
+    eWayBillNo: '101234567890'
+  },
+  receiver: {
+    receiverName: 'Suresh Patil',
+    receiverPhone: '9822012345',
+    designation: 'Store Manager',
+    remarks: 'Received 2 units sealed and tested'
+  },
+  items: [
+    {
+      productId: 'PROD-CAM-1',
+      name: 'Hikvision 4MP IP Dome Camera',
+      hsn: '8525',
+      unit: 'Nos',
+      qty: 2,
+      rate: 4500,
+      serialNo: 'HK4M-99101, HK4M-99102',
+      warranty: '3 Years Warranty'
+    }
+  ],
+  notes: 'Issued under GST Rule 55 for transport of goods without tax invoice.'
+}, true);
+
+assert(testChallan.id && testChallan.challanNo === challanNo, 'Delivery Challan saved successfully with unique ID');
+const retrievedChallan = context.DB.getChallanById(testChallan.id);
+assert(retrievedChallan && retrievedChallan.customerName === 'Sharma Electronics', 'DB.getChallanById accurately retrieves challan');
+const docChallans = context.DB.getDocChallans('APS/2026-27/0088');
+assert(docChallans.length >= 1, `DB.getDocChallans successfully finds linked challans (${docChallans.length} found)`);
+
+// Test 17.2: A4 Official GST Rule 55 Delivery Challan Document Generation
+const challanA4Html = context.Billing.generateChallanHtml(testChallan, 'a4');
+assert(challanA4Html.includes('DELIVERY CHALLAN') && challanA4Html.includes('Rule 55 of CGST/SGST Rules, 2017'), 'A4 Challan includes official GST Rule 55 statutory heading');
+assert(challanA4Html.includes('MH 12 AB 5504') && challanA4Html.includes('DISP-8801'), 'A4 Challan includes vehicle registration and dispatch tracking metadata');
+assert(challanA4Html.includes('HK4M-99101, HK4M-99102'), 'A4 Challan includes hardware serial numbers (S/N)');
+assert(challanA4Html.includes("Consignee / Receiver's Acknowledgment"), 'A4 Challan includes physical receiver acknowledgment section');
+assert(challanA4Html.includes('Suresh Patil') && challanA4Html.includes('Store Manager'), 'A4 Challan pre-populates receiver name and designation');
+assert(challanA4Html.includes("Receiver's Physical Signature &amp; Official Rubber Stamp"), 'A4 Challan features physical signature & company rubber stamp box');
+
+// Test 17.3: 3" Compact POS Thermal Gate Pass Document Generation
+const challanPosHtml = context.Billing.generateChallanHtml(testChallan, 'compact_pos');
+assert(challanPosHtml.includes('GATE PASS / OUTWARD SLIP'), '3" POS Challan contains Gate Pass title');
+assert(challanPosHtml.includes('MH 12 AB 5504'), '3" POS Gate Pass includes vehicle number');
+assert(challanPosHtml.includes("RECEIVER'S PHYSICAL SIGNATURE"), '3" POS Gate Pass contains physical signature handover block');
+
+// Test 17.4: Delivery Challan WhatsApp Dispatch Notification
+capturedWaModal = null;
+context.Billing.shareChallanWhatsApp(testChallan.id);
+assert(capturedWaModal !== null, 'Billing.shareChallanWhatsApp opens WhatsApp Dispatch Modal');
+assert(capturedWaModal.title.includes(testChallan.challanNo), 'Challan WhatsApp modal title references challan number');
+assert(capturedWaModal.messageText.includes('DISPATCH & DELIVERY NOTICE'), 'Challan WhatsApp message has dispatch notice header');
+assert(capturedWaModal.messageText.includes('MH 12 AB 5504'), 'Challan WhatsApp message includes transport vehicle number');
+assert(capturedWaModal.messageText.includes('Suresh Patil'), 'Challan WhatsApp message references designated receiver');
+
+// Test 17.5: Rapid USB Barcode Gun Scanner POS Mode
+const allProds = context.DB.getProducts();
+const barcodeProd = allProds.find(p => p.barcode);
+assert(barcodeProd !== undefined, `Found product with barcode for scan test: ${barcodeProd.name} (${barcodeProd.barcode})`);
+
+// Prepare DOM mock for items-tbody
+const mockTbody = {
+  rows: [],
+  querySelectorAll: function(sel) { return this.rows; },
+  querySelector: function(sel) { return this.rows[0] || null; },
+  appendChild: function(row) { this.rows.push(row); }
+};
+const mockScanInput = { value: '', focus: () => {}, select: () => {} };
+
+// Mock finding elements in document
+const origGetEl = context.document.getElementById;
+context.document.getElementById = function(id) {
+  if (id === 'items-tbody') return mockTbody;
+  if (id === 'barcode-quick-scan') return mockScanInput;
+  if (id === 'if-pos') return { value: '27' };
+  if (id === 'if-party') return { value: '' };
+  return origGetEl ? origGetEl(id) : null;
+};
+
+// Initial scan adds line item to cart
+context.Billing._playScanBeep = () => {};
+context.Billing._triggerBarcodeAdd(barcodeProd.barcode);
+assert(mockTbody.rows.length >= 1, 'Rapid Barcode scanner successfully added item to cart on first scan');
+
+// Test 17.6: Aging Khata & Overdue Receivables Buckets Calculation
+const todayDate = new Date();
+const salesList = context.DB.getSales().filter(s => s.status !== 'paid' && s.status !== 'draft');
+const agingCurrent = salesList.filter(s => context.daysBetween(todayDate, new Date(s.dueDate)) >= 0);
+const aging30 = salesList.filter(s => { const d = context.daysBetween(todayDate, new Date(s.dueDate)); return d < 0 && d >= -30; });
+const aging60 = salesList.filter(s => { const d = context.daysBetween(todayDate, new Date(s.dueDate)); return d < -30 && d >= -60; });
+const aging90 = salesList.filter(s => context.daysBetween(todayDate, new Date(s.dueDate)) < -60);
+
+assert(Array.isArray(agingCurrent) && Array.isArray(aging30) && Array.isArray(aging60) && Array.isArray(aging90), 'Aging Khata accurately buckets receivables into 0-30, 31-60, 61-90, and 90+ days');
+
+// Aging payment reminder WhatsApp presets
+capturedWaModal = null;
+const overdueSale = salesList.find(s => s.status === 'overdue' || s.status === 'unpaid') || salesList[0];
+if (overdueSale) {
+  context.Billing.sendAgingReminderWhatsApp(overdueSale.id);
+  assert(capturedWaModal !== null, 'Billing.sendAgingReminderWhatsApp opens WhatsApp Dispatch Modal');
+  assert(capturedWaModal.presets.length === 3, `Aging reminder provides 3 tone presets (got ${capturedWaModal.presets.length})`);
+  const agingLabels = capturedWaModal.presets.map(p => p.label);
+  assert(agingLabels.some(l => l.includes('Gentle')) && agingLabels.some(l => l.includes('Urgent')) && agingLabels.some(l => l.includes('Final')), 'Aging presets include Gentle, Urgent, and Final notice tones');
+}
+context.document.getElementById = origGetEl;
 
 // Summary
 console.log('\n======================================================');

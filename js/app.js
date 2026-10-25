@@ -90,6 +90,7 @@ const App = {
           <div class="nav-section-items">
             <a href="#cash-register" class="nav-item" data-r="cash-register"><span class="material-icons">point_of_sale</span><span>Cash Register (Till)</span>${openReg ? `<span class="nav-badge" style="background:#10b981;color:#fff">OPEN</span>` : ''}</a>
             <a href="#billing-sales" class="nav-item" data-r="billing-sales"><span class="material-icons">receipt_long</span><span>Sales Invoices</span></a>
+            <a href="#challans" class="nav-item" data-r="challans"><span class="material-icons">local_shipping</span><span>Delivery Challans</span></a>
             <a href="#quotations" class="nav-item" data-r="quotations"><span class="material-icons">request_quote</span><span>Quotations / Estimates</span></a>
             <a href="#services" class="nav-item" data-r="services"><span class="material-icons">build</span><span>Repairs &amp; Services</span>${activeJobs ? `<span class="nav-badge warn">${activeJobs}</span>` : ''}</a>
             <a href="#amc" class="nav-item" data-r="amc"><span class="material-icons">handshake</span><span>AMC Contracts</span>${expiringAmcs ? `<span class="nav-badge warn">${expiringAmcs}</span>` : ''}</a>
@@ -257,6 +258,7 @@ const App = {
 
     const titles = {
       dashboard: 'Dashboard', 'billing-sales': 'Sales Invoices',
+      challans: 'Delivery Challans & Gate Passes',
       quotations: 'Quotations & Estimates',
       services: 'Repairs & Services',
       'billing-purchases': 'Purchase Bills',
@@ -310,6 +312,7 @@ const App = {
       case 'dashboard': this.renderDashboard(c); break;
       case 'cash-register': Register.render(c); break;
       case 'billing-sales': Billing.render(c, 'sales'); break;
+      case 'challans': Billing.renderChallans(c); break;
       case 'quotations': Billing.renderQuotations(c); break;
       case 'services': Services.render(c); break;
       case 'amc': AMC.render(c); break;
@@ -726,6 +729,24 @@ const App = {
     const SCANNER_MAX_INTERVAL_MS = 60; // Hardware laser/CCD scanners emit keystrokes ~10-40ms apart
 
     window.addEventListener('keydown', (e) => {
+      // F2 POS Hotkey: Instantly focus barcode scanner input or open new sales invoice
+      if (e.key === 'F2') {
+        e.preventDefault();
+        const scanInput = document.getElementById('barcode-quick-scan');
+        if (scanInput) {
+          scanInput.focus();
+          scanInput.select();
+          App.toast('⚡ Barcode scanner ready (F2)', 'info');
+        } else {
+          Billing.openNew('sales');
+          setTimeout(() => {
+            const si = document.getElementById('barcode-quick-scan');
+            if (si) { si.focus(); si.select(); }
+          }, 250);
+        }
+        return;
+      }
+
       // Don't intercept shortcut combinations
       if (e.ctrlKey || e.altKey || e.metaKey) return;
 
@@ -2705,6 +2726,7 @@ ${JSON.stringify(data, null, 2)}
             <div class="form-grid">
               <div class="form-group"><label>Sales Invoice Prefix</label><input id="s-invpfx" value="${b.invoicePrefix || 'SCS'}" maxlength="6"></div>
               <div class="form-group"><label>Quotation / Estimate Prefix</label><input id="s-qtnpfx" value="${b.quotationPrefix || 'QTN'}" maxlength="6"></div>
+              <div class="form-group"><label>Delivery Challan Prefix</label><input id="s-challanpfx" value="${b.challanPrefix || 'DC'}" maxlength="6"></div>
               <div class="form-group"><label>Purchase Bill Prefix</label><input id="s-billpfx" value="${b.billPrefix || 'SCS-PO'}" maxlength="6"></div>
               <div class="form-group"><label>Credit Note Prefix (Customer Return)</label><input id="s-cnpfx" value="${b.creditNotePrefix || 'CN'}" maxlength="6"></div>
               <div class="form-group"><label>Debit Note Prefix (Supplier Return)</label><input id="s-dnpfx" value="${b.debitNotePrefix || 'DN'}" maxlength="6"></div>
@@ -3114,6 +3136,7 @@ ${JSON.stringify(data, null, 2)}
       backupDir: document.getElementById('s-backup-dir')?.value.trim() || DB.getBiz().backupDir || '',
       invoicePrefix: document.getElementById('s-invpfx').value.trim() || 'INV',
       quotationPrefix: document.getElementById('s-qtnpfx')?.value.trim() || 'QTN',
+      challanPrefix: document.getElementById('s-challanpfx')?.value.trim() || 'DC',
       billPrefix: document.getElementById('s-billpfx').value.trim() || 'PO',
       creditNotePrefix: document.getElementById('s-cnpfx')?.value.trim() || 'CN',
       debitNotePrefix: document.getElementById('s-dnpfx')?.value.trim() || 'DN',
