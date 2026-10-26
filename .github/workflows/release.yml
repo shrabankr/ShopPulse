@@ -44,29 +44,44 @@ jobs:
           files: |
             dist/*Setup*.exe
             dist/ShopPulse-windows-x64.zip
-          name: ShopPulse ${{ github.ref_name }} — Specialized Computer & Electronics Store Edition
+          name: ShopPulse ${{ github.ref_name }} — Unified Enterprise Edition
           body: |
-            ## ⚡ ShopPulse Desktop ${{ github.ref_name }}
+            ## ⚡ ShopPulse Desktop ${{ github.ref_name }} — Unified Enterprise Edition
 
-            Specialized GST-Compliant Billing, Inventory, RMA, and CRM for Indian Computer, CCTV & Electronics Retailers.
+            Specialized GST-Compliant Billing, Inventory, RMA, Dispatch Challans, Aging Khata, and CRM for Indian IT, CCTV & Electronics Retailers.
 
-            ### ✨ What's New in ${{ github.ref_name }}:
-            - 🛡️ **Hardware Serial Number (S/N) & IMEI Tracking**: Record line-item serial numbers across Sales Invoices, Purchase Bills, and print them on all receipts.
-            - ⏳ **Warranty Engine & Expiry Tracking**: Supports Testing Warranty, 3M, 6M, 1–5 Years, and Lifetime coverage with live active/expired badges.
-            - 🔍 **Hardware Serial & Warranty Lookup Hub**: 1-click topbar search (`Warranty S/N`) to instantly look up any S/N, view customer invoice, remaining warranty, and distributor RMA records.
-            - 🏷️ **Dual Pricing Engine (Retail vs Dealer / Wholesale)**: Auto-detects dealer accounts and offers a 1-click rate toggle pill on line items.
-            - 🔫 **Barcode Scanner Gun Fast-Add Bar**: Scan barcodes directly into invoices with zero-dependency offline audio feedback.
-            - 📜 **Quotation & Estimations**: Issue quotations with 1-click item-by-item conversion to GST Tax Invoices.
-            - 🔄 **Sales & Purchase Return Engine**: Issue Credit Notes and Debit Notes with automated real-time stock restoration.
-            - 🧾 **Multi-Format Invoicing**: Classic GST, Modern Blue, 3" POS Thermal Slip (80mm), and Executive Dark templates.
-            - ✈️ **100% Offline Capable**: Bundled offline Inter fonts and Material Icons — zero external network or CDN dependency.
-            
+            ### ✨ What's Included in Unified ${{ github.ref_name }}:
+            - 🚚 **GST Delivery Challan & Dispatch Gate Pass (GST Rule 55)**:
+              - 1-Click creation from Sales Invoices or Service Job Sheets.
+              - Dual layouts: A4 Official Delivery Challan (with transport metadata, vehicle/LR/e-way numbers, hardware serial numbers, and physical receiver signature & rubber stamp block) and 3" Thermal POS Gate Pass roll slip.
+              - Dedicated `#challans` transaction hub with 1-click WhatsApp dispatch notice.
+            - ⚡ **Rapid USB Barcode Scanner POS Mode**:
+              - Continuous zero-touch scanning with any standard USB/wireless barcode gun.
+              - Auto-increments cart item quantity with instant green highlight and Web Audio API synthesizer chime.
+              - Fast `F2` keyboard shortcut to focus scanner input or launch a new sales invoice.
+            - 📊 **Aging Khata & Credit Overdue Analysis Dashboard**:
+              - Automated credit categorization into 4 aging buckets: 0–30d (Current), 31–60d (Overdue), 61–90d (Critical), and 90+d (High Risk / Bad Debt).
+              - Interactive KPI filter cards in `#receivables` and `#payables`.
+              - Tiered 1-click WhatsApp payment reminders with Shop UPI ID (*Gentle*, *Urgent*, *Final*).
+              - 1-Click Aging CSV export for accounting reviews.
+            - 💬 **Enhanced 1-Click Zero-Cost WhatsApp Dispatch Engine**:
+              - Interactive preview modal with phone number normalizer (`+91`), bold text preview, direct web/desktop launch, clipboard copy, and PDF export shortcut.
+              - Multi-scenario presets for Sales Invoices, Payment Receipts, Service Tickets (Intake, Estimate, Ready, Status), AMC Contracts, and Customer Ledgers.
+            - 💳 **Split Payments & Multi-Tender Support**:
+              - Pay via multiple modes simultaneously (Cash, UPI, Card, Cheque, Credit) with live change return calculator.
+            - 🛡️ **Hardware Serial Number (S/N) & Warranty Tracking**:
+              - Complete serial number capture and 1-click Warranty Lookup Hub.
+            - 🏛️ **Official GSTR-1 JSON Generator**:
+              - Direct portal upload `.json` return files for B2B, B2CS, CDNR, Table 12 HSN, and Table 13 Documents.
+            - 💼 **Daily Cash Register & Shift Balancing (Z-Report)**:
+              - Complete POS till management with currency denomination note counter and variance audit.
+
             ### 📥 Download Options:
-            - **`ShopPulse-Setup-${{ github.ref_name }}.exe`**: Windows Installer Wizard (installs Desktop icon & Start Menu shortcut).
+            - **`ShopPulse-Setup-2.0.0.exe`**: Windows Installer Wizard (installs Desktop icon & Start Menu shortcut).
             - **`ShopPulse-windows-x64.zip`**: Portable ZIP archive — extract anywhere and double-click `ShopPulse.exe` (no installation needed).
-            
+
             ### 🚀 How to Run:
-            1. Download and run **`ShopPulse-Setup-${{ github.ref_name }}.exe`** for standard installation, OR extract **`ShopPulse-windows-x64.zip`** for portable use.
-            2. Double-click `ShopPulse.exe` to launch immediately (100% offline-ready).
+            1. Download and run **`ShopPulse-Setup-2.0.0.exe`** for standard installation, OR extract **`ShopPulse-windows-x64.zip`** for portable use.
+            2. Double-click `ShopPulse.exe` to launch immediately (100% offline-ready, browser `localStorage` powered).
           draft: false
           prerelease: false
