@@ -2227,8 +2227,10 @@ const Billing = {
                   <td><span class="mono" style="font-size:.75rem">${p.ref || '—'}</span></td>
                   <td class="text-right font-bold">${fmtCurrency(p.amount)}</td>
                   <td style="text-align:center;white-space:nowrap">
+                    ${DB.getRole() !== 'staff' ? `
                     <button class="btn btn-xs btn-ghost" onclick="App.closeModal();Billing.editPayment('${id}','${type}','${p.id}')" title="Change Payment Method / Date">✏️ Edit</button>
                     <button class="btn btn-xs btn-ghost" onclick="App.closeModal();Billing.deletePayment('${id}','${type}','${p.id}')" title="Delete Payment Record" style="color:var(--danger)">🗑️</button>
+                    ` : '<span style="color:var(--text-secondary);font-size:.72rem">🔒 Verified</span>'}
                   </td>
                 </tr>
               `).join('')}
@@ -2311,8 +2313,10 @@ const Billing = {
                   <td class="text-right font-bold">${fmtCurrency(p.amount)}</td>
                   <td style="white-space:nowrap;text-align:center">
                     <button class="btn btn-xs btn-ghost" onclick="Billing.sharePaymentReceiptWhatsApp('${id}','${type}','${p.id}')" title="Send Receipt on WhatsApp" style="color:#25d366">💬</button>
+                    ${DB.getRole() !== 'staff' ? `
                     <button class="btn btn-xs btn-ghost" onclick="Billing.editPayment('${id}','${type}','${p.id}')" title="Edit / Change Method">✏️</button>
                     <button class="btn btn-xs btn-ghost" onclick="Billing.deletePayment('${id}','${type}','${p.id}')" title="Delete Payment" style="color:var(--danger)">🗑️</button>
+                    ` : ''}
                   </td>
                 </tr>
               `).join('')}
@@ -2455,6 +2459,11 @@ const Billing = {
   },
 
   editPayment(docId, type, paymentId) {
+    if (DB.getRole() === 'staff') {
+      App.toast('🔒 Staff cannot edit past payments. Owner Mode required.', 'error');
+      App.toggleRoleModal();
+      return;
+    }
     const isSales = type === 'sales';
     const doc = isSales ? DB.getSaleById(docId) : DB.getPurchaseById(docId);
     if (!doc) return;
@@ -2519,6 +2528,11 @@ const Billing = {
   },
 
   deletePayment(docId, type, paymentId) {
+    if (DB.getRole() === 'staff') {
+      App.toast('🔒 Staff cannot delete payment records. Owner Mode required.', 'error');
+      App.toggleRoleModal();
+      return;
+    }
     if (!confirm('Remove this payment record?\n\nThe due balance will be restored.')) return;
     DB.deleteDocPayment(docId, type, paymentId);
     App.toast('Payment entry removed. Due amount updated.', 'warning');
@@ -7251,6 +7265,11 @@ body { font-family: 'Inter', Arial, sans-serif; font-size: 8.5pt; color: #1e293b
   },
 
   deleteChallan(id) {
+    if (DB.getRole() === 'staff') {
+      App.toast('🔒 Staff cannot delete delivery challans. Owner Mode required.', 'error');
+      App.toggleRoleModal();
+      return;
+    }
     const challan = DB.getChallanById(id);
     if (!challan) return;
 

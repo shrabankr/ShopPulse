@@ -56,7 +56,7 @@ const AI = {
           <div class="card" style="margin-top:16px">
             <div class="card-header">
               <h3>🚨 Reorder Required — ${lowStock.length} Item${lowStock.length > 1 ? 's' : ''}</h3>
-              <button class="btn btn-sm btn-warning" onclick="AI.generatePO()"><span class="material-icons">add_shopping_cart</span> Generate PO</button>
+              ${DB.getRole() !== 'staff' ? `<button class="btn btn-sm btn-warning" onclick="AI.generatePO()"><span class="material-icons">add_shopping_cart</span> Generate PO</button>` : ''}
             </div>
             <div class="card-body p-0">
               <table class="table">
@@ -168,6 +168,9 @@ const AI = {
     if (q.includes('customer') || q.includes('top') || q.includes('best')) return this._topPerformers();
     if (q.includes('summary') || q.includes('health') || q.includes('report')) return this._businessSummary();
     if (q.includes('expense') || q.includes('cost') || q.includes('spending') || q.includes('opex')) {
+      if (DB.getRole() === 'staff') {
+        return `🔒 <strong>Confidential Details:</strong><br><br>Operating expenses and company cost breakdowns are restricted to Owner Mode.`;
+      }
       const expenses = DB.getExpenses();
       const totalExp = expenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
       const itcExp = expenses.filter(e => e.isItc).reduce((s, e) => s + (parseFloat(e.gstAmt) || 0), 0);
@@ -188,6 +191,9 @@ const AI = {
         💡 <strong>Tip:</strong> Always collect GST tax invoices for commercial rent, broadband, and tools to claim 100% Input Tax Credit in GSTR-3B.`;
     }
     if (q.includes('profit') || q.includes('margin')) {
+      if (DB.getRole() === 'staff') {
+        return `🔒 <strong>Confidential Details:</strong><br><br>Gross margins and net profit metrics are restricted to Owner Mode.`;
+      }
       const totalRevenue = sales.filter(s => s.status === 'paid').reduce((s, i) => s + i.total, 0);
       const totalCost = purchases.filter(p => p.status === 'paid').reduce((s, b) => s + b.total, 0);
       const expenses = DB.getExpenses();
@@ -227,6 +233,7 @@ const AI = {
   },
 
   _businessSummary() {
+    const isStaff = DB.getRole() === 'staff';
     const sales = DB.getSales();
     const purchases = DB.getPurchases();
     const expenses = DB.getExpenses();
@@ -252,6 +259,26 @@ const AI = {
     ));
 
     const scoreLabel = score >= 80 ? '🟢 Excellent' : score >= 60 ? '🟡 Good' : score >= 40 ? '🟠 Needs Attention' : '🔴 Critical';
+
+    if (isStaff) {
+      return `📊 <strong>Business Activity Summary — ${biz.name}</strong><br><br>
+        <strong>💰 Sales &amp; Collections:</strong>
+        <ul>
+          <li>Total Paid Invoices Revenue: ${fmtCurrency(totalRevenue)}</li>
+          <li>Outstanding Receivables: ${fmtCurrency(receivables)} (${overdueCount} overdue) ${overdueCount > 0 ? '⚠️' : '✅'}</li>
+        </ul>
+        <strong>📦 Inventory Status:</strong>
+        <ul>
+          <li>Low Stock Items: ${lowStock} ${lowStock > 0 ? '⚠️' : '✅'}</li>
+          <li>Out of Stock: ${outOfStock} ${outOfStock > 0 ? '🔴' : '✅'}</li>
+        </ul>
+        <strong>💡 Action Items:</strong>
+        <ul>
+          ${overdueCount > 0 ? '<li>Follow up on ' + overdueCount + ' overdue customer invoices</li>' : ''}
+          ${lowStock > 0 ? '<li>Notify owner to reorder ' + lowStock + ' low-stock items</li>' : ''}
+          <li>Ensure all cash and counter collections are marked promptly</li>
+        </ul>`;
+    }
 
     return `📊 <strong>Business Health Report — ${biz.name}</strong><br><br>
       <strong>Health Score: ${score}/100 — ${scoreLabel}</strong><br><br>
@@ -475,6 +502,11 @@ const AI = {
   },
 
   generatePO() {
+    if (DB.getRole() === 'staff') {
+      App.toast('🔒 Staff cannot access Purchase Orders. Owner Mode required.', 'error');
+      App.toggleRoleModal();
+      return;
+    }
     const lowStock = DB.getProducts().filter(p => p.reorderLevel > 0 && p.stock <= p.reorderLevel);
     if (!lowStock.length) { App.toast('No items to reorder', 'info'); return; }
     App.navigate('#billing-purchases');

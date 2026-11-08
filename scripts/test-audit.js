@@ -891,6 +891,102 @@ if (overdueSale) {
 }
 context.document.getElementById = origGetEl;
 
+// Phase 18: Staff Role Restrictions, Confidential Details Masking & Delete Blockers
+console.log('\n--- Phase 18: Staff Role Restrictions, Confidential Details Masking & Delete Blockers ---');
+runFile(path.resolve(__dirname, '..', 'js/expenses.js'), context, 'Expenses');
+runFile(path.resolve(__dirname, '..', 'js/ai.js'), context, 'AI');
+
+// Ensure staff mode is active
+context.DB.setRole('staff');
+assert(context.DB.getRole() === 'staff', 'Security Check: Active role is staff mode');
+
+let capturedToast = '';
+const origToast = context.App.toast;
+context.App.toast = (msg) => { capturedToast = msg; };
+let roleModalToggled = false;
+const origToggleRoleModal = context.App.toggleRoleModal;
+context.App.toggleRoleModal = () => { roleModalToggled = true; };
+
+// Test 18.1: Settings Route & Modal Security
+let mockSettingsContainer = createMockElement('page-content');
+capturedToast = '';
+roleModalToggled = false;
+context.App.renderSettings(mockSettingsContainer);
+assert(capturedToast.includes('Owner Mode required') || roleModalToggled === true, 'Staff cannot render settings page (triggers Owner auth prompt)');
+
+// Test 18.2: Delete Document Protection (Sales Invoices / Purchase Bills)
+capturedToast = '';
+context.Billing.deleteDoc('INV-001', 'sales');
+assert(capturedToast.includes('Staff cannot delete invoices/bills'), 'Staff is strictly blocked from deleting sales invoices / bills');
+
+// Test 18.3: Delete & Edit Payment Protection
+capturedToast = '';
+context.Billing.deletePayment('INV-001', 'sales', 'pay-1');
+assert(capturedToast.includes('Staff cannot delete payment records'), 'Staff is strictly blocked from deleting payment records');
+
+capturedToast = '';
+context.Billing.editPayment('INV-001', 'sales', 'pay-1');
+assert(capturedToast.includes('Staff cannot edit past payments'), 'Staff is strictly blocked from editing payment history');
+
+// Test 18.4: Delete Delivery Challan Protection
+capturedToast = '';
+context.Billing.deleteChallan('DC-001');
+assert(capturedToast.includes('Staff cannot delete delivery challans'), 'Staff is strictly blocked from deleting delivery challans');
+
+// Test 18.5: Delete Repair Job Sheet Protection
+capturedToast = '';
+context.Services.deleteJob('JOB-001');
+assert(capturedToast.includes('Staff cannot delete repair job sheets'), 'Staff is strictly blocked from deleting repair job sheets');
+
+// Test 18.6: Delete AMC Contract Protection
+capturedToast = '';
+context.AMC.deleteAmc('AMC-001');
+assert(capturedToast.includes('Staff cannot delete AMC contracts'), 'Staff is strictly blocked from deleting AMC contracts');
+
+// Test 18.7: Delete Bundle Template Protection
+capturedToast = '';
+context.Configurator.deleteTemplate('BND-001');
+assert(capturedToast.includes('Staff cannot delete bundle templates'), 'Staff is strictly blocked from deleting bundle templates');
+
+// Test 18.8: Delete Product Protection
+capturedToast = '';
+context.Inventory.deleteProduct('PROD-001');
+assert(capturedToast.includes('Staff cannot delete products'), 'Staff is strictly blocked from deleting inventory products');
+
+// Test 18.9: Delete Contact & Loyalty Adjustment Protection
+capturedToast = '';
+context.CRM.deleteContact('CUST-001', 'customers');
+assert(capturedToast.includes('Staff cannot delete'), 'Staff is strictly blocked from deleting CRM contacts');
+
+capturedToast = '';
+context.CRM.openAdjustPointsModal('CUST-001');
+assert(capturedToast.includes('Staff cannot manually adjust loyalty points'), 'Staff is strictly blocked from manually altering loyalty points');
+
+// Test 18.10: Expenses Delete Protection
+capturedToast = '';
+context.Expenses.delete('EXP-001');
+assert(capturedToast.includes('Staff cannot delete expenses'), 'Staff is strictly blocked from deleting operating expenses');
+
+// Test 18.11: Purchase Order Generation Protection
+capturedToast = '';
+context.AI.generatePO();
+assert(capturedToast.includes('Staff cannot access Purchase Orders'), 'Staff is strictly blocked from generating Purchase Orders');
+
+// Test 18.12: Confidential Financial Metrics in AI Assistant
+const profitQueryResp = context.AI._processQuery('what is our net profit and margin?');
+assert(profitQueryResp.includes('Confidential Details') && profitQueryResp.includes('restricted to Owner Mode'), 'AI assistant refuses net profit/margin queries in Staff Mode');
+
+const expenseQueryResp = context.AI._processQuery('show me operating expenses and opex breakdown');
+assert(expenseQueryResp.includes('Confidential Details') && expenseQueryResp.includes('restricted to Owner Mode'), 'AI assistant refuses opex/expense breakdown queries in Staff Mode');
+
+const staffBusinessSummary = context.AI._businessSummary();
+assert(!staffBusinessSummary.includes('Product Purchases (COGS)') && !staffBusinessSummary.includes('Net Operating Profit') && !staffBusinessSummary.includes('Outstanding Payables'), 'AI Business Summary strictly hides COGS, net profit, and supplier payables from staff');
+
+// Restore App mocks
+context.App.toast = origToast;
+context.App.toggleRoleModal = origToggleRoleModal;
+context.DB.setRole('owner');
+
 // Summary
 console.log('\n======================================================');
 console.log(`TOTAL TESTS RUN: ${passedTests + failedTests}`);

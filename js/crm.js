@@ -350,11 +350,13 @@ const CRM = {
               ${c.referralCount ? ` • Successful Referrals: <strong>${c.referralCount}</strong>` : ''}
             </div>
           </div>
+          ${DB.getRole() !== 'staff' ? `
           <div style="display:flex;gap:6px">
             <button class="btn btn-xs btn-secondary" onclick="CRM.openAdjustPointsModal('${id}')" style="border-color:#d97706;color:#92400e;background:#fff">
               <span class="material-icons" style="font-size:14px">tune</span> Adjust Points
             </button>
           </div>
+          ` : ''}
         </div>
         ${history.length ? `
         <div style="margin-top:10px;padding-top:8px;border-top:1px dashed #fcd34d">
@@ -418,6 +420,11 @@ const CRM = {
      LOYALTY POINTS ADJUSTMENT
   ═══════════════════════════════════════════ */
   openAdjustPointsModal(customerId) {
+    if (DB.getRole() === 'staff') {
+      App.toast('🔒 Staff cannot manually adjust loyalty points. Owner Mode required.', 'error');
+      App.toggleRoleModal();
+      return;
+    }
     const c = DB.getCustomerById(customerId);
     if (!c) return;
     const biz = DB.getBiz();

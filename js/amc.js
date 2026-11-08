@@ -275,9 +275,11 @@ const AMC = {
                         <button class="btn btn-xs btn-secondary" onclick="AMC.openForm('${a.id}')" title="Edit Contract Details">
                           <span class="material-icons" style="font-size:14px">edit</span>
                         </button>
+                        ${DB.getRole() !== 'staff' ? `
                         <button class="btn btn-xs btn-ghost" onclick="AMC.deleteAmc('${a.id}')" title="Delete Contract">
                           <span class="material-icons" style="font-size:14px;color:var(--danger)">delete</span>
                         </button>
+                        ` : ''}
                       </div>
                     </td>
                   </tr>
@@ -597,6 +599,11 @@ const AMC = {
   },
 
   deleteAmc(amcId) {
+    if (DB.getRole() === 'staff') {
+      App.toast('🔒 Staff cannot delete AMC contracts. Owner Mode required.', 'error');
+      App.toggleRoleModal();
+      return;
+    }
     const amc = DB.getAmcById(amcId);
     if (!amc) return;
     if (confirm(`Are you sure you want to delete AMC Contract ${amc.amcNo} for "${amc.customerName}"?`)) {

@@ -222,9 +222,11 @@ const Services = {
                           <button class="btn btn-xs btn-secondary" onclick="Services.openForm('${job.id}')" title="Edit Job Details">
                             <span class="material-icons" style="font-size:14px">edit</span>
                           </button>
+                          ${DB.getRole() !== 'staff' ? `
                           <button class="btn btn-xs btn-danger" onclick="Services.deleteJob('${job.id}')" title="Delete Job Sheet">
                             <span class="material-icons" style="font-size:14px">delete</span>
                           </button>
+                          ` : ''}
                         </div>
                       </td>
                     </tr>
@@ -1254,6 +1256,11 @@ const Services = {
      DELETE SERVICE JOB SHEET
   ═══════════════════════════════════════════ */
   deleteJob(id) {
+    if (DB.getRole() === 'staff') {
+      App.toast('🔒 Staff cannot delete repair job sheets. Owner Mode required.', 'error');
+      App.toggleRoleModal();
+      return;
+    }
     const job = DB.getJobById(id);
     if (!job) return;
 

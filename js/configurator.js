@@ -624,9 +624,11 @@ const Configurator = {
                   </span>
                   <h3 style="margin:0;font-size:1rem;font-weight:700">${b.name}</h3>
                 </div>
+                ${DB.getRole() !== 'staff' ? `
                 <button class="btn btn-xs btn-ghost text-danger" onclick="Configurator.deleteTemplate('${b.id}')" title="Delete bundle">
                   <span class="material-icons" style="font-size:16px">delete</span>
                 </button>
+                ` : ''}
               </div>
 
               <div class="card-body" style="padding:0 16px 14px">
@@ -1388,6 +1390,11 @@ const Configurator = {
   },
 
   deleteTemplate(bundleId) {
+    if (DB.getRole() === 'staff') {
+      App.toast('🔒 Staff cannot delete bundle templates. Owner Mode required.', 'error');
+      App.toggleRoleModal();
+      return;
+    }
     if (!confirm('Are you sure you want to delete this bundle template?')) return;
     DB.deleteBundle(bundleId);
     App.toast('Bundle deleted.', 'info');

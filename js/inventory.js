@@ -226,7 +226,14 @@ const Inventory = {
         </div>
         <div class="form-group">
           <label>Purchase / Cost Price (₹)</label>
+          ${DB.getRole() === 'staff' ? `
+          <input id="p-pp" type="hidden" value="${p?.purchasePrice || 0}">
+          <div style="font-size:.85rem;color:var(--text-secondary);padding:8px 12px;background:var(--bg);border-radius:var(--radius-sm);border:1px dashed var(--border)">
+            🔒 Hidden in Staff Mode
+          </div>
+          ` : `
           <input id="p-pp" type="number" value="${p?.purchasePrice || ''}" min="0" step="0.01" placeholder="0.00">
+          `}
         </div>
         <div class="form-group">
           <label>Warranty Period</label>
@@ -284,6 +291,12 @@ const Inventory = {
     if (!hsn) { App.toast('HSN/SAC code is required for GST compliance', 'error'); return; }
     if (!sp || sp < 0) { App.toast('Selling price is required', 'error'); return; }
 
+    const existingProd = existingId ? DB.getProductById(existingId) : null;
+    let purchasePrice = parseFloat(document.getElementById('p-pp')?.value) || 0;
+    if (DB.getRole() === 'staff' && existingProd) {
+      purchasePrice = existingProd.purchasePrice || 0;
+    }
+
     const data = {
       id: existingId || null,
       name, sku: document.getElementById('p-sku')?.value?.trim() || '',
@@ -291,7 +304,7 @@ const Inventory = {
       hsn, category: document.getElementById('p-cat')?.value || 'Other',
       unit: document.getElementById('p-unit')?.value || 'Nos',
       gstRate: parseFloat(document.getElementById('p-gst')?.value) || 0,
-      purchasePrice: parseFloat(document.getElementById('p-pp')?.value) || 0,
+      purchasePrice: purchasePrice,
       sellingPrice: sp,
       dealerPrice: parseFloat(document.getElementById('p-dp')?.value) || 0,
       warranty: document.getElementById('p-warranty')?.value || '1 Year',
@@ -405,7 +418,7 @@ const Inventory = {
         p.category || '',
         p.hsn || '',
         p.unit || 'Nos',
-        p.purchasePrice != null ? p.purchasePrice : 0,
+        DB.getRole() === 'staff' ? 'Hidden' : (p.purchasePrice != null ? p.purchasePrice : 0),
         p.sellingPrice != null ? p.sellingPrice : 0,
         p.dealerPrice != null ? p.dealerPrice : 0,
         p.gstRate != null ? p.gstRate : 18,

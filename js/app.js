@@ -126,7 +126,11 @@ const App = {
               <a href="#gst" class="nav-item" data-r="gst"><span class="material-icons">receipt</span><span>GST Returns</span></a>
             `}
             <a href="#ai" class="nav-item" data-r="ai"><span class="material-icons">auto_awesome</span><span>AI Assistant</span><span class="nav-chip">AI</span></a>
-            <a href="#settings" class="nav-item" data-r="settings"><span class="material-icons">settings</span><span>Settings &amp; Backup</span></a>
+            ${isStaff ? `
+              <a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked in Staff Mode (Owner PIN Required)"><span class="material-icons">lock</span><span>Settings (Locked)</span></a>
+            ` : `
+              <a href="#settings" class="nav-item" data-r="settings"><span class="material-icons">settings</span><span>Settings &amp; Backup</span></a>
+            `}
             <a href="#help" class="nav-item" data-r="help"><span class="material-icons">help_outline</span><span>Help &amp; Support</span></a>
           </div>
         </div>
@@ -300,7 +304,7 @@ const App = {
     }
 
     // Guard owner-only sections when in Staff Mode
-    const ownerOnlyRoutes = ['billing-purchases', 'returns-purchases', 'expenses', 'payables', 'suppliers', 'reports', 'gst'];
+    const ownerOnlyRoutes = ['billing-purchases', 'returns-purchases', 'expenses', 'payables', 'suppliers', 'reports', 'gst', 'settings'];
     if (DB.getRole() === 'staff' && ownerOnlyRoutes.includes(r)) {
       this.toast('🔒 This section requires Owner Mode. Enter PIN to unlock.', 'warning');
       this.toggleRoleModal();
@@ -443,6 +447,7 @@ const App = {
               <div><strong>AI Insights Ready</strong><p>Smart business analysis available</p></div>
               <a href="#ai" onclick="App.route('#ai')" class="alert-action">Open</a>
             </div>
+            ${DB.getRole() === 'staff' ? '' : `
             <div class="card" style="margin-top:10px">
               <div class="card-header"><h3>GST This Month</h3><a href="#gst" onclick="App.route('#gst')" class="card-link">Returns</a></div>
               <div class="card-body">
@@ -453,6 +458,7 @@ const App = {
                 </div>
               </div>
             </div>
+            `}
           </div>
 
           <div class="card">
@@ -553,7 +559,7 @@ const App = {
             <span class="material-icons" style="font-size:28px">admin_panel_settings</span>
           </div>
           <h3>Enter Owner PIN</h3>
-          <p style="font-size:.85rem;color:var(--text-secondary)">Default PIN is <strong>1234</strong>. Unlocks P&amp;L, purchase prices, and full settings.</p>
+          <p style="font-size:.85rem;color:var(--text-secondary)">Enter 4-digit Owner PIN to unlock settings, cost prices, P&amp;L, and management controls.</p>
         </div>
         <div class="form-group" style="max-width:260px;margin:0 auto 12px">
           <input type="password" id="owner-pin-input" placeholder="Enter 4-digit PIN" maxlength="20" style="text-align:center;font-size:1.2rem;letter-spacing:.2em;font-weight:700" onkeyup="if(event.key==='Enter')App.unlockOwner()">
@@ -2357,6 +2363,12 @@ ${JSON.stringify(data, null, 2)}
 
   /* ─── Settings ─── */
   renderSettings(container) {
+    if (DB.getRole() === 'staff') {
+      this.toast('🔒 Settings & System Configurations are locked in Staff Mode. Please enter Owner PIN.', 'warning');
+      this.toggleRoleModal();
+      this.route('#dashboard');
+      return;
+    }
     const b = DB.getBiz();
     const auth = DB.getAuth();
     const lic = DB.getLicenseStatus();
@@ -3103,6 +3115,11 @@ ${JSON.stringify(data, null, 2)}
   },
 
   saveSettings() {
+    if (DB.getRole() === 'staff') {
+      this.toast('🔒 Staff cannot modify system settings. Owner PIN required.', 'error');
+      this.toggleRoleModal();
+      return;
+    }
     const stateEl = document.getElementById('s-state');
     const selectedState = INDIAN_STATES.find(s => s.code === stateEl.value);
     const limits = DB.getTrialLimits();
