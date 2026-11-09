@@ -2346,6 +2346,10 @@ const DB = {
   },
 
   downloadBackup() {
+    if (this.getRole() === 'staff') {
+      console.warn('DB.downloadBackup blocked in Staff Mode');
+      return null;
+    }
     const backup = this.createBackupObject();
     const biz = this.getBiz();
     const jsonStr = JSON.stringify(backup, null, 2);
@@ -2391,6 +2395,9 @@ const DB = {
   },
 
   restoreBackup(backupData) {
+    if (this.getRole() === 'staff') {
+      throw new Error('Staff role is not authorized to restore database backups. Owner Mode required.');
+    }
     if (!backupData || !backupData.data) {
       throw new Error('Invalid backup file format: missing data payload');
     }
@@ -2418,6 +2425,9 @@ const DB = {
   },
 
   factoryReset(seedDemo = false) {
+    if (this.getRole() === 'staff') {
+      throw new Error('Staff role is not authorized to reset or wipe database.');
+    }
     localStorage.clear();
     if (seedDemo) {
       this.seed();

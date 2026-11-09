@@ -127,7 +127,7 @@ const App = {
             `}
             <a href="#ai" class="nav-item" data-r="ai"><span class="material-icons">auto_awesome</span><span>AI Assistant</span><span class="nav-chip">AI</span></a>
             ${isStaff ? `
-              <a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked in Staff Mode (Owner PIN Required)"><span class="material-icons">lock</span><span>Settings (Locked)</span></a>
+              <a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked in Staff Mode (Owner PIN Required)"><span class="material-icons">lock</span><span>Settings &amp; Backup (Locked)</span></a>
             ` : `
               <a href="#settings" class="nav-item" data-r="settings"><span class="material-icons">settings</span><span>Settings &amp; Backup</span></a>
             `}
@@ -226,9 +226,11 @@ const App = {
         <button class="btn btn-primary btn-sm" onclick="Billing.openNew('sales')">
           <span class="material-icons">add</span> New Invoice
         </button>
+        ${role === 'staff' ? '' : `
         <button class="icon-btn" onclick="App.route('#settings')" title="Settings &amp; Backup Hub">
           <span class="material-icons">settings</span>
         </button>
+        `}
         <button class="icon-btn" onclick="App.route('#help')" title="Help &amp; Developer Support">
           <span class="material-icons">help_outline</span>
         </button>
@@ -888,6 +890,11 @@ const App = {
 
   /* ─── Backup & Restore Functions ─── */
   async triggerAutoBackup(isManual = false) {
+    if (isManual && DB.getRole() === 'staff') {
+      this.toast('🔒 Staff cannot export database backups. Owner Mode required.', 'error');
+      this.toggleRoleModal();
+      return;
+    }
     const auth = DB.getAuth();
     if (!isManual && auth.autoBackupEnabled === false) return;
 
@@ -937,6 +944,11 @@ const App = {
   },
 
   async openBackupFolder() {
+    if (DB.getRole() === 'staff') {
+      this.toast('🔒 Staff cannot access backup folders. Owner Mode required.', 'error');
+      this.toggleRoleModal();
+      return;
+    }
     if (window.desktopApp && window.desktopApp.openBackupFolder) {
       const biz = DB.getBiz();
       await window.desktopApp.openBackupFolder(biz.backupDir || '');
@@ -998,6 +1010,7 @@ const App = {
   },
 
   async _loadDesktopBackupsUI() {
+    if (DB.getRole() === 'staff') return;
     const el = document.getElementById('detected-backups-container');
     if (!el) return;
 
@@ -1151,6 +1164,11 @@ const App = {
   },
 
   _executeRestore(backupObj) {
+    if (DB.getRole() === 'staff') {
+      this.toast('🔒 Staff cannot restore databases. Owner Mode required.', 'error');
+      this.toggleRoleModal();
+      return;
+    }
     try {
       DB.restoreBackup(backupObj);
       this.closeModal();
@@ -1179,6 +1197,11 @@ const App = {
 
   /* ─── Onboarding Welcome Setup Wizard ─── */
   openSetupWizard() {
+    if (DB.getRole() === 'staff') {
+      this.toast('🔒 Setup Wizard is restricted to Owner Mode.', 'error');
+      this.toggleRoleModal();
+      return;
+    }
     const biz = DB.getBiz();
     const stateOpts = INDIAN_STATES.map(s => `<option value="${s.code}" ${s.code === (biz.stateCode || '27') ? 'selected' : ''}>${s.name}</option>`).join('');
 

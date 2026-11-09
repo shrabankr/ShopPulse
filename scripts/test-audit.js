@@ -982,6 +982,50 @@ assert(expenseQueryResp.includes('Confidential Details') && expenseQueryResp.inc
 const staffBusinessSummary = context.AI._businessSummary();
 assert(!staffBusinessSummary.includes('Product Purchases (COGS)') && !staffBusinessSummary.includes('Net Operating Profit') && !staffBusinessSummary.includes('Outstanding Payables'), 'AI Business Summary strictly hides COGS, net profit, and supplier payables from staff');
 
+// Test 18.13: Backup & Settings Lockdown for Staff by Default
+capturedToast = '';
+context.App.triggerAutoBackup(true);
+assert(capturedToast.includes('Staff cannot export database backups'), 'Staff is strictly blocked from manual backup exports');
+
+capturedToast = '';
+context.App.openBackupFolder();
+assert(capturedToast.includes('Staff cannot access backup folders'), 'Staff is strictly blocked from opening backup directories');
+
+capturedToast = '';
+context.App.openSetupWizard();
+assert(capturedToast.includes('Setup Wizard is restricted'), 'Staff is strictly blocked from opening store setup wizard');
+
+capturedToast = '';
+context.App._executeRestore({});
+assert(capturedToast.includes('Staff cannot restore databases'), 'Staff is strictly blocked from executing database restores');
+
+assert(context.DB.downloadBackup() === null, 'DB.downloadBackup() returns null and prevents file download in Staff Mode');
+
+let restoreThrew = false;
+try { context.DB.restoreBackup({}); } catch (err) { restoreThrew = true; }
+assert(restoreThrew === true, 'DB.restoreBackup() throws unauthorized error in Staff Mode');
+
+let resetThrew = false;
+try { context.DB.factoryReset(); } catch (err) { resetThrew = true; }
+assert(resetThrew === true, 'DB.factoryReset() throws unauthorized error in Staff Mode');
+
+// Verify UI elements hide settings and backup by default in Staff Mode
+const mockTopbar = createMockElement('topbar');
+const mockSidebar = createMockElement('sidebar');
+const origGetId = context.document.getElementById;
+context.document.getElementById = function(id) {
+  if (id === 'topbar') return mockTopbar;
+  if (id === 'sidebar') return mockSidebar;
+  return origGetId(id);
+};
+
+context.App.buildTopbar();
+assert(!mockTopbar.innerHTML.includes("App.route('#settings')"), 'Topbar actions hide Settings & Backup button when in Staff Mode');
+
+context.App.buildSidebar();
+assert(mockSidebar.innerHTML.includes('Settings &amp; Backup (Locked)'), 'Sidebar displays Settings & Backup as Locked with Owner PIN requirement');
+context.document.getElementById = origGetId;
+
 // Restore App mocks
 context.App.toast = origToast;
 context.App.toggleRoleModal = origToggleRoleModal;
