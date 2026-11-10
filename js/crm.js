@@ -77,7 +77,7 @@ const CRM = {
                           <div style="font-weight:600;display:flex;align-items:center;gap:6px">
                             ${c.name}
                             ${c.customerType === 'dealer' ? `<span class="badge" style="background:hsl(271,78%,92%);color:hsl(271,78%,35%);font-size:.65rem;padding:1px 6px;font-weight:700">DEALER / TECH</span>` : ''}
-                            ${type === 'customers' && (c.loyaltyPoints > 0) ? `<span class="badge" style="background:#fef3c7;color:#92400e;font-size:.68rem;padding:1px 6px;font-weight:700" title="${c.loyaltyPoints} Loyalty Points Available">⭐ ${c.loyaltyPoints} pts</span>` : ''}
+                            ${type === 'customers' && DB.getBiz().enableLoyalty && (c.loyaltyPoints > 0) ? `<span class="badge" style="background:#fef3c7;color:#92400e;font-size:.68rem;padding:1px 6px;font-weight:700" title="${c.loyaltyPoints} Loyalty Points Available">⭐ ${c.loyaltyPoints} pts</span>` : ''}
                           </div>
                           ${c.city ? `<div style="font-size:.75rem;color:var(--text-secondary)">${c.city}</div>` : ''}
                         </div>
@@ -211,6 +211,7 @@ const CRM = {
             <option value="dealer" ${c && c.customerType === 'dealer' ? 'selected' : ''}>Dealer / CCTV Installer / Technician (Auto-Applies Wholesale Rates)</option>
           </select>
         </div>
+        ${DB.getBiz().enableLoyalty ? `
         <div class="form-group form-full">
           <label>Referred By (Optional Referral Rewards)</label>
           <select id="c-referrer">
@@ -220,7 +221,8 @@ const CRM = {
             `).join('')}
           </select>
           <div class="form-hint">When this customer makes their first purchase, the referring customer will receive bonus loyalty points!</div>
-        </div>` : ''}
+        </div>
+        ` : ''}` : ''}
         <div class="form-group">
           <label>GSTIN</label>
           <input id="c-gstin" value="${c?.gstin || ''}" placeholder="27AAAAA0000A1Z5 (blank if unregistered)" maxlength="15" style="font-family:monospace;letter-spacing:.05em;text-transform:uppercase">
@@ -335,7 +337,7 @@ const CRM = {
         </div>
       </div>
 
-      ${isCustomer ? `
+      ${isCustomer && biz.enableLoyalty ? `
       <!-- Customer Loyalty & Referral Hub -->
       <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:14px">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">

@@ -81,6 +81,41 @@ function daysBetween(d1, d2) {
   return Math.floor(diff / 86400000);
 }
 
+function formatBizContacts(biz, sep = ' | ') {
+  if (!biz) return '';
+  const p = (biz.phone || '').trim();
+  const w = (biz.whatsapp || '').trim();
+  if (p && w) {
+    if (p === w) return `Phone / WhatsApp: ${p}`;
+    return `Phone: ${p}${sep}WhatsApp: ${w}`;
+  }
+  if (p) return `Phone: ${p}`;
+  if (w) return `WhatsApp: ${w}`;
+  return '';
+}
+
+function formatBizContactsHtml(biz, sep = ' | ') {
+  if (!biz) return '';
+  const p = (biz.phone || '').trim();
+  const w = (biz.whatsapp || '').trim();
+  if (p && w) {
+    if (p === w) return `<strong>Phone / WhatsApp:</strong> ${p}`;
+    return `<strong>Phone:</strong> ${p}${sep}<strong>WhatsApp:</strong> ${w}`;
+  }
+  if (p) return `<strong>Phone:</strong> ${p}`;
+  if (w) return `<strong>WhatsApp:</strong> ${w}`;
+  return '';
+}
+
+if (typeof window !== 'undefined') {
+  window.formatBizContacts = formatBizContacts;
+  window.formatBizContactsHtml = formatBizContactsHtml;
+}
+if (typeof global !== 'undefined') {
+  global.formatBizContacts = formatBizContacts;
+  global.formatBizContactsHtml = formatBizContactsHtml;
+}
+
 /* ─────────────────────────────────────────────
    Code 128 Barcode Generator (Pure SVG)
 ───────────────────────────────────────────── */
@@ -404,7 +439,7 @@ const DB = {
       quotationPrefix: 'QTN', quotationCounter: 1,
       challanPrefix: 'DC', challanCounter: 1,
       jobPrefix: 'JOB', jobCounter: 4,
-      enableLoyalty: true, loyaltySpendRate: 100, loyaltyPointValue: 1, loyaltyMinRedeem: 10, referralBonusPoints: 50,
+      enableLoyalty: false, loyaltySpendRate: 100, loyaltyPointValue: 1, loyaltyMinRedeem: 10, referralBonusPoints: 50,
       defaultPaymentTerms: 30, signatory: 'Shraban Kumar Mahato', termsAndConditions: 'Goods once sold will not be taken back.\nWarranty as per manufacturer terms.\nInterest @18% p.a. will be charged on delayed payments.',
       waGreeting: 'Dear Valued Customer,', waFooter: '', waDirectSend: false
     };
@@ -412,6 +447,8 @@ const DB = {
       if (b.waGreeting === undefined) b.waGreeting = 'Dear Valued Customer,';
       if (b.waFooter === undefined) b.waFooter = '';
       if (b.waDirectSend === undefined) b.waDirectSend = false;
+      if (b.enableLoyalty === undefined) b.enableLoyalty = false;
+      if (!b.staffPermissions) b.staffPermissions = { ...this.DEFAULT_STAFF_PERMS };
     }
     return b;
   },
@@ -1868,6 +1905,45 @@ const DB = {
     this.setAuth(a);
   },
 
+  /* ─── Granular Staff Permissions System ─── */
+  DEFAULT_STAFF_PERMS: {
+    sales: true,          // Sales Invoices
+    challans: true,       // Delivery Challans & Gate Passes
+    quotations: true,     // Quotations & Estimates
+    register: true,       // Cash Register / Till
+    services: true,       // Repairs & Service Job Sheets
+    amc: true,            // AMC Contracts
+    configurator: true,   // PC & CCTV Configurator
+    inventory: true,      // Inventory Catalog & Stock
+    customers: true,      // Customers Directory
+    receivables: true,    // Receivables & Payment Collections
+    returns: true,        // Customer Returns (Credit Notes)
+    ai: true,             // AI Business Assistant
+    purchases: false,     // Purchase Bills (Owner Only by Default)
+    expenses: false,      // Operating Expenses (Owner Only by Default)
+    payables: false,      // Supplier Payables (Owner Only by Default)
+    suppliers: false,     // Supplier Directory (Owner Only by Default)
+    reports: false,       // P&L & Reports (Owner Only by Default)
+    gst: false            // GST Tax Returns (Owner Only by Default)
+  },
+
+  getStaffPermissions() {
+    const biz = this.getBiz();
+    return { ...this.DEFAULT_STAFF_PERMS, ...(biz.staffPermissions || {}) };
+  },
+
+  setStaffPermissions(perms) {
+    const biz = this.getBiz();
+    biz.staffPermissions = { ...this.DEFAULT_STAFF_PERMS, ...(perms || {}) };
+    this.setBiz(biz);
+  },
+
+  hasStaffPermission(permKey) {
+    if (this.getRole() !== 'staff') return true;
+    const perms = this.getStaffPermissions();
+    return perms[permKey] !== undefined ? !!perms[permKey] : (this.DEFAULT_STAFF_PERMS[permKey] !== undefined ? !!this.DEFAULT_STAFF_PERMS[permKey] : true);
+  },
+
   /* ─── Gmail & Subscription Licensing Engine ─── */
   getLicense() {
     let lic = this._get(this.K.LICENSE);
@@ -2306,6 +2382,53 @@ const DB = {
       exportedAt: new Date().toISOString(),
       businessName: biz.name,
       gstin: biz.gstin,
+      phone: biz.phone,
+      whatsapp: biz.whatsapp,
+      email: biz.email,
+      profile: {
+        name: biz.name,
+        tagline: biz.tagline || '',
+        logo: biz.logo || '',
+        gstin: biz.gstin || '',
+        pan: biz.pan || '',
+        address: biz.address || '',
+        city: biz.city || '',
+        state: biz.state || '',
+        stateCode: biz.stateCode || '',
+        pincode: biz.pincode || '',
+        phone: biz.phone || '',
+        whatsapp: biz.whatsapp || '',
+        email: biz.email || '',
+        website: biz.website || '',
+        bankName: biz.bankName || '',
+        bankAccount: biz.bankAccount || '',
+        bankIFSC: biz.bankIFSC || '',
+        bankBranch: biz.bankBranch || '',
+        upiId: biz.upiId || '',
+        invoicePrefix: biz.invoicePrefix,
+        invoiceFormat: biz.invoiceFormat || 'classic',
+        billPrefix: biz.billPrefix,
+        creditNotePrefix: biz.creditNotePrefix,
+        debitNotePrefix: biz.debitNotePrefix,
+        quotationPrefix: biz.quotationPrefix,
+        challanPrefix: biz.challanPrefix,
+        jobPrefix: biz.jobPrefix,
+        amcPrefix: biz.amcPrefix,
+        signatory: biz.signatory || '',
+        defaultPaymentTerms: biz.defaultPaymentTerms || 30,
+        termsAndConditions: biz.termsAndConditions || '',
+        enableLoyalty: biz.enableLoyalty || false,
+        loyaltySpendRate: biz.loyaltySpendRate,
+        loyaltyPointValue: biz.loyaltyPointValue,
+        loyaltyMinRedeem: biz.loyaltyMinRedeem,
+        referralBonusPoints: biz.referralBonusPoints,
+        staffPermissions: biz.staffPermissions || {},
+        pdfSaveDir: biz.pdfSaveDir || '',
+        backupDir: biz.backupDir || '',
+        waGreeting: biz.waGreeting,
+        waFooter: biz.waFooter,
+        waDirectSend: biz.waDirectSend
+      },
       stats: {
         salesCount: this.getSales().length,
         purchasesCount: this.getPurchases().length,
@@ -2324,6 +2447,7 @@ const DB = {
       },
       data: {
         biz: this.getBiz(),
+        license: this.getLicense ? this.getLicense() : null,
         categories: this.getCategories(),
         customers: this.getCustomers(),
         suppliers: this.getSuppliers(),
@@ -2398,11 +2522,17 @@ const DB = {
     if (this.getRole() === 'staff') {
       throw new Error('Staff role is not authorized to restore database backups. Owner Mode required.');
     }
-    if (!backupData || !backupData.data) {
-      throw new Error('Invalid backup file format: missing data payload');
+    if (!backupData) {
+      throw new Error('Invalid backup file format: empty backup object');
     }
-    const d = backupData.data;
-    if (d.biz) this.setBiz(d.biz);
+    const d = backupData.data || {};
+    // Ensure full business profile and contacts are restored
+    const restoredBiz = d.biz || backupData.profile || backupData.biz;
+    if (restoredBiz) {
+      const currentBiz = this.getBiz();
+      this.setBiz({ ...currentBiz, ...restoredBiz });
+    }
+    if (d.license && this.saveLicense) this.saveLicense(d.license);
     if (d.categories) this.saveCategories(d.categories);
     if (d.customers) this._set(this.K.CUSTOMERS, d.customers);
     if (d.suppliers) this._set(this.K.SUPPLIERS, d.suppliers);

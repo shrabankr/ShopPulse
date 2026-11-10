@@ -804,7 +804,7 @@ const Services = {
           <div class="center">
             <div class="bold" style="font-size:15px">${biz.name}</div>
             <div>${biz.address || ''}, ${biz.city || ''}</div>
-            <div>Tel: ${biz.phone || ''}</div>
+            <div>${formatBizContacts(biz) || `Tel: ${biz.phone || ''}`}</div>
             ${biz.gstin ? `<div>GSTIN: ${biz.gstin}</div>` : ''}
             <div class="dash"></div>
             <div class="title">*** SERVICE CLAIM TOKEN ***</div>
@@ -889,7 +889,7 @@ const Services = {
                 <div style="font-size:20px;font-weight:800;color:#0f172a">${biz.name}</div>
                 <div style="color:#64748b">${biz.tagline || 'IT Solutions & Hardware Service Center'}</div>
                 <div>${biz.address || ''}, ${biz.city || ''}</div>
-                <div>Tel: ${biz.phone || ''} | Email: ${biz.email || ''}</div>
+                <div>${formatBizContacts(biz) || `Tel: ${biz.phone || ''}`}${biz.email ? ` | Email: ${biz.email}` : ''}</div>
                 ${biz.gstin ? `<div><strong>GSTIN:</strong> ${biz.gstin}</div>` : ''}
               </td>
               <td class="text-right">
@@ -1020,7 +1020,7 @@ const Services = {
     const partyPhone = job.customerPhone || '';
 
     const greeting = biz.waGreeting ? `${biz.waGreeting}\n\n` : '';
-    const footer = biz.waFooter ? `\n\n${biz.waFooter}` : `\n\n📞 For inquiries, contact: ${biz.phone || ''}\n_ShopPulse Service Desk_`;
+    const footer = biz.waFooter ? `\n\n${biz.waFooter}` : `\n\n📞 For inquiries, contact: ${formatBizContacts(biz) || biz.phone || ''}\n_ShopPulse Service Desk_`;
 
     // Preset 1: Intake Token Receipt
     const intakeMsg = `${greeting}🛠️ *SERVICE INTAKE RECEIPT — ${biz.name}*\n` +

@@ -1031,6 +1031,145 @@ context.App.toast = origToast;
 context.App.toggleRoleModal = origToggleRoleModal;
 context.DB.setRole('owner');
 
+// Phase 19: Default Disabled Loyalty & Configurable Staff Permissions
+console.log('\n--- Phase 19: Default Disabled Loyalty & Configurable Staff Permissions ---');
+
+// Test 19.1: Default Loyalty is Disabled
+const defaultBiz = context.DB.getBiz();
+assert(defaultBiz.enableLoyalty === false, 'Security & UX: Customer Loyalty program is disabled by default');
+
+// Test 19.2: Owner can toggle loyalty program on and off
+defaultBiz.enableLoyalty = true;
+context.DB.setBiz(defaultBiz);
+assert(context.DB.getBiz().enableLoyalty === true, 'Owner can successfully enable customer loyalty rewards');
+defaultBiz.enableLoyalty = false;
+context.DB.setBiz(defaultBiz);
+assert(context.DB.getBiz().enableLoyalty === false, 'Owner can toggle customer loyalty rewards back off');
+
+// Test 19.3: Granular Staff Permissions default setup
+const defaultPerms = context.DB.getStaffPermissions();
+assert(typeof defaultPerms === 'object', 'DB.getStaffPermissions() returns permissions object');
+assert(defaultPerms.sales === true, 'Default staff permissions: Sales Invoices enabled');
+assert(defaultPerms.register === true, 'Default staff permissions: Cash Register enabled');
+assert(defaultPerms.challans === true, 'Default staff permissions: Delivery Challans enabled');
+assert(defaultPerms.purchases === false, 'Default staff permissions: Purchase Bills restricted to Owner');
+assert(defaultPerms.expenses === false, 'Default staff permissions: Operating Expenses restricted to Owner');
+assert(defaultPerms.reports === false, 'Default staff permissions: Reports & P&L restricted to Owner');
+assert(defaultPerms.gst === false, 'Default staff permissions: GST Tax Returns restricted to Owner');
+
+// Test 19.4: Role-aware permission checking
+context.DB.setRole('staff');
+assert(context.DB.hasStaffPermission('sales') === true, 'Staff has permission for sales invoices by default');
+assert(context.DB.hasStaffPermission('purchases') === false, 'Staff does not have permission for purchase bills by default');
+
+context.DB.setRole('owner');
+assert(context.DB.hasStaffPermission('purchases') === true, 'Owner always has full permissions for all modules regardless of staff toggles');
+
+// Test 19.5: Owner customizes staff permissions
+context.DB.setRole('staff');
+context.DB.setStaffPermissions({ purchases: true, sales: false });
+assert(context.DB.hasStaffPermission('purchases') === true, 'Owner can explicitly grant Purchase Bills access to Staff Mode');
+assert(context.DB.hasStaffPermission('sales') === false, 'Owner can explicitly restrict Sales Invoices from Staff Mode');
+
+// Test 19.6: Dynamic Route Guard for custom staff permissions
+capturedToast = '';
+let routeModalOpened = false;
+context.App.toast = (msg) => { capturedToast = msg; };
+context.App.toggleRoleModal = () => { routeModalOpened = true; };
+
+context.App.route('#billing-sales');
+assert(capturedToast.includes('restricted for staff by the Owner'), 'Route guard blocks staff from accessing modules restricted by Owner');
+
+// Reset staff permissions back to default
+context.DB.setStaffPermissions(context.DB.DEFAULT_STAFF_PERMS);
+assert(context.DB.hasStaffPermission('sales') === true, 'Restored standard staff permissions successfully');
+
+// Test 19.7: Quick Presets verification
+const mockPermElements = {};
+const permKeysList = ['sales', 'register', 'challans', 'quotations', 'returns', 'services', 'amc', 'configurator', 'ai', 'inventory', 'customers', 'receivables', 'purchases', 'payables', 'suppliers', 'expenses', 'reports', 'gst'];
+permKeysList.forEach(k => {
+  mockPermElements[`s-perm-${k}`] = { checked: false };
+});
+const prevDocGetId = context.document.getElementById;
+context.document.getElementById = (id) => mockPermElements[id] || (prevDocGetId ? prevDocGetId(id) : null);
+
+context.App.applyStaffPreset('billing_only');
+assert(mockPermElements['s-perm-sales'].checked === true, 'Preset "billing_only" enables sales');
+assert(mockPermElements['s-perm-services'].checked === false, 'Preset "billing_only" disables repairs/services');
+assert(mockPermElements['s-perm-purchases'].checked === false, 'Preset "billing_only" disables purchases');
+
+context.App.applyStaffPreset('manager');
+assert(mockPermElements['s-perm-purchases'].checked === true, 'Preset "manager" grants purchase bills');
+assert(mockPermElements['s-perm-reports'].checked === true, 'Preset "manager" grants reports');
+
+context.document.getElementById = prevDocGetId;
+context.DB.setRole('owner');
+
+// --- PHASE 20: Contact Visibility on Bills, Save Paths & Full Profile Backups ---
+console.log('\n--- PHASE 20: Contact Visibility, Preferred Paths & Business Profile Backups ---');
+{
+  // Test 20.1: formatBizContacts helper outputs
+  assert(typeof context.formatBizContacts === 'function', 'formatBizContacts helper is globally available');
+  assert(typeof context.formatBizContactsHtml === 'function', 'formatBizContactsHtml helper is globally available');
+
+  const sampleBizBothDifferent = { phone: '+91 98000 11111', whatsapp: '+91 98000 22222' };
+  assert(context.formatBizContacts(sampleBizBothDifferent) === 'Phone: +91 98000 11111 | WhatsApp: +91 98000 22222', 'formatBizContacts shows both phone and whatsapp when different');
+  assert(context.formatBizContactsHtml(sampleBizBothDifferent).includes('<strong>Phone:</strong>') && context.formatBizContactsHtml(sampleBizBothDifferent).includes('<strong>WhatsApp:</strong>'), 'formatBizContactsHtml wraps labels in strong tags');
+
+  const sampleBizIdentical = { phone: '+91 98000 11111', whatsapp: '+91 98000 11111' };
+  assert(context.formatBizContacts(sampleBizIdentical) === 'Phone / WhatsApp: +91 98000 11111', 'formatBizContacts combines cleanly when phone and whatsapp are identical');
+
+  const sampleBizPhoneOnly = { phone: '+91 98000 11111', whatsapp: '' };
+  assert(context.formatBizContacts(sampleBizPhoneOnly) === 'Phone: +91 98000 11111', 'formatBizContacts outputs phone only if whatsapp is empty');
+
+  // Test 20.2: Invoice generation contains both phone and whatsapp
+  const currentBiz = context.DB.getBiz();
+  context.DB.setBiz({
+    ...currentBiz,
+    phone: '+91 98111 00001',
+    whatsapp: '+91 98222 00002'
+  });
+  const sales = context.DB.getSales();
+  const sale = sales[0];
+  const invoiceHtml = context.Billing.generateDocHtml(sale, 'sales', 'classic');
+  assert(invoiceHtml.includes('+91 98111 00001') && invoiceHtml.includes('+91 98222 00002'), 'A4 Classic Invoice HTML includes both Phone and WhatsApp numbers');
+
+  const posReceiptHtml = context.Billing.generateDocHtml(sale, 'sales', 'pos');
+  assert(posReceiptHtml.includes('+91 98111 00001') && posReceiptHtml.includes('+91 98222 00002'), 'POS Thermal Slip HTML includes both Phone and WhatsApp numbers');
+
+  // Test 20.3: Backup object contains full business profile, license and contact info
+  const backupObj = context.DB.createBackupObject();
+  assert(backupObj.phone === '+91 98111 00001', 'Backup root metadata includes phone');
+  assert(backupObj.whatsapp === '+91 98222 00002', 'Backup root metadata includes whatsapp');
+  assert(backupObj.profile && backupObj.profile.name === currentBiz.name, 'Backup includes complete profile object');
+  assert(backupObj.profile.phone === '+91 98111 00001', 'Profile object contains phone');
+  assert(backupObj.profile.whatsapp === '+91 98222 00002', 'Profile object contains whatsapp');
+  assert(backupObj.data && backupObj.data.biz, 'Backup payload contains full data.biz object');
+
+  // Test 20.4: Backup restore successfully restores business profile without data loss
+  backupObj.data.biz.name = 'Restored Tech Store';
+  backupObj.data.biz.phone = '+91 99999 88888';
+  backupObj.data.biz.whatsapp = '+91 99999 77777';
+  context.DB.restoreBackup(backupObj);
+  const restoredBiz = context.DB.getBiz();
+  assert(restoredBiz.name === 'Restored Tech Store', 'restoreBackup restores business name');
+  assert(restoredBiz.phone === '+91 99999 88888', 'restoreBackup restores business phone');
+  assert(restoredBiz.whatsapp === '+91 99999 77777', 'restoreBackup restores business whatsapp');
+
+  // Test 20.5: Preferred Save Paths persistence
+  context.DB.setBiz({
+    ...restoredBiz,
+    pdfSaveDir: 'D:\\ShopPulse\\Invoices',
+    backupDir: 'D:\\ShopPulse\\Backups'
+  });
+  const pathBiz = context.DB.getBiz();
+  assert(pathBiz.pdfSaveDir === 'D:\\ShopPulse\\Invoices', 'pdfSaveDir is safely saved in DB.biz');
+  assert(pathBiz.backupDir === 'D:\\ShopPulse\\Backups', 'backupDir is safely saved in DB.biz');
+
+  // Restore original test state
+  context.DB.setBiz(currentBiz);
+}
+
 // Summary
 console.log('\n======================================================');
 console.log(`TOTAL TESTS RUN: ${passedTests + failedTests}`);

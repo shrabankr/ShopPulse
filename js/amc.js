@@ -926,7 +926,7 @@ const AMC = {
         <div style="font-size:8.5pt;color:#4b5563;margin-top:2px">${biz.tagline || 'IT Infrastructure, Surveillance &amp; Computer Services'}</div>
         <div style="font-size:8.5pt;color:#374151;margin-top:4px">
           ${biz.address || ''}, ${biz.city || ''} - ${biz.pincode || ''}, ${biz.state || ''}<br>
-          GSTIN: <strong>${biz.gstin || 'UNREGISTERED'}</strong> | Phone: ${biz.phone || ''} | Email: ${biz.email || ''}
+          GSTIN: <strong>${biz.gstin || 'UNREGISTERED'}</strong> | ${formatBizContacts(biz) || `Phone: ${biz.phone || ''}`}${biz.email ? ` | Email: ${biz.email}` : ''}
         </div>
       </td>
       <td style="vertical-align:top;text-align:right">
@@ -1054,7 +1054,7 @@ const AMC = {
     const nextPendingVisit = visits.find(v => v.status === 'pending');
 
     const greeting = biz.waGreeting ? `${biz.waGreeting}\n\n` : '';
-    const footer = biz.waFooter ? `\n\n${biz.waFooter}` : `\n\n📞 Support / SLA Desk: ${biz.phone || ''}\n_ShopPulse AMC Services_`;
+    const footer = biz.waFooter ? `\n\n${biz.waFooter}` : `\n\n📞 Support / SLA Desk: ${formatBizContacts(biz) || biz.phone || ''}\n_ShopPulse AMC Services_`;
 
     // Preset 1: Status & Renewal Notice
     let renewalMsg = `${greeting}🛡️ *AMC CONTRACT UPDATE — ${biz.name}*\n` +

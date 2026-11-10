@@ -88,17 +88,39 @@ const App = {
             <span class="material-icons nav-section-toggle-icon">expand_more</span>
           </div>
           <div class="nav-section-items">
-            <a href="#cash-register" class="nav-item" data-r="cash-register"><span class="material-icons">point_of_sale</span><span>Cash Register (Till)</span>${openReg ? `<span class="nav-badge" style="background:#10b981;color:#fff">OPEN</span>` : ''}</a>
-            <a href="#billing-sales" class="nav-item" data-r="billing-sales"><span class="material-icons">receipt_long</span><span>Sales Invoices</span></a>
-            <a href="#challans" class="nav-item" data-r="challans"><span class="material-icons">local_shipping</span><span>Delivery Challans</span></a>
-            <a href="#quotations" class="nav-item" data-r="quotations"><span class="material-icons">request_quote</span><span>Quotations / Estimates</span></a>
-            <a href="#services" class="nav-item" data-r="services"><span class="material-icons">build</span><span>Repairs &amp; Services</span>${activeJobs ? `<span class="nav-badge warn">${activeJobs}</span>` : ''}</a>
-            <a href="#amc" class="nav-item" data-r="amc"><span class="material-icons">handshake</span><span>AMC Contracts</span>${expiringAmcs ? `<span class="nav-badge warn">${expiringAmcs}</span>` : ''}</a>
-            ${isStaff ? '' : `<a href="#billing-purchases" class="nav-item" data-r="billing-purchases"><span class="material-icons">shopping_bag</span><span>Purchase Bills</span></a>`}
-            <a href="#returns" class="nav-item" data-r="returns"><span class="material-icons">assignment_return</span><span>Returns &amp; Notes</span></a>
-            ${isStaff ? '' : `<a href="#expenses" class="nav-item" data-r="expenses"><span class="material-icons">receipt</span><span>Expenses</span></a>`}
-            <a href="#receivables" class="nav-item" data-r="receivables"><span class="material-icons">account_balance_wallet</span><span>Receivables</span>${unpaidSales ? `<span class="nav-badge">${unpaidSales}</span>` : ''}</a>
-            ${isStaff ? '' : `<a href="#payables" class="nav-item" data-r="payables"><span class="material-icons">payments</span><span>Payables</span>${unpaidBuys ? `<span class="nav-badge">${unpaidBuys}</span>` : ''}</a>`}
+            ${!isStaff || DB.hasStaffPermission('register') ? `
+              <a href="#cash-register" class="nav-item" data-r="cash-register"><span class="material-icons">point_of_sale</span><span>Cash Register (Till)</span>${openReg ? `<span class="nav-badge" style="background:#10b981;color:#fff">OPEN</span>` : ''}</a>
+            ` : `<a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked by Owner"><span class="material-icons">lock</span><span>Cash Register (Locked)</span></a>`}
+            ${!isStaff || DB.hasStaffPermission('sales') ? `
+              <a href="#billing-sales" class="nav-item" data-r="billing-sales"><span class="material-icons">receipt_long</span><span>Sales Invoices</span></a>
+            ` : `<a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked by Owner"><span class="material-icons">lock</span><span>Sales Invoices (Locked)</span></a>`}
+            ${!isStaff || DB.hasStaffPermission('challans') ? `
+              <a href="#challans" class="nav-item" data-r="challans"><span class="material-icons">local_shipping</span><span>Delivery Challans</span></a>
+            ` : `<a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked by Owner"><span class="material-icons">lock</span><span>Delivery Challans (Locked)</span></a>`}
+            ${!isStaff || DB.hasStaffPermission('quotations') ? `
+              <a href="#quotations" class="nav-item" data-r="quotations"><span class="material-icons">request_quote</span><span>Quotations / Estimates</span></a>
+            ` : `<a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked by Owner"><span class="material-icons">lock</span><span>Quotations (Locked)</span></a>`}
+            ${!isStaff || DB.hasStaffPermission('services') ? `
+              <a href="#services" class="nav-item" data-r="services"><span class="material-icons">build</span><span>Repairs &amp; Services</span>${activeJobs ? `<span class="nav-badge warn">${activeJobs}</span>` : ''}</a>
+            ` : `<a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked by Owner"><span class="material-icons">lock</span><span>Repairs (Locked)</span></a>`}
+            ${!isStaff || DB.hasStaffPermission('amc') ? `
+              <a href="#amc" class="nav-item" data-r="amc"><span class="material-icons">handshake</span><span>AMC Contracts</span>${expiringAmcs ? `<span class="nav-badge warn">${expiringAmcs}</span>` : ''}</a>
+            ` : `<a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked by Owner"><span class="material-icons">lock</span><span>AMC (Locked)</span></a>`}
+            ${!isStaff || DB.hasStaffPermission('purchases') ? `
+              <a href="#billing-purchases" class="nav-item" data-r="billing-purchases"><span class="material-icons">shopping_bag</span><span>Purchase Bills</span></a>
+            ` : `<a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked by Owner"><span class="material-icons">lock</span><span>Purchase Bills (Locked)</span></a>`}
+            ${!isStaff || DB.hasStaffPermission('returns') ? `
+              <a href="#returns" class="nav-item" data-r="returns"><span class="material-icons">assignment_return</span><span>Returns &amp; Notes</span></a>
+            ` : `<a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked by Owner"><span class="material-icons">lock</span><span>Returns (Locked)</span></a>`}
+            ${!isStaff || DB.hasStaffPermission('expenses') ? `
+              <a href="#expenses" class="nav-item" data-r="expenses"><span class="material-icons">receipt</span><span>Expenses</span></a>
+            ` : `<a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked by Owner"><span class="material-icons">lock</span><span>Expenses (Locked)</span></a>`}
+            ${!isStaff || DB.hasStaffPermission('receivables') ? `
+              <a href="#receivables" class="nav-item" data-r="receivables"><span class="material-icons">account_balance_wallet</span><span>Receivables</span>${unpaidSales ? `<span class="nav-badge">${unpaidSales}</span>` : ''}</a>
+            ` : `<a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked by Owner"><span class="material-icons">lock</span><span>Receivables (Locked)</span></a>`}
+            ${!isStaff || DB.hasStaffPermission('payables') ? `
+              <a href="#payables" class="nav-item" data-r="payables"><span class="material-icons">payments</span><span>Payables</span>${unpaidBuys ? `<span class="nav-badge">${unpaidBuys}</span>` : ''}</a>
+            ` : `<a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked by Owner"><span class="material-icons">lock</span><span>Payables (Locked)</span></a>`}
           </div>
         </div>
         <div class="nav-section ${collapsed.includes('management') ? 'collapsed' : ''}" data-section="management">
@@ -107,10 +129,18 @@ const App = {
             <span class="material-icons nav-section-toggle-icon">expand_more</span>
           </div>
           <div class="nav-section-items">
-            <a href="#inventory" class="nav-item" data-r="inventory"><span class="material-icons">inventory_2</span><span>Inventory</span>${lowStock ? `<span class="nav-badge warn">${lowStock}</span>` : ''}</a>
-            <a href="#configurator" class="nav-item" data-r="configurator"><span class="material-icons">memory</span><span>PC &amp; CCTV Builder</span></a>
-            <a href="#customers" class="nav-item" data-r="customers"><span class="material-icons">people</span><span>Customers</span></a>
-            ${isStaff ? '' : `<a href="#suppliers" class="nav-item" data-r="suppliers"><span class="material-icons">local_shipping</span><span>Suppliers</span></a>`}
+            ${!isStaff || DB.hasStaffPermission('inventory') ? `
+              <a href="#inventory" class="nav-item" data-r="inventory"><span class="material-icons">inventory_2</span><span>Inventory</span>${lowStock ? `<span class="nav-badge warn">${lowStock}</span>` : ''}</a>
+            ` : `<a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked by Owner"><span class="material-icons">lock</span><span>Inventory (Locked)</span></a>`}
+            ${!isStaff || DB.hasStaffPermission('configurator') ? `
+              <a href="#configurator" class="nav-item" data-r="configurator"><span class="material-icons">memory</span><span>PC &amp; CCTV Builder</span></a>
+            ` : `<a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked by Owner"><span class="material-icons">lock</span><span>PC &amp; CCTV Builder (Locked)</span></a>`}
+            ${!isStaff || DB.hasStaffPermission('customers') ? `
+              <a href="#customers" class="nav-item" data-r="customers"><span class="material-icons">people</span><span>Customers</span></a>
+            ` : `<a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked by Owner"><span class="material-icons">lock</span><span>Customers (Locked)</span></a>`}
+            ${!isStaff || DB.hasStaffPermission('suppliers') ? `
+              <a href="#suppliers" class="nav-item" data-r="suppliers"><span class="material-icons">local_shipping</span><span>Suppliers</span></a>
+            ` : `<a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked by Owner"><span class="material-icons">lock</span><span>Suppliers (Locked)</span></a>`}
           </div>
         </div>
         <div class="nav-section ${collapsed.includes('analytics') ? 'collapsed' : ''}" data-section="analytics">
@@ -119,13 +149,15 @@ const App = {
             <span class="material-icons nav-section-toggle-icon">expand_more</span>
           </div>
           <div class="nav-section-items">
-            ${isStaff ? `
-              <a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked in Staff Mode"><span class="material-icons">lock</span><span>Reports (Locked)</span></a>
-            ` : `
+            ${!isStaff || DB.hasStaffPermission('reports') ? `
               <a href="#reports" class="nav-item" data-r="reports"><span class="material-icons">bar_chart</span><span>Reports &amp; P&amp;L</span></a>
+            ` : `<a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked by Owner"><span class="material-icons">lock</span><span>Reports (Locked)</span></a>`}
+            ${!isStaff || DB.hasStaffPermission('gst') ? `
               <a href="#gst" class="nav-item" data-r="gst"><span class="material-icons">receipt</span><span>GST Returns</span></a>
-            `}
-            <a href="#ai" class="nav-item" data-r="ai"><span class="material-icons">auto_awesome</span><span>AI Assistant</span><span class="nav-chip">AI</span></a>
+            ` : `<a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked by Owner"><span class="material-icons">lock</span><span>GST Returns (Locked)</span></a>`}
+            ${!isStaff || DB.hasStaffPermission('ai') ? `
+              <a href="#ai" class="nav-item" data-r="ai"><span class="material-icons">auto_awesome</span><span>AI Assistant</span><span class="nav-chip">AI</span></a>
+            ` : `<a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked by Owner"><span class="material-icons">lock</span><span>AI Assistant (Locked)</span></a>`}
             ${isStaff ? `
               <a href="javascript:void(0)" onclick="App.toggleRoleModal()" class="nav-item text-muted" title="Locked in Staff Mode (Owner PIN Required)"><span class="material-icons">lock</span><span>Settings &amp; Backup (Locked)</span></a>
             ` : `
@@ -305,13 +337,44 @@ const App = {
       return;
     }
 
-    // Guard owner-only sections when in Staff Mode
-    const ownerOnlyRoutes = ['billing-purchases', 'returns-purchases', 'expenses', 'payables', 'suppliers', 'reports', 'gst', 'settings'];
-    if (DB.getRole() === 'staff' && ownerOnlyRoutes.includes(r)) {
-      this.toast('🔒 This section requires Owner Mode. Enter PIN to unlock.', 'warning');
-      this.toggleRoleModal();
-      this.route('#dashboard');
-      return;
+    // Guard owner-only and permission-restricted sections when in Staff Mode
+    if (DB.getRole() === 'staff') {
+      if (r === 'settings') {
+        this.toast('🔒 Settings & Backup Hub requires Owner Mode. Enter PIN to unlock.', 'warning');
+        this.toggleRoleModal();
+        this.route('#dashboard');
+        return;
+      }
+      const routePermMap = {
+        'billing-sales': 'sales',
+        'challans': 'challans',
+        'quotations': 'quotations',
+        'cash-register': 'register',
+        'services': 'services',
+        'amc': 'amc',
+        'configurator': 'configurator',
+        'pc-builder': 'configurator',
+        'inventory': 'inventory',
+        'customers': 'customers',
+        'receivables': 'receivables',
+        'returns': 'returns',
+        'returns-sales': 'returns',
+        'returns-purchases': 'purchases',
+        'ai': 'ai',
+        'billing-purchases': 'purchases',
+        'expenses': 'expenses',
+        'payables': 'payables',
+        'suppliers': 'suppliers',
+        'reports': 'reports',
+        'gst': 'gst'
+      };
+      const reqPerm = routePermMap[r];
+      if (reqPerm && !DB.hasStaffPermission(reqPerm)) {
+        this.toast('🔒 Access to this section has been restricted for staff by the Owner. Enter Owner PIN to unlock.', 'warning');
+        this.toggleRoleModal();
+        this.route('#dashboard');
+        return;
+      }
     }
 
     switch (r) {
@@ -2396,6 +2459,7 @@ ${JSON.stringify(data, null, 2)}
     const auth = DB.getAuth();
     const lic = DB.getLicenseStatus();
     const limits = DB.getTrialLimits();
+    const perms = DB.getStaffPermissions();
     const snapshots = DB.getSnapshots();
     const stateOpts = INDIAN_STATES.map(s => `<option value="${s.code}" ${b.stateCode === s.code ? 'selected' : ''}>${s.name}</option>`).join('');
     container.innerHTML = `
@@ -2534,28 +2598,28 @@ ${JSON.stringify(data, null, 2)}
               <div class="form-group form-full">
                 <label style="font-weight:700">📄 Default Bill / Invoice PDF Save Folder</label>
                 <div style="display:flex;gap:8px;align-items:center">
-                  <input id="s-pdf-dir" value="${b.pdfSaveDir || ''}" placeholder="Default (Documents / Prompts on Save)" readonly style="background:#f8fafc;font-family:monospace;font-size:.85rem;cursor:default">
+                  <input id="s-pdf-dir" value="${b.pdfSaveDir || ''}" placeholder="e.g. D:\ShopPulse\Invoices (or click Browse)" style="font-family:monospace;font-size:.85rem">
                   <button class="btn btn-secondary btn-sm" type="button" onclick="App.browseFolder('pdf')" style="white-space:nowrap">
                     <span class="material-icons" style="font-size:16px">folder_open</span> Browse Folder
                   </button>
                   ${b.pdfSaveDir ? `<button class="btn btn-ghost btn-sm text-danger" type="button" onclick="App.resetFolder('pdf')" title="Reset to default">✕</button>` : ''}
                 </div>
                 <div class="form-hint" style="font-size:.75rem;color:var(--text-secondary);margin-top:3px">
-                  When exporting or saving invoices as PDF, the save file dialog opens directly in this folder.
+                  When exporting or saving invoices as PDF, the save file dialog opens directly in this folder. You can browse or paste a path directly.
                 </div>
               </div>
 
               <div class="form-group form-full">
                 <label style="font-weight:700">💾 Database Backup Save Folder</label>
                 <div style="display:flex;gap:8px;align-items:center">
-                  <input id="s-backup-dir" value="${b.backupDir || ''}" placeholder="Default (Downloads / Desktop)" readonly style="background:#f8fafc;font-family:monospace;font-size:.85rem;cursor:default">
+                  <input id="s-backup-dir" value="${b.backupDir || ''}" placeholder="e.g. D:\ShopPulse\Backups (or click Browse)" style="font-family:monospace;font-size:.85rem">
                   <button class="btn btn-secondary btn-sm" type="button" onclick="App.browseFolder('backup')" style="white-space:nowrap">
                     <span class="material-icons" style="font-size:16px">folder_open</span> Browse Folder
                   </button>
                   ${b.backupDir ? `<button class="btn btn-ghost btn-sm text-danger" type="button" onclick="App.resetFolder('backup')" title="Reset to default">✕</button>` : ''}
                 </div>
                 <div class="form-hint" style="font-size:.75rem;color:var(--text-secondary);margin-top:3px">
-                  When exporting backups, ShopPulse automatically saves your JSON backup copy directly into this folder.
+                  When exporting backups, ShopPulse automatically saves your JSON backup copy directly into this folder. You can browse or paste a path directly.
                 </div>
               </div>
             </div>
@@ -2771,41 +2835,182 @@ ${JSON.stringify(data, null, 2)}
           </div>
         </div>
 
-        <div class="card" style="border-left:4px solid #f59e0b">
+        <!-- Customer Loyalty & Referral Program (Disabled by default, Owner/Dev can enable) -->
+        <div class="card" style="border-left:4px solid #f59e0b;margin-bottom:20px">
           <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
             <h3><span class="material-icons" style="vertical-align:middle;font-size:20px;color:#f59e0b">stars</span> Customer Loyalty &amp; Referral Program</h3>
-            <span class="badge badge-paid">Customer Retention</span>
+            <span class="badge ${b.enableLoyalty ? 'badge-paid' : 'badge-draft'}">${b.enableLoyalty ? 'Active' : 'Disabled (Default)'}</span>
           </div>
           <div class="card-body">
             <p style="font-size:.85rem;color:var(--text-secondary);margin-bottom:14px">
-              Reward repeat clients with reward points on every purchase and incentivize customer referrals with bonus points.
+              Reward repeat clients with reward points on every purchase and incentivize customer referrals with bonus points. Disabled by default, but can be enabled anytime by the Owner.
             </p>
             <div class="form-grid">
               <div class="form-group form-full">
                 <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-weight:700">
-                  <input type="checkbox" id="s-loyalty-enable" ${b.enableLoyalty !== false ? 'checked' : ''}>
-                  Enable Loyalty Points &amp; Referral Program
+                  <input type="checkbox" id="s-loyalty-enable" ${b.enableLoyalty ? 'checked' : ''} onchange="const f = document.getElementById('loyalty-settings-fields'); if (f) { f.style.opacity = this.checked ? '1' : '0.45'; f.style.pointerEvents = this.checked ? 'auto' : 'none'; }">
+                  Enable Customer Loyalty Points &amp; Referral Program
                 </label>
               </div>
-              <div class="form-group">
-                <label>Spend per 1 Point (₹)</label>
-                <input id="s-loyalty-spend" type="number" min="1" step="1" value="${b.loyaltySpendRate || 100}">
-                <div class="form-hint">e.g. ₹100 spend = 1 loyalty point earned</div>
+            </div>
+            <div id="loyalty-settings-fields" style="opacity:${b.enableLoyalty ? '1' : '0.45'};pointer-events:${b.enableLoyalty ? 'auto' : 'none'};transition:all .2s">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>Spend per 1 Point (₹)</label>
+                  <input id="s-loyalty-spend" type="number" min="1" step="1" value="${b.loyaltySpendRate || 100}">
+                  <div class="form-hint">e.g. ₹100 spend = 1 loyalty point earned</div>
+                </div>
+                <div class="form-group">
+                  <label>Point Redemption Value (₹ per pt)</label>
+                  <input id="s-loyalty-val" type="number" min="0.1" step="0.1" value="${b.loyaltyPointValue || 1}">
+                  <div class="form-hint">e.g. 1 point = ₹1 discount on invoice</div>
+                </div>
+                <div class="form-group">
+                  <label>Minimum Points to Redeem</label>
+                  <input id="s-loyalty-min" type="number" min="1" step="1" value="${b.loyaltyMinRedeem || 10}">
+                  <div class="form-hint">Minimum points balance required for customer to redeem</div>
+                </div>
+                <div class="form-group">
+                  <label>Referral Bonus Points</label>
+                  <input id="s-loyalty-ref" type="number" min="0" step="1" value="${b.referralBonusPoints || 50}">
+                  <div class="form-hint">Bonus points given to referrer on referred client's 1st purchase</div>
+                </div>
               </div>
-              <div class="form-group">
-                <label>Point Redemption Value (₹ per pt)</label>
-                <input id="s-loyalty-val" type="number" min="0.1" step="0.1" value="${b.loyaltyPointValue || 1}">
-                <div class="form-hint">e.g. 1 point = ₹1 discount on invoice</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Staff Access Control & Role Permissions Manager -->
+        <div class="card" style="border-left:4px solid var(--primary);margin-bottom:20px">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+            <h3 style="display:flex;align-items:center;gap:8px">
+              <span class="material-icons" style="color:var(--primary);font-size:22px">shield</span>
+              Staff Access Control &amp; Module Permissions
+            </h3>
+            <span class="badge badge-info">Owner Configured</span>
+          </div>
+          <div class="card-body">
+            <p style="font-size:.85rem;color:var(--text-secondary);margin-bottom:14px;line-height:1.5">
+              Decide which areas of ShopPulse your staff can access when Staff Mode is active. 
+              <strong>Settings, Backups, and Record Deletions are permanently locked to Owner Mode for safety.</strong>
+            </p>
+            
+            <!-- Quick Preset Buttons -->
+            <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;align-items:center;background:var(--bg);padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border)">
+              <span style="font-size:.78rem;font-weight:700;color:var(--text-secondary);margin-right:4px">Apply Role Presets:</span>
+              <button type="button" class="btn btn-xs btn-secondary" onclick="App.applyStaffPreset('standard')">Standard Counter Staff</button>
+              <button type="button" class="btn btn-xs btn-secondary" onclick="App.applyStaffPreset('billing_only')">Billing &amp; Cashier Only</button>
+              <button type="button" class="btn btn-xs btn-secondary" onclick="App.applyStaffPreset('technician')">Service &amp; Repair Tech</button>
+              <button type="button" class="btn btn-xs btn-secondary" onclick="App.applyStaffPreset('manager')">Store Manager (All Modules)</button>
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:14px">
+              <!-- Counter & Billing -->
+              <div style="background:var(--bg);padding:12px 14px;border-radius:var(--radius-sm);border:1px solid var(--border)">
+                <div style="font-weight:700;font-size:.84rem;color:var(--primary);margin-bottom:10px;display:flex;align-items:center;gap:6px">
+                  <span class="material-icons" style="font-size:16px">point_of_sale</span> Counter &amp; Billing
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px;font-size:.82rem">
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" id="s-perm-sales" ${perms.sales ? 'checked' : ''}>
+                    <span>Sales Invoices &amp; POS Billing</span>
+                  </label>
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" id="s-perm-register" ${perms.register ? 'checked' : ''}>
+                    <span>Cash Register / Till Drawer</span>
+                  </label>
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" id="s-perm-challans" ${perms.challans ? 'checked' : ''}>
+                    <span>Delivery Challans &amp; Gate Passes</span>
+                  </label>
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" id="s-perm-quotations" ${perms.quotations ? 'checked' : ''}>
+                    <span>Quotations &amp; Price Estimates</span>
+                  </label>
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" id="s-perm-returns" ${perms.returns ? 'checked' : ''}>
+                    <span>Customer Returns (Credit Notes)</span>
+                  </label>
+                </div>
               </div>
-              <div class="form-group">
-                <label>Minimum Points to Redeem</label>
-                <input id="s-loyalty-min" type="number" min="1" step="1" value="${b.loyaltyMinRedeem || 10}">
-                <div class="form-hint">Minimum points balance required for customer to redeem</div>
+
+              <!-- Technical & Hardware -->
+              <div style="background:var(--bg);padding:12px 14px;border-radius:var(--radius-sm);border:1px solid var(--border)">
+                <div style="font-weight:700;font-size:.84rem;color:var(--primary);margin-bottom:10px;display:flex;align-items:center;gap:6px">
+                  <span class="material-icons" style="font-size:16px">build</span> Technical &amp; Hardware
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px;font-size:.82rem">
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" id="s-perm-services" ${perms.services ? 'checked' : ''}>
+                    <span>Repairs &amp; Service Job Sheets</span>
+                  </label>
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" id="s-perm-amc" ${perms.amc ? 'checked' : ''}>
+                    <span>Annual Maintenance (AMC)</span>
+                  </label>
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" id="s-perm-configurator" ${perms.configurator ? 'checked' : ''}>
+                    <span>PC &amp; CCTV System Builder</span>
+                  </label>
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" id="s-perm-ai" ${perms.ai ? 'checked' : ''}>
+                    <span>AI Assistant (Inventory/Stock Queries)</span>
+                  </label>
+                </div>
               </div>
-              <div class="form-group">
-                <label>Referral Bonus Points</label>
-                <input id="s-loyalty-ref" type="number" min="0" step="1" value="${b.referralBonusPoints || 50}">
-                <div class="form-hint">Bonus points given to referrer on referred client's 1st purchase</div>
+
+              <!-- Inventory & CRM -->
+              <div style="background:var(--bg);padding:12px 14px;border-radius:var(--radius-sm);border:1px solid var(--border)">
+                <div style="font-weight:700;font-size:.84rem;color:var(--primary);margin-bottom:10px;display:flex;align-items:center;gap:6px">
+                  <span class="material-icons" style="font-size:16px">inventory_2</span> Catalog &amp; Accounts
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px;font-size:.82rem">
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" id="s-perm-inventory" ${perms.inventory ? 'checked' : ''}>
+                    <span>Product Catalog &amp; Stock</span>
+                  </label>
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" id="s-perm-customers" ${perms.customers ? 'checked' : ''}>
+                    <span>Customers Directory &amp; Ledger</span>
+                  </label>
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" id="s-perm-receivables" ${perms.receivables ? 'checked' : ''}>
+                    <span>Customer Receivables &amp; Payments</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Owner Confidential Modules -->
+              <div style="background:#fef2f2;padding:12px 14px;border-radius:var(--radius-sm);border:1px solid #fecaca">
+                <div style="font-weight:700;font-size:.84rem;color:var(--danger);margin-bottom:10px;display:flex;align-items:center;gap:6px">
+                  <span class="material-icons" style="font-size:16px">lock</span> Confidential / Financial Modules
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px;font-size:.82rem">
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" id="s-perm-purchases" ${perms.purchases ? 'checked' : ''}>
+                    <span>Purchase Bills (Supplier Orders)</span>
+                  </label>
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" id="s-perm-payables" ${perms.payables ? 'checked' : ''}>
+                    <span>Supplier Payables</span>
+                  </label>
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" id="s-perm-suppliers" ${perms.suppliers ? 'checked' : ''}>
+                    <span>Suppliers Directory</span>
+                  </label>
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" id="s-perm-expenses" ${perms.expenses ? 'checked' : ''}>
+                    <span>Operating Expenses &amp; ITC</span>
+                  </label>
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" id="s-perm-reports" ${perms.reports ? 'checked' : ''}>
+                    <span>P&amp;L Reports &amp; Financials</span>
+                  </label>
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" id="s-perm-gst" ${perms.gst ? 'checked' : ''}>
+                    <span>GST Returns (GSTR-1 / 3B)</span>
+                  </label>
+                </div>
               </div>
             </div>
           </div>
@@ -3137,6 +3342,27 @@ ${JSON.stringify(data, null, 2)}
     this.renderSettings(document.getElementById('page-content'));
   },
 
+  applyStaffPreset(presetName) {
+    const permMap = {
+      standard: { sales: true, register: true, challans: true, quotations: true, returns: true, services: true, amc: true, configurator: true, ai: true, inventory: true, customers: true, receivables: true, purchases: false, payables: false, suppliers: false, expenses: false, reports: false, gst: false },
+      billing_only: { sales: true, register: true, challans: true, quotations: true, returns: true, services: false, amc: false, configurator: false, ai: false, inventory: true, customers: true, receivables: true, purchases: false, payables: false, suppliers: false, expenses: false, reports: false, gst: false },
+      technician: { sales: true, register: false, challans: true, quotations: true, returns: false, services: true, amc: true, configurator: true, ai: true, inventory: true, customers: true, receivables: false, purchases: false, payables: false, suppliers: false, expenses: false, reports: false, gst: false },
+      manager: { sales: true, register: true, challans: true, quotations: true, returns: true, services: true, amc: true, configurator: true, ai: true, inventory: true, customers: true, receivables: true, purchases: true, payables: true, suppliers: true, expenses: true, reports: true, gst: true }
+    };
+    const target = permMap[presetName] || permMap.standard;
+    Object.keys(target).forEach(k => {
+      const el = document.getElementById(`s-perm-${k}`);
+      if (el) el.checked = target[k];
+    });
+    const labelMap = {
+      standard: 'Standard Counter Staff',
+      billing_only: 'Billing & Cashier Only',
+      technician: 'Service & Repair Tech',
+      manager: 'Store Manager (All Modules)'
+    };
+    this.toast(`Applied "${labelMap[presetName] || presetName}" preset! Click Save to apply.`, 'info');
+  },
+
   saveSettings() {
     if (DB.getRole() === 'staff') {
       this.toast('🔒 Staff cannot modify system settings. Owner PIN required.', 'error');
@@ -3172,15 +3398,15 @@ ${JSON.stringify(data, null, 2)}
       waGreeting: document.getElementById('s-wa-greeting')?.value.trim() || 'Dear Valued Customer,',
       waFooter: document.getElementById('s-wa-footer')?.value.trim() || '',
       waDirectSend: !!document.getElementById('s-wa-direct-send')?.checked,
-      pdfSaveDir: document.getElementById('s-pdf-dir')?.value.trim() || DB.getBiz().pdfSaveDir || '',
-      backupDir: document.getElementById('s-backup-dir')?.value.trim() || DB.getBiz().backupDir || '',
+      pdfSaveDir: document.getElementById('s-pdf-dir') ? document.getElementById('s-pdf-dir').value.trim() : (DB.getBiz().pdfSaveDir || ''),
+      backupDir: document.getElementById('s-backup-dir') ? document.getElementById('s-backup-dir').value.trim() : (DB.getBiz().backupDir || ''),
       invoicePrefix: document.getElementById('s-invpfx').value.trim() || 'INV',
       quotationPrefix: document.getElementById('s-qtnpfx')?.value.trim() || 'QTN',
       challanPrefix: document.getElementById('s-challanpfx')?.value.trim() || 'DC',
       billPrefix: document.getElementById('s-billpfx').value.trim() || 'PO',
       creditNotePrefix: document.getElementById('s-cnpfx')?.value.trim() || 'CN',
       debitNotePrefix: document.getElementById('s-dnpfx')?.value.trim() || 'DN',
-      enableLoyalty: document.getElementById('s-loyalty-enable')?.checked !== false,
+      enableLoyalty: !!document.getElementById('s-loyalty-enable')?.checked,
       loyaltySpendRate: parseFloat(document.getElementById('s-loyalty-spend')?.value) || 100,
       loyaltyPointValue: parseFloat(document.getElementById('s-loyalty-val')?.value) || 1,
       loyaltyMinRedeem: parseInt(document.getElementById('s-loyalty-min')?.value, 10) || 10,
@@ -3190,9 +3416,20 @@ ${JSON.stringify(data, null, 2)}
     };
     if (!biz.name) { this.toast('Business name is required', 'error'); return; }
     if (biz.gstin && !validateGSTIN(biz.gstin)) { this.toast('Invalid GSTIN format', 'error'); return; }
+
+    // Save Staff Module Permissions
+    const permKeys = ['sales', 'register', 'challans', 'quotations', 'returns', 'services', 'amc', 'configurator', 'ai', 'inventory', 'customers', 'receivables', 'purchases', 'payables', 'suppliers', 'expenses', 'reports', 'gst'];
+    const staffPermissions = {};
+    permKeys.forEach(k => {
+      const el = document.getElementById(`s-perm-${k}`);
+      if (el) staffPermissions[k] = el.checked;
+    });
+    biz.staffPermissions = staffPermissions;
+
     DB.setBiz(biz);
     this.buildSidebar();
-    this.toast('Settings saved successfully!');
+    this.buildTopbar();
+    this.toast('Settings & Staff Permissions saved successfully! ✅', 'success');
   },
 
   renderHelp(container) {
