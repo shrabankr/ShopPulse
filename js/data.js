@@ -532,13 +532,14 @@ const DB = {
 
   grantReferralBonus(customerId, invoiceNo) {
     if (!customerId) return;
+    const biz = this.getBiz();
+    if (!biz.enableLoyalty) return;
     const c = this.getCustomerById(customerId);
     if (!c || !c.referredBy || c._referralBonusGranted) return;
 
     const referrer = this.getCustomerById(c.referredBy);
     if (!referrer) return;
 
-    const biz = this.getBiz();
     const bonus = parseInt(biz.referralBonusPoints, 10) || 50;
 
     this.adjustCustomerLoyalty(
@@ -2570,6 +2571,7 @@ const DB = {
         bankName: '', bankAccount: '', bankIFSC: '', bankBranch: '',
         invoicePrefix: 'INV', invoiceCounter: 1,
         billPrefix: 'PO', billCounter: 1,
+        enableLoyalty: false, loyaltySpendRate: 100, loyaltyPointValue: 1, loyaltyMinRedeem: 10, referralBonusPoints: 50,
         defaultPaymentTerms: 30, signatory: '',
         termsAndConditions: 'All goods carry manufacturer warranty only. No returns after installation.\nSubject to local jurisdiction.'
       });
@@ -2594,17 +2596,18 @@ const DB = {
       upiId: 'shraban@okaxis',
       invoicePrefix: 'APS', invoiceCounter: 9,
       billPrefix: 'PO', billCounter: 6,
+      enableLoyalty: false, loyaltySpendRate: 100, loyaltyPointValue: 1, loyaltyMinRedeem: 10, referralBonusPoints: 50,
       defaultPaymentTerms: 30, signatory: 'Shraban Kumar Mahato',
       termsAndConditions: 'All goods carry manufacturer warranty only. No returns after installation.\nAMC services are non-refundable once commenced.\nInterest @18% p.a. on delayed payments. Subject to local jurisdiction.',
     });
 
     // ── Customers (Businesses & Organisations) ──
     const c1 = this.saveCustomer({ name: 'Zenith Infotech Pvt Ltd', customerType: 'dealer', gstin: '27AABCZ9321K1Z4', phone: '9823001122', whatsapp: '9823001122', email: 'accounts@zenithinfotech.com', address: 'Plot 15, Rajiv Gandhi IT Park', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411057', contactPerson: 'Suresh Patil' });
-    const c2 = this.saveCustomer({ name: 'St. Xavier School & College', customerType: 'retail', gstin: '27AABTS4218M1ZQ', phone: '9823003344', whatsapp: '9823003344', email: 'admin@stxaviers.edu.in', address: '5, MG Road, Camp', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411001', contactPerson: 'Fr. Thomas', loyaltyPoints: 150, referralCount: 1 });
-    const c3 = this.saveCustomer({ name: 'City Hospital & Research Centre', customerType: 'retail', gstin: '27AABCC7123H1ZR', phone: '9823005566', whatsapp: '9823005566', email: 'accounts@cityhospital.in', address: '88 Nagar Road, Yerawada', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411006', contactPerson: 'Mrs. Shinde', loyaltyPoints: 240 });
+    const c2 = this.saveCustomer({ name: 'St. Xavier School & College', customerType: 'retail', gstin: '27AABTS4218M1ZQ', phone: '9823003344', whatsapp: '9823003344', email: 'admin@stxaviers.edu.in', address: '5, MG Road, Camp', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411001', contactPerson: 'Fr. Thomas', loyaltyPoints: 0, referralCount: 0 });
+    const c3 = this.saveCustomer({ name: 'City Hospital & Research Centre', customerType: 'retail', gstin: '27AABCC7123H1ZR', phone: '9823005566', whatsapp: '9823005566', email: 'accounts@cityhospital.in', address: '88 Nagar Road, Yerawada', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411006', contactPerson: 'Mrs. Shinde', loyaltyPoints: 0 });
     const c4 = this.saveCustomer({ name: 'Nagpur Municipal Corporation', customerType: 'retail', gstin: '27AAANS8891P1ZX', phone: '0712-2567890', whatsapp: '9823007700', email: 'it.dept@nagpurcorp.gov.in', address: 'Mahapal Complex, Kasturchand Park', city: 'Nagpur', state: 'Maharashtra', stateCode: '27', pincode: '440001', contactPerson: 'Mr. Borse (IT Officer)' });
     const c5 = this.saveCustomer({ name: 'Alpha Manufacturing Ltd', customerType: 'retail', gstin: '24AABCA4512R1ZT', phone: '9712001234', whatsapp: '9712001234', email: 'it@alphamfg.com', address: 'GIDC Industrial Estate, Phase II', city: 'Surat', state: 'Gujarat', stateCode: '24', pincode: '394221', contactPerson: 'Rajesh Shah' });
-    const c6 = this.saveCustomer({ name: 'Kohinoor Group of Hotels', customerType: 'retail', gstin: '27AABCK3312L1ZV', phone: '9823007788', whatsapp: '9823007788', email: 'finance@kohinoorhotels.com', address: '42 FC Road', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411005', contactPerson: 'Deepa Kulkarni', loyaltyPoints: 80, referredBy: c2.id });
+    const c6 = this.saveCustomer({ name: 'Kohinoor Group of Hotels', customerType: 'retail', gstin: '27AABCK3312L1ZV', phone: '9823007788', whatsapp: '9823007788', email: 'finance@kohinoorhotels.com', address: '42 FC Road', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411005', contactPerson: 'Deepa Kulkarni', loyaltyPoints: 0, referredBy: c2.id });
 
     // ── Suppliers (IT & CCTV Distributors) ──
     const s1 = this.saveSupplier({ name: 'Ingram Micro India Pvt Ltd', gstin: '27AAACI5892K1ZE', phone: '1800209800', email: 'orders@ingrammicro.in', address: 'Kalina, Santacruz East', city: 'Mumbai', state: 'Maharashtra', stateCode: '27', pincode: '400098' });
